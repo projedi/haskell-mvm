@@ -1,0 +1,12 @@
+int i;
+float j;
+string str;
+
+i = 0;
+j = 3.1;
+str = "abc";
+print(i, j, str);
+i = i + 1;
+j = j * 1.4;
+str = str + "def";
+print(i, j, str);

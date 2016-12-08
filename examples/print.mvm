@@ -1,0 +1,4 @@
+print(1);
+print(2.3);
+print("abc");
+print("Variadic", 100, -0.01);
