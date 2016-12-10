@@ -1,4 +1,5 @@
 {
+{-# OPTIONS_GHC -fno-warn-unused-matches -fno-warn-name-shadowing #-}
 module Lexer
   ( Token(..)
   , scanTokens

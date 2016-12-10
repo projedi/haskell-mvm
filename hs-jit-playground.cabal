@@ -18,12 +18,14 @@ library
   exposed-modules:     Lib
                      , Lexer
                      , Parser
+                     , PrettyPrint
                      , Syntax
   build-depends:       base >= 4.7 && < 5
                      , array
                      , mtl
   build-tools:         alex, happy
   default-language:    Haskell2010
+  ghc-options:         -Wall -Werror
 
 executable hs-jit-playground-exe
   hs-source-dirs:      app

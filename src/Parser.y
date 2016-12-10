@@ -5,8 +5,6 @@ module Parser
 
 import Lexer
 import Syntax
-
-import Control.Monad.Except
 }
 
 %name program
@@ -138,7 +136,7 @@ params
 
 funcall : sym '(' args ')' { FunctionCall (FunctionName $1) (reverse $3) }
 
-vardecl : vartype sym { VarDef $1 (VarName $2) }
+vardecl : vartype sym { VarDecl $1 (VarName $2) }
 
 vartype
   : 'int'
@@ -199,6 +197,6 @@ parseError :: [Token] -> a
 parseError (l:ls) = error (show l)
 parseError [] = error "Unexpected end of Input"
 
-parseExpr :: String -> [Statement]
-parseExpr = reverse . program . scanTokens
+parseExpr :: String -> Program
+parseExpr = Program . reverse . program . scanTokens
 }

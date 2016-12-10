@@ -1,5 +1,7 @@
 module Syntax where
 
+data Program = Program [Statement]
+
 type Symbol = String
 
 data VarName = VarName Symbol
@@ -14,14 +16,14 @@ data VarType
   | VarTypeString
   deriving (Eq, Show)
 
-data VarDef = VarDef VarType VarName
+data VarDecl = VarDecl VarType VarName
   deriving (Eq, Show)
 
 data Statement
   = StatementBlock [Statement]
   | StatementFunctionCall FunctionCall
   | StatementWhile Expr Statement
-  | StatementVarDecl VarDef
+  | StatementVarDecl VarDecl
   | StatementFunctionDecl FunctionDecl
   | StatementAssign VarName Expr
   | StatementIfElse Expr Statement Statement
@@ -32,7 +34,7 @@ data Statement
   deriving (Eq, Show)
 
 data FunctionDecl
-  = FunctionDecl (Maybe VarType) FunctionName [VarDef]
+  = FunctionDecl (Maybe VarType) FunctionName [VarDecl]
   deriving (Eq, Show)
 
 data FunctionCall
