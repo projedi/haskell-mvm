@@ -1,14 +1,15 @@
 module Syntax where
 
 data Program = Program [Statement]
+  deriving (Show)
 
 type Symbol = String
 
 data VarName = VarName Symbol
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data FunctionName = FunctionName Symbol
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 data VarType
   = VarTypeInt
