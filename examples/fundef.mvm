@@ -1,3 +1,5 @@
+float k(int i, float j);
+
 void f(int i, float j, string str) {
   i = i + 1;
   j = j * 1.4;

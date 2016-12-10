@@ -1,6 +1,15 @@
 module Lib
-    ( someFunc
-    ) where
+  ( someFunc
+  ) where
+
+import Control.Monad (forM_)
+import System.Environment (getArgs)
+
+import Parser (parseExpr)
 
 someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+someFunc = do
+  args <- getArgs
+  forM_ args $ \fname -> do
+    putStrLn $ "Parsing " ++ fname
+    print =<< parseExpr <$> readFile fname
