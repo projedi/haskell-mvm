@@ -1,0 +1,9 @@
+int x;
+int y;
+
+for (x in -15..15) {
+  for (y in -15..15) {
+    print(x, y, sin(sqrt(x * x + y * y)) / sqrt (x * x + y * y));
+  }
+  print("");
+}

@@ -26,6 +26,7 @@ testList =
   , "strops"
   , "vardef"
   , "while"
+  , "gnuplot/pm3d.8"
   ]
 
 tests :: TestTree

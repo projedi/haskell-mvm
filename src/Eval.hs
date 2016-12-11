@@ -294,6 +294,19 @@ functionCall (FunctionCall (FunctionName "print") args) = do
   vals <- evaluateArgs args
   printCall vals
   pure Nothing
+-- TODO: Implement them as FFI
+functionCall (FunctionCall (FunctionName "sin") [arg]) = do
+  val <- evaluate arg
+  case val of
+    ValueInt i -> pure $ Just $ ValueFloat $ sin $ fromIntegral i
+    ValueFloat f -> pure $ Just $ ValueFloat $ sin f
+    _ -> error "Type mismatch"
+functionCall (FunctionCall (FunctionName "sqrt") [arg]) = do
+  val <- evaluate arg
+  case val of
+    ValueInt i -> pure $ Just $ ValueFloat $ sqrt $ fromIntegral i
+    ValueFloat f -> pure $ Just $ ValueFloat $ sqrt f
+    _ -> error "Type mismatch"
 functionCall (FunctionCall fname args) = do
   env <- State.get
   let Just (Function rettype params (Just (lid, body))) = getFunctionFromEnv env fname
