@@ -7,11 +7,9 @@ import qualified Data.Algorithm.DiffOutput as DiffOutput
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import System.FilePath ((</>), (<.>), replaceExtension)
-import System.IO.Silently (capture_)
+import qualified System.Process
 import Test.Tasty
 import Test.Tasty.Golden.Advanced
-
-import Lib (evaluateFile)
 
 testList :: [String]
 testList =
@@ -30,7 +28,7 @@ testList =
   ]
 
 tests :: TestTree
-tests = localOption (mkTimeout 1000000) $ testGroup "Golden tests" $ map test testList
+tests = localOption (mkTimeout 2000000) $ testGroup "Golden tests" $ map test testList
 
 test :: String -> TestTree
 test name =
@@ -45,7 +43,9 @@ test name =
 
 runEvaluate :: FilePath -> IO String
 runEvaluate fname =
-  capture_ $ evaluateFile fname
+  System.Process.readCreateProcess
+    (System.Process.shell $ "stack exec hs-jit-playground-exe " ++ fname)
+    ""
 
 compareResult :: String -> String -> IO (Maybe String)
 compareResult lhs rhs = do

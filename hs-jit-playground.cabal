@@ -47,10 +47,10 @@ test-suite hs-jit-playground-test
                      , Diff
                      , bytestring
                      , filepath
-                     , silently
+                     , process
                      , tasty
                      , tasty-golden
-  -- Cannot make it parallel for now.
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 
 source-repository head

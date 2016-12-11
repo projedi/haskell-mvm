@@ -1,6 +1,5 @@
 module Lib
-  ( evaluateFile
-  , someFunc
+  ( someFunc
   ) where
 
 import Control.Monad (forM_)
@@ -19,5 +18,4 @@ someFunc :: IO ()
 someFunc = do
   args <- getArgs
   forM_ args $ \fname -> do
-    putStrLn $ "=== Evaluating " ++ fname ++ " ==="
     evaluateFile fname
