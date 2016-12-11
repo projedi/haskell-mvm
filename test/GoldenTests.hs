@@ -15,7 +15,8 @@ import Lib (evaluateFile)
 
 testList :: [String]
 testList =
-  [ "flops"
+  [ "fib"
+  , "flops"
   , "for"
   , "fundef"
   , "if"
