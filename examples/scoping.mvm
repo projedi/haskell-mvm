@@ -8,6 +8,7 @@ i = 0;
 }
 print(i);
 
+int f();
 i = 0;
 int f() {
   return i + 1;
@@ -17,23 +18,24 @@ i = 1;
 print(f());
 
 int j;
-int f(int i) {
+int g(int i) {
   return i + j;
 }
+int g(int i);
 i = 0;
 j = 1;
-print(f(3));
+print(g(3));
 i = 10;
 j = 20;
-print(f(3));
+print(g(3));
 
-void f() {
+void h() {
   i = i + 1;
 }
 i = 0;
-f();
+h();
 print(i);
-f();
+h();
 print(i);
 
 {
@@ -49,6 +51,7 @@ print(i);
     i = 10;
     void g() {
       i = i + 1;
+      // f here must modify i from it's own scope, not ours.
       f();
       f();
       print(i);

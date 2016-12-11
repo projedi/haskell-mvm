@@ -125,7 +125,9 @@ defaultValueFromType VarTypeInt = ValueInt 0
 defaultValueFromType VarTypeFloat = ValueFloat 0
 defaultValueFromType VarTypeString = ValueString ""
 
-data Function = Function (Maybe VarType) [VarDecl] (Maybe [Statement])
+type LayerID = Int
+
+data Function = Function (Maybe VarType) [VarDecl] (Maybe (LayerID, [Statement]))
 
 argsMatch :: [VarDecl] -> [VarDecl] -> Bool
 argsMatch largs rargs = map (\(VarDecl t _) -> t) largs == map (\(VarDecl t _) -> t) rargs
@@ -175,10 +177,10 @@ addFunctionToLayer l name f@(Function _ _ body) =
         | functionTypesMatch oldf f -> Just $ l { funEnv = newfunenv }
         | otherwise -> Nothing
 
-type Env = (Layer, [Layer])
+type Env = [Layer]
 
 emptyEnv :: Env
-emptyEnv = (emptyLayer, [])
+emptyEnv = [emptyLayer]
 
 modifyingLayer :: (Layer -> Maybe Layer) -> [Layer] -> Maybe [Layer]
 modifyingLayer _ [] = Nothing
@@ -188,43 +190,76 @@ modifyingLayer f (l:ls) =
     Just l' -> Just (l':ls)
 
 readVariableFromEnv :: Env -> VarName -> Maybe Value
-readVariableFromEnv (curlayer, otherlayers) vname =
+readVariableFromEnv (curlayer:otherlayers) vname =
   asum (map (\l -> readVariableFromLayer l vname) (curlayer : otherlayers))
+readVariableFromEnv [] _ = error "Env broke"
 
 writeVariableToEnv :: Env -> VarName -> Value -> Maybe Env
-writeVariableToEnv (curlayer, otherlayers) vname val =
+writeVariableToEnv (curlayer:otherlayers) vname val =
   case (modifyingLayer (\l -> writeVariableToLayer l vname val) (curlayer : otherlayers)) of
-    Just (curlayer' : otherlayers') -> Just (curlayer', otherlayers')
+    Just (curlayer' : otherlayers') -> Just (curlayer':otherlayers')
     Just _ -> error "Impossible"
     Nothing -> Nothing
+writeVariableToEnv [] _ _ = error "Env broke"
 
 addVariableToEnv :: Env -> VarName -> VarType -> Maybe Env
-addVariableToEnv (curlayer, otherlayers) vname vtype =
+addVariableToEnv (curlayer:otherlayers) vname vtype =
   case addVariableToLayer curlayer vname vtype of
     Nothing -> Nothing
-    Just l' -> Just (l', otherlayers)
+    Just l' -> Just (l':otherlayers)
+addVariableToEnv [] _ _ = error "Env broke"
 
 getFunctionFromEnv :: Env -> FunctionName -> Maybe Function
-getFunctionFromEnv (curlayer, otherlayers) name =
+getFunctionFromEnv (curlayer:otherlayers) name =
   asum (map (\l -> getFunctionFromLayer l name) (curlayer : otherlayers))
+getFunctionFromEnv [] _ = error "Env broke"
 
 addFunctionToEnv :: Env -> FunctionName -> Function -> Maybe Env
-addFunctionToEnv (curlayer, otherlayers) fname f =
+addFunctionToEnv (curlayer:otherlayers) fname f =
   case addFunctionToLayer curlayer fname f of
     Nothing -> Nothing
-    Just l' -> Just (l', otherlayers)
+    Just l' -> Just (l':otherlayers)
+addFunctionToEnv [] _ _ = error "Env broke"
 
 type Execute a = ExceptT (Maybe Value) (StateT Env IO) a
 
-newLayer :: Execute ()
-newLayer = do
-  (l, ls) <- State.get
-  State.put (emptyLayer, l : ls)
+withNewLayer :: Execute a -> Execute a
+withNewLayer m = do
+  lid <- currentLayer
+  newLayer
+  res <- m
+  dropLayer
+  newLid <- currentLayer
+  when (lid /= newLid) $
+    error "Scoping broke."
+  pure res
+ where
+  newLayer = State.modify (emptyLayer:)
+  dropLayer = State.modify tail
 
-dropLayer :: Execute ()
-dropLayer = do
-  (_, l : ls) <- State.get
-  State.put (l, ls)
+currentLayer :: Execute LayerID
+currentLayer = length <$> State.get
+
+splitLayers :: LayerID -> Execute [Layer]
+splitLayers lid = do
+  ls <- State.get
+  let (newenv, preserve) = List.splitAt lid $ List.reverse ls
+  State.put (List.reverse newenv)
+  pure $ List.reverse preserve
+
+combineLayers :: [Layer] -> Execute ()
+combineLayers ls = State.modify (ls++)
+
+withLayer :: LayerID -> Execute a -> Execute a
+withLayer lid m = do
+  oldLid <- currentLayer
+  preserve <- splitLayers lid
+  res <- m
+  combineLayers preserve
+  newLid <- currentLayer
+  when (oldLid /= newLid) $
+    error "Scoping broke."
+  pure res
 
 runExecute :: Env -> Execute a -> IO (Env, Maybe Value)
 runExecute env m = do
@@ -246,7 +281,8 @@ declareFunction (FunctionDecl rettype name params) = do
 defineFunction :: FunctionDecl -> [Statement] -> Execute ()
 defineFunction (FunctionDecl rettype name params) body = do
   env <- State.get
-  let Just env' = addFunctionToEnv env name (Function rettype params (Just body))
+  lid <- currentLayer
+  let Just env' = addFunctionToEnv env name (Function rettype params (Just (lid, body)))
   State.put env'
 
 printCall :: [Value] -> Execute ()
@@ -260,11 +296,11 @@ functionCall (FunctionCall (FunctionName "print") args) = do
   pure Nothing
 functionCall (FunctionCall fname args) = do
   env <- State.get
-  let Just (Function rettype params (Just body)) = getFunctionFromEnv env fname
+  let Just (Function rettype params (Just (lid, body))) = getFunctionFromEnv env fname
   vals <- evaluateArgs args
   let varassignments = generateAssignments params vals
   let newbody = StatementBlock $ varassignments ++ body
-  res <- executeStatementWithReturn newbody
+  res <- withLayer lid $ executeStatementWithReturn newbody
   case (res, rettype) of
     (Nothing, Nothing) -> pure res
     (Just val, Just valtype)
@@ -287,8 +323,13 @@ evaluateArgs :: [Expr] -> Execute [Value]
 evaluateArgs = mapM evaluate
 
 executeStatementWithReturn :: Statement -> Execute (Maybe Value)
-executeStatementWithReturn s =
-  (execute s >> pure Nothing) `Except.catchError` pure
+executeStatementWithReturn s = do
+  lid <- currentLayer
+  (execute s >> pure Nothing) `Except.catchError` (restoreFromReturn lid)
+ where
+  restoreFromReturn lid val = do
+    _ <- splitLayers lid
+    pure val
 
 functionReturn :: Maybe Value -> Execute ()
 functionReturn = Except.throwError
@@ -337,10 +378,7 @@ evaluateAsInt e = do
   pure i
 
 execute :: Statement -> Execute ()
-execute (StatementBlock stmts) = do
-  newLayer
-  forM_ stmts execute
-  dropLayer
+execute (StatementBlock stmts) = withNewLayer (forM_ stmts execute)
 execute (StatementFunctionCall fcall) = functionCall fcall >> pure ()
 execute s@(StatementWhile e stmt) = do
   res <- evaluateAsBool e
