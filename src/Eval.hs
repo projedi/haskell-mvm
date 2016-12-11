@@ -10,6 +10,7 @@ import Data.Foldable (asum)
 import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Numeric
 
 import Syntax
 
@@ -38,7 +39,13 @@ valueToExpr (ValueString s) = ExprString s
 
 printValue :: Value -> String
 printValue (ValueInt i) = show i
-printValue (ValueFloat f) = show f
+printValue (ValueFloat f)
+ | stripedAfter == "." = before
+ | otherwise = before ++ stripedAfter
+ where
+  str = Numeric.showFFloat (Just 3) f ""
+  (before, after) = List.span (/= '.') str
+  stripedAfter = List.dropWhileEnd (== '0') after
 printValue (ValueString s) = s
 
 instance Eq Value where
