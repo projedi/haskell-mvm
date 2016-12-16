@@ -1,0 +1,1 @@
+dlopen("libm.so.6");

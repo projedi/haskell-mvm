@@ -1,1 +1,3 @@
 /.stack-work/
+# Unfortunately inline-c generates sources in the source dir instead of build dir.
+/src/*.c

@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Eval (eval) where
 
 import Control.Monad (forM_, when)
@@ -12,11 +13,13 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Numeric
 
+import ForeignEval
 import Syntax
 
 eval :: Program -> IO ()
 eval (Program stmts) = do
-  _ <- runExecute emptyEnv (execute (StatementBlock stmts))
+  (finalEnv, _) <- runExecute emptyEnv (execute (StatementBlock stmts))
+  forM_ (envLibs finalEnv) dlclose
   pure ()
 
 data Value
@@ -181,10 +184,13 @@ addFunctionToLayer l name f@(Function _ _ body) =
         | functionTypesMatch oldf f -> Just $ l { funEnv = newfunenv }
         | otherwise -> Nothing
 
-type Env = [Layer]
+data Env = Env
+ { envLibs :: [LibHandle]
+ , envLayers :: [Layer]
+ }
 
 emptyEnv :: Env
-emptyEnv = [emptyLayer]
+emptyEnv = Env [] []
 
 modifyingLayer :: (Layer -> Maybe Layer) -> [Layer] -> Maybe [Layer]
 modifyingLayer _ [] = Nothing
@@ -194,36 +200,36 @@ modifyingLayer f (l:ls) =
     Just l' -> Just (l':ls)
 
 readVariableFromEnv :: Env -> VarName -> Maybe Value
-readVariableFromEnv (curlayer:otherlayers) vname =
+readVariableFromEnv (Env { envLayers = curlayer:otherlayers }) vname =
   asum (map (\l -> readVariableFromLayer l vname) (curlayer : otherlayers))
-readVariableFromEnv [] _ = error "Env broke"
+readVariableFromEnv _ _ = error "Env broke"
 
 writeVariableToEnv :: Env -> VarName -> Value -> Maybe Env
-writeVariableToEnv (curlayer:otherlayers) vname val =
+writeVariableToEnv env@(Env { envLayers = curlayer:otherlayers}) vname val =
   case (modifyingLayer (\l -> writeVariableToLayer l vname val) (curlayer : otherlayers)) of
-    Just (curlayer' : otherlayers') -> Just (curlayer':otherlayers')
+    Just (curlayer' : otherlayers') -> Just (env { envLayers = curlayer':otherlayers'})
     Just _ -> error "Impossible"
     Nothing -> Nothing
-writeVariableToEnv [] _ _ = error "Env broke"
+writeVariableToEnv _ _ _ = error "Env broke"
 
 addVariableToEnv :: Env -> VarName -> VarType -> Maybe Env
-addVariableToEnv (curlayer:otherlayers) vname vtype =
+addVariableToEnv env@(Env { envLayers = curlayer:otherlayers}) vname vtype =
   case addVariableToLayer curlayer vname vtype of
     Nothing -> Nothing
-    Just l' -> Just (l':otherlayers)
-addVariableToEnv [] _ _ = error "Env broke"
+    Just l' -> Just (env { envLayers = l':otherlayers})
+addVariableToEnv _ _ _ = error "Env broke"
 
 getFunctionFromEnv :: Env -> FunctionName -> Maybe Function
-getFunctionFromEnv (curlayer:otherlayers) name =
+getFunctionFromEnv (Env { envLayers = curlayer:otherlayers}) name =
   asum (map (\l -> getFunctionFromLayer l name) (curlayer : otherlayers))
-getFunctionFromEnv [] _ = error "Env broke"
+getFunctionFromEnv _ _ = error "Env broke"
 
 addFunctionToEnv :: Env -> FunctionName -> Function -> Maybe Env
-addFunctionToEnv (curlayer:otherlayers) fname f =
+addFunctionToEnv env@(Env { envLayers = curlayer:otherlayers }) fname f =
   case addFunctionToLayer curlayer fname f of
     Nothing -> Nothing
-    Just l' -> Just (l':otherlayers)
-addFunctionToEnv [] _ _ = error "Env broke"
+    Just l' -> Just $ env { envLayers = l':otherlayers }
+addFunctionToEnv _ _ _ = error "Env broke"
 
 type Execute a = ExceptT (Maybe Value) (StateT Env IO) a
 
@@ -238,21 +244,21 @@ withNewLayer m = do
     error "Scoping broke."
   pure res
  where
-  newLayer = State.modify (emptyLayer:)
-  dropLayer = State.modify tail
+  newLayer = State.modify (\env@(Env { envLayers = layers}) -> env { envLayers = emptyLayer:layers})
+  dropLayer = State.modify (\env@(Env { envLayers = layers}) -> env { envLayers = tail layers})
 
 currentLayer :: Execute LayerID
-currentLayer = length <$> State.get
+currentLayer = (length . envLayers) <$> State.get
 
 splitLayers :: LayerID -> Execute [Layer]
 splitLayers lid = do
-  ls <- State.get
+  env@(Env {envLayers = ls}) <- State.get
   let (newenv, preserve) = List.splitAt lid $ List.reverse ls
-  State.put (List.reverse newenv)
+  State.put $ env { envLayers = List.reverse newenv }
   pure $ List.reverse preserve
 
 combineLayers :: [Layer] -> Execute ()
-combineLayers ls = State.modify (ls++)
+combineLayers ls = State.modify (\env@(Env {envLayers = layers}) -> env { envLayers = ls++layers})
 
 withLayer :: LayerID -> Execute a -> Execute a
 withLayer lid m = do
@@ -264,6 +270,11 @@ withLayer lid m = do
   when (oldLid /= newLid) $
     error "Scoping broke."
   pure res
+
+openLibrary :: String -> Execute ()
+openLibrary lib = do
+  handle <- either error id <$> Trans.liftIO (dlopen lib)
+  State.modify (\env@(Env { envLibs = libs }) -> env { envLibs = handle:libs})
 
 runExecute :: Env -> Execute a -> IO (Env, Maybe Value)
 runExecute env m = do
@@ -293,10 +304,19 @@ printCall :: [Value] -> Execute ()
 printCall vals =
   Trans.liftIO $ putStrLn $ List.intercalate " " (map printValue vals)
 
+dlopenCall :: [Value] -> Execute ()
+dlopenCall vals = forM_ vals $ \case
+  (ValueString s) -> openLibrary s
+  _ -> error "Type mismatch"
+
 functionCall :: FunctionCall -> Execute (Maybe Value)
 functionCall (FunctionCall (FunctionName "print") args) = do
   vals <- evaluateArgs args
   printCall vals
+  pure Nothing
+functionCall (FunctionCall (FunctionName "dlopen") args) = do
+  vals <- evaluateArgs args
+  dlopenCall vals
   pure Nothing
 -- TODO: Implement them as FFI
 functionCall (FunctionCall (FunctionName "sin") [arg]) = do
