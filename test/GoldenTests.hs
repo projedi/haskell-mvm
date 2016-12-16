@@ -11,6 +11,10 @@ import qualified System.Process
 import Test.Tasty
 import Test.Tasty.Golden.Advanced
 
+-- Individual test timeout in seconds
+timeout :: Integer
+timeout = 5
+
 testList :: [String]
 testList =
   [ "fib"
@@ -28,7 +32,7 @@ testList =
   ]
 
 tests :: TestTree
-tests = localOption (mkTimeout 2000000) $ testGroup "Golden tests" $ map test testList
+tests = localOption (mkTimeout (1000000 * timeout)) $ testGroup "Golden tests" $ map test testList
 
 test :: String -> TestTree
 test name =

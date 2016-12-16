@@ -32,6 +32,12 @@ typeof (ValueInt _) = VarTypeInt
 typeof (ValueFloat _) = VarTypeFloat
 typeof (ValueString _) = VarTypeString
 
+convert :: Value -> VarType -> Value
+convert v vtype
+ | v `typeIs` vtype = v
+convert (ValueInt i) VarTypeFloat = ValueFloat $ fromIntegral i
+convert _ _ = error "Type mismatch"
+
 valueToExpr :: Value -> Expr
 valueToExpr (ValueInt i) = ExprInt i
 valueToExpr (ValueFloat f) = ExprFloat f
@@ -149,12 +155,10 @@ readVariableFromLayer l name = Map.lookup name (varEnv l)
 
 writeVariableToLayer :: Layer -> VarName -> Value -> Maybe Layer
 writeVariableToLayer l name value =
-  let (moldvalue, newvarenv) = Map.insertLookupWithKey (\_ a _ -> a) name value (varEnv l)
+  let (moldvalue, newvarenv) = Map.insertLookupWithKey (\_ newVal oldVal -> convert newVal (typeof oldVal)) name value (varEnv l)
   in case moldvalue of
        Nothing -> Nothing
-       Just oldvalue
-        | typeof oldvalue == typeof value -> Just $ l { varEnv = newvarenv }
-        | otherwise -> error "Type mismatch"
+       Just _ -> Just $ l { varEnv = newvarenv }
 
 addVariableToLayer :: Layer -> VarName -> VarType -> Maybe Layer
 addVariableToLayer l name vtype =
@@ -316,9 +320,7 @@ functionCall (FunctionCall fname args) = do
   res <- withLayer lid $ executeStatementWithReturn newbody
   case (res, rettype) of
     (Nothing, Nothing) -> pure res
-    (Just val, Just valtype)
-     | val `typeIs` valtype -> pure res
-     | otherwise -> error "Type mismatch"
+    (Just val, Just valtype) -> pure $ Just $ convert val valtype
     _ -> error "Type mismatch"
 
 generateAssignment :: VarDecl -> Value -> [Statement]

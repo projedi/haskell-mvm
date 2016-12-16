@@ -1,8 +1,22 @@
-int x;
-int y;
+int ix;
+int iy;
+int range;
+int multisampling;
+int final_range;
 
-for (x in -15..15) {
-  for (y in -15..15) {
+range = 15;
+multisampling = 10;
+
+final_range = range * multisampling;
+
+for (ix in -final_range..final_range) {
+  float x;
+  x = ix;
+  x = x / multisampling;
+  for (iy in -final_range..final_range) {
+    float y;
+    y = iy;
+    y = y / multisampling;
     print(x, y, sin(sqrt(x * x + y * y)) / sqrt (x * x + y * y));
   }
   print("");
