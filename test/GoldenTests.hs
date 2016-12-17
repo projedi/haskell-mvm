@@ -49,7 +49,7 @@ test name =
 runEvaluate :: FilePath -> IO String
 runEvaluate fname =
   System.Process.readCreateProcess
-    (System.Process.shell $ "stack exec hs-jit-playground-exe " ++ fname)
+    (System.Process.shell $ "stack exec mvm-haskell-exe " ++ fname)
     ""
 
 compareResult :: String -> String -> IO (Maybe String)
