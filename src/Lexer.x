@@ -46,6 +46,8 @@ tokens :-
     { \p s -> TokenDiv p }
   "%"
     { \p s -> TokenMod p }
+  "!"
+    { \p s -> TokenNot p }
   "=="
     { \p s -> TokenEq p }
   "!="
@@ -103,6 +105,7 @@ data Token
   | TokenTimes AlexPosn
   | TokenDiv AlexPosn
   | TokenMod AlexPosn
+  | TokenNot AlexPosn
   | TokenEq AlexPosn
   | TokenNeq AlexPosn
   | TokenLt AlexPosn

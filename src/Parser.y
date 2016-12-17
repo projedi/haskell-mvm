@@ -40,6 +40,8 @@ import Syntax
     { TokenDiv _ }
   '%'
     { TokenMod _ }
+  '!'
+    { TokenNot _ }
   '=='
     { TokenEq _ }
   '!='
@@ -84,7 +86,7 @@ import Syntax
 %left '==' '!=' '<' '<=' '>' '>='
 %left '+' '-'
 %left '*' '/' '%'
-%left NEG
+%left NEG '!'
 
 %%
 
@@ -183,6 +185,8 @@ expr
     { ExprDiv $1 $3 }
   | expr '%' expr
     { ExprMod $1 $3 }
+  | '!' expr
+    { ExprNot $2 }
   | expr '==' expr
     { ExprEq $1 $3 }
   | expr '!=' expr

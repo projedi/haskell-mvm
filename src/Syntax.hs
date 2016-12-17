@@ -77,6 +77,7 @@ data Expr
             Expr
   | ExprMod Expr
             Expr
+  | ExprNot Expr
   | ExprEq Expr
            Expr
   | ExprNeq Expr

@@ -36,6 +36,7 @@ prettyPrintExpr n (ExprDiv el er) =
   parenIfNeeded n 2 $ prettyPrintExpr 2 el ++ " / " ++ prettyPrintExpr 2 er
 prettyPrintExpr n (ExprMod el er) =
   parenIfNeeded n 2 $ prettyPrintExpr 2 el ++ " % " ++ prettyPrintExpr 2 er
+prettyPrintExpr n (ExprNot e) = parenIfNeeded n 3 $ "!" ++ prettyPrintExpr 3 e
 prettyPrintExpr n (ExprEq el er) =
   parenIfNeeded n 0 $ prettyPrintExpr 0 el ++ " == " ++ prettyPrintExpr 0 er
 prettyPrintExpr n (ExprNeq el er) =

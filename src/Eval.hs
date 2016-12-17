@@ -495,6 +495,12 @@ evaluate (ExprMinus el er) = (-) <$> evaluate el <*> evaluate er
 evaluate (ExprTimes el er) = (*) <$> evaluate el <*> evaluate er
 evaluate (ExprDiv el er) = (/) <$> evaluate el <*> evaluate er
 evaluate (ExprMod el er) = rem <$> evaluate el <*> evaluate er
+evaluate (ExprNot e) = do
+  val <- evaluate e
+  case val of
+    ValueInt 0 -> pure $ ValueInt 1
+    ValueInt _ -> pure $ ValueInt 0
+    _ -> error "Type mismatch"
 evaluate (ExprEq el er) = ((fromBool .) . (==)) <$> evaluate el <*> evaluate er
 evaluate (ExprNeq el er) = ((fromBool .) . (/=)) <$> evaluate el <*> evaluate er
 evaluate (ExprLt el er) = ((fromBool .) . (<)) <$> evaluate el <*> evaluate er
