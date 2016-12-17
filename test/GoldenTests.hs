@@ -13,10 +13,6 @@ import qualified System.Process
 import Test.Tasty
 import Test.Tasty.Golden.Advanced
 
--- Individual test timeout in seconds
-timeout :: Integer
-timeout = 5
-
 testList :: [String]
 testList =
   [ "flops"
@@ -35,25 +31,29 @@ testList =
   ]
 
 tests :: TestTree
-tests =
-  localOption (mkTimeout (1000000 * timeout)) $
-  testGroup "Golden tests" $ map test testList
+tests = testGroup "Golden tests" [testsWithParams "Dumb evaluate" 5 "--dumb"]
 
-test :: String -> TestTree
-test name =
+testsWithParams :: String -> Integer -> String -> TestTree
+testsWithParams name timeout flags =
+  localOption (mkTimeout (1000000 * timeout)) $
+  testGroup name $ map (test flags) testList
+
+test :: String -> String -> TestTree
+test flags name =
   goldenTest
     name
     (BS.unpack <$> BS.readFile goldenFile)
-    (runEvaluate (goldenFile `replaceExtension` "mvm"))
+    (runEvaluateWithFlags flags (goldenFile `replaceExtension` "mvm"))
     compareResult
     (BS.writeFile goldenFile . BS.pack)
   where
     goldenFile = "examples" </> name <.> "expected"
 
-runEvaluate :: FilePath -> IO String
-runEvaluate fname =
+runEvaluateWithFlags :: String -> FilePath -> IO String
+runEvaluateWithFlags flags fname =
   System.Process.readCreateProcess
-    (System.Process.shell $ "stack exec mvm-haskell-exe " ++ fname)
+    (System.Process.shell $
+     "stack exec mvm-haskell-exe -- " ++ flags ++ " " ++ fname)
     ""
 
 compareResult :: String -> String -> IO (Maybe String)
