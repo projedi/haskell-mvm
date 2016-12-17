@@ -171,7 +171,7 @@ writeVariableToLayer l name value =
 addVariableToLayer :: Layer -> VarName -> VarType -> Maybe Layer
 addVariableToLayer l name vtype =
   let (oldvalue, newvarenv) = Map.insertLookupWithKey (\_ a _ -> a) name (defaultValueFromType vtype) (varEnv l)
-  in maybe (Just $ l { varEnv = newvarenv }) (const $ Nothing) oldvalue
+  in maybe (Just $ l { varEnv = newvarenv }) (const Nothing) oldvalue
 
 getFunctionFromLayer :: Layer -> FunctionName -> Maybe Function
 getFunctionFromLayer l name = Map.lookup name (funEnv l)
@@ -205,32 +205,32 @@ modifyingLayer f (l:ls) =
     Just l' -> Just (l':ls)
 
 readVariableFromEnv :: Env -> VarName -> Maybe Value
-readVariableFromEnv (Env { envLayers = curlayer:otherlayers }) vname =
-  asum (map (\l -> readVariableFromLayer l vname) (curlayer : otherlayers))
+readVariableFromEnv Env { envLayers = curlayer:otherlayers } vname =
+  asum (map (`readVariableFromLayer` vname) (curlayer : otherlayers))
 readVariableFromEnv _ _ = error "Env broke"
 
 writeVariableToEnv :: Env -> VarName -> Value -> Maybe Env
-writeVariableToEnv env@(Env { envLayers = curlayer:otherlayers}) vname val =
-  case (modifyingLayer (\l -> writeVariableToLayer l vname val) (curlayer : otherlayers)) of
+writeVariableToEnv env@Env { envLayers = curlayer:otherlayers} vname val =
+  case modifyingLayer (\l -> writeVariableToLayer l vname val) (curlayer : otherlayers) of
     Just (curlayer' : otherlayers') -> Just (env { envLayers = curlayer':otherlayers'})
     Just _ -> error "Impossible"
     Nothing -> Nothing
 writeVariableToEnv _ _ _ = error "Env broke"
 
 addVariableToEnv :: Env -> VarName -> VarType -> Maybe Env
-addVariableToEnv env@(Env { envLayers = curlayer:otherlayers}) vname vtype =
+addVariableToEnv env@Env { envLayers = curlayer:otherlayers} vname vtype =
   case addVariableToLayer curlayer vname vtype of
     Nothing -> Nothing
     Just l' -> Just (env { envLayers = l':otherlayers})
 addVariableToEnv _ _ _ = error "Env broke"
 
 getFunctionFromEnv :: Env -> FunctionName -> Maybe Function
-getFunctionFromEnv (Env { envLayers = curlayer:otherlayers}) name =
-  asum (map (\l -> getFunctionFromLayer l name) (curlayer : otherlayers))
+getFunctionFromEnv Env { envLayers = curlayer:otherlayers} name =
+  asum (map (`getFunctionFromLayer` name) (curlayer : otherlayers))
 getFunctionFromEnv _ _ = error "Env broke"
 
 addFunctionToEnv :: Env -> FunctionName -> Function -> Maybe Env
-addFunctionToEnv env@(Env { envLayers = curlayer:otherlayers }) fname f =
+addFunctionToEnv env@Env { envLayers = curlayer:otherlayers } fname f =
   case addFunctionToLayer curlayer fname f of
     Nothing -> Nothing
     Just l' -> Just $ env { envLayers = l':otherlayers }
@@ -249,21 +249,21 @@ withNewLayer m = do
     error "Scoping broke."
   pure res
  where
-  newLayer = State.modify (\env@(Env { envLayers = layers}) -> env { envLayers = emptyLayer:layers})
-  dropLayer = State.modify (\env@(Env { envLayers = layers}) -> env { envLayers = tail layers})
+  newLayer = State.modify (\env@Env { envLayers = layers} -> env { envLayers = emptyLayer:layers})
+  dropLayer = State.modify (\env@Env { envLayers = layers} -> env { envLayers = tail layers})
 
 currentLayer :: Execute LayerID
 currentLayer = (length . envLayers) <$> State.get
 
 splitLayers :: LayerID -> Execute [Layer]
 splitLayers lid = do
-  env@(Env {envLayers = ls}) <- State.get
+  env@Env {envLayers = ls} <- State.get
   let (newenv, preserve) = List.splitAt lid $ List.reverse ls
   State.put $ env { envLayers = List.reverse newenv }
   pure $ List.reverse preserve
 
 combineLayers :: [Layer] -> Execute ()
-combineLayers ls = State.modify (\env@(Env {envLayers = layers}) -> env { envLayers = ls++layers})
+combineLayers ls = State.modify (\env@Env {envLayers = layers} -> env { envLayers = ls++layers})
 
 withLayer :: LayerID -> Execute a -> Execute a
 withLayer lid m = do
@@ -279,7 +279,7 @@ withLayer lid m = do
 openLibrary :: String -> Execute ()
 openLibrary lib = do
   handle <- either error id <$> Trans.liftIO (dlopen lib)
-  State.modify (\env@(Env { envLibs = libs }) -> env { envLibs = handle:libs})
+  State.modify (\env@Env { envLibs = libs } -> env { envLibs = handle:libs})
 
 runExecute :: Env -> Execute a -> IO (Env, Maybe Value)
 runExecute env m = do
@@ -307,21 +307,21 @@ defineFunction (FunctionDecl rettype name params) body = do
 
 declareForeignFunction :: FunctionDecl -> Execute ()
 declareForeignFunction (FunctionDecl rettype name@(FunctionName strname) params) = do
-  env@(Env { envLibs = libs }) <- State.get
+  env@Env { envLibs = libs } <- State.get
   Just f <- Trans.liftIO $ findSymbol libs strname
   let Just env' = addFunctionToEnv env name (Function rettype params (Just $ FunctionForeign f))
   State.put env'
 
 printCall :: [Value] -> Execute ()
 printCall vals =
-  Trans.liftIO $ putStrLn $ List.intercalate " " (map printValue vals)
+  Trans.liftIO $ putStrLn $ unwords (map printValue vals)
 
 dlopenCall :: [Value] -> Execute ()
 dlopenCall vals = forM_ vals $ \case
   (ValueString s) -> openLibrary s
   _ -> error "Type mismatch"
 
-nativeFunctionCall :: (Maybe VarType) -> [VarDecl] -> [Value] -> LayerID -> [Statement] -> Execute (Maybe Value)
+nativeFunctionCall :: Maybe VarType -> [VarDecl] -> [Value] -> LayerID -> [Statement] -> Execute (Maybe Value)
 nativeFunctionCall rettype params vals lid body = do
   let varassignments = generateAssignments params vals
   let newbody = StatementBlock $ varassignments ++ body
@@ -331,14 +331,14 @@ nativeFunctionCall rettype params vals lid body = do
     (Just val, Just valtype) -> pure $ Just $ convert val valtype
     _ -> error "Type mismatch"
 
-foreignFunctionCall :: (Maybe VarType) -> [VarDecl] -> [Value] -> ForeignFun -> Execute (Maybe Value)
+foreignFunctionCall :: Maybe VarType -> [VarDecl] -> [Value] -> ForeignFun -> Execute (Maybe Value)
 foreignFunctionCall rettype params vals fun = Trans.liftIO $
   case (rettype, convertVals params vals) of
     (Just VarTypeFloat, [ValueFloat f]) -> callForeignFun fun (realToFrac f :: CDouble) >>= floatReturnValue
     _ -> error "Extend supported FFI calls as needed"
  where
   convertVals [] [] = []
-  convertVals ((VarDecl vtype _):ps) (v:vs) = convert v vtype : convertVals ps vs
+  convertVals (VarDecl vtype _:ps) (v:vs) = convert v vtype : convertVals ps vs
   convertVals _ _ = error "Type mismatch"
   floatReturnValue :: CDouble -> IO (Maybe Value)
   floatReturnValue = pure . Just . ValueFloat . realToFrac
@@ -377,7 +377,7 @@ evaluateArgs = mapM evaluate
 executeStatementWithReturn :: Statement -> Execute (Maybe Value)
 executeStatementWithReturn s = do
   lid <- currentLayer
-  (execute s >> pure Nothing) `Except.catchError` (restoreFromReturn lid)
+  (execute s >> pure Nothing) `Except.catchError` restoreFromReturn lid
  where
   restoreFromReturn lid val = do
     _ <- splitLayers lid
@@ -448,7 +448,7 @@ execute (StatementIfElse e strue sfalse) = do
   if res then execute strue else execute sfalse
 execute (StatementIf e s) = do
   res <- evaluateAsBool e
-  when res $ do
+  when res $
     execute s
 execute (StatementFor v e1 e2 s) = do
   i1 <- evaluateAsInt e1

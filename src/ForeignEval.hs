@@ -22,25 +22,29 @@ newtype LibHandle = LibHandle (Ptr ())
 
 newtype ForeignFun = ForeignFun (Ptr ())
 
+{-# ANN c_dlopen "HLint: ignore Use camelCase" #-}
 c_dlopen :: String -> IO LibHandle
 c_dlopen name = CString.withCString name $ \cname ->
   LibHandle <$> [CU.exp| void* { dlopen($(const char *cname), RTLD_LAZY) } |]
 
+{-# ANN c_dlclose "HLint: ignore Use camelCase" #-}
 c_dlclose :: LibHandle -> IO Bool
 c_dlclose (LibHandle handle) =
   (== 0) <$> [CU.exp| int { dlclose($(void *handle)) } |]
 
+{-# ANN c_dlerror "HLint: ignore Use camelCase" #-}
 c_dlerror :: IO String
 c_dlerror = [CU.exp| char* { dlerror() } |] >>= CString.peekCString
 
-c_dlsym :: LibHandle -> String -> IO (ForeignFun)
+{-# ANN c_dlsym "HLint: ignore Use camelCase" #-}
+c_dlsym :: LibHandle -> String -> IO ForeignFun
 c_dlsym (LibHandle handle) name = CString.withCString name $ \cname -> ForeignFun <$>
   [CU.exp| void* { dlsym($(void *handle), $(char* cname)) } |]
 
 dlopen :: String -> IO (Either String LibHandle)
 dlopen lib = do
   (LibHandle handle) <- c_dlopen lib
-  if (handle /= nullPtr)
+  if handle /= nullPtr
     then pure $ Right $ LibHandle handle
     else Left <$> c_dlerror
 
@@ -55,7 +59,7 @@ findSymbol :: [LibHandle] -> String -> IO (Maybe ForeignFun)
 findSymbol [] _ = pure Nothing
 findSymbol (lib:libs) name = do
   (ForeignFun res) <- c_dlsym lib name
-  if (res /= nullPtr)
+  if res /= nullPtr
     then pure $ Just $ ForeignFun res
     else findSymbol libs name
 

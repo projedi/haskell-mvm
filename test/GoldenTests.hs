@@ -55,7 +55,7 @@ runEvaluate fname =
 compareResult :: String -> String -> IO (Maybe String)
 compareResult lhs rhs = do
   let diff = Diff.getGroupedDiff (lines lhs) (lines rhs)
-  if (nonEmptyDiff diff) then pure $ Just $ DiffOutput.ppDiff diff else pure Nothing
+  if nonEmptyDiff diff then pure $ Just $ DiffOutput.ppDiff diff else pure Nothing
 
 nonEmptyDiff :: [Diff a] -> Bool
 nonEmptyDiff [] = False

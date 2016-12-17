@@ -24,10 +24,13 @@ library
                      , Syntax
   c-sources:           src/ForeignEval.c
   build-depends:       base >= 4.7 && < 5
+                       -- for hlint
+                     , apply-refact
                      , array
                      , containers
-                     , inline-c
                      , filepath
+                     , hlint
+                     , inline-c
                      , mtl
   extra-libraries:     dl
   build-tools:         alex, happy
