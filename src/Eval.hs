@@ -1,5 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
-module Eval (eval) where
+
+module Eval
+  ( eval
+  ) where
 
 import Control.Monad (forM_, when)
 import Control.Monad.State (StateT, runStateT)
@@ -38,7 +41,7 @@ typeof (ValueString _) = VarTypeString
 
 convert :: Value -> VarType -> Value
 convert v vtype
- | v `typeIs` vtype = v
+  | v `typeIs` vtype = v
 convert (ValueInt i) VarTypeFloat = ValueFloat $ fromIntegral i
 convert _ _ = error "Type mismatch"
 
@@ -50,12 +53,12 @@ valueToExpr (ValueString s) = ExprString s
 printValue :: Value -> String
 printValue (ValueInt i) = show i
 printValue (ValueFloat f)
- | stripedAfter == "." = before
- | otherwise = before ++ stripedAfter
- where
-  str = Numeric.showFFloat (Just 3) f ""
-  (before, after) = List.span (/= '.') str
-  stripedAfter = List.dropWhileEnd (== '0') after
+  | stripedAfter == "." = before
+  | otherwise = before ++ stripedAfter
+  where
+    str = Numeric.showFFloat (Just 3) f ""
+    (before, after) = List.span (/= '.') str
+    stripedAfter = List.dropWhileEnd (== '0') after
 printValue (ValueString s) = s
 
 instance Eq Value where
@@ -77,30 +80,24 @@ instance Num Value where
   (ValueFloat fl) + (ValueFloat fr) = ValueFloat (fl + fr)
   (ValueString sl) + (ValueString sr) = ValueString (sl ++ sr)
   _ + _ = error "Type mismatch"
-
   (ValueInt il) * (ValueInt ir) = ValueInt (il * ir)
   (ValueInt il) * (ValueFloat fr) = ValueFloat (fromIntegral il * fr)
   (ValueFloat fl) * (ValueInt ir) = ValueFloat (fl * fromIntegral ir)
   (ValueFloat fl) * (ValueFloat fr) = ValueFloat (fl * fr)
   _ * _ = error "Type mismatch"
-
   fromInteger i = ValueInt (fromInteger i)
-
   signum (ValueInt i) = ValueInt (signum i)
   signum (ValueFloat f) = ValueFloat (signum f)
   signum _ = error "Type mismatch"
-
   abs (ValueInt i) = ValueInt (abs i)
   abs (ValueFloat f) = ValueFloat (abs f)
   abs _ = error "Type mismatch"
-
   negate (ValueInt i) = ValueInt (negate i)
   negate (ValueFloat f) = ValueFloat (negate f)
   negate _ = error "Type mismatch"
 
 instance Enum Value where
   toEnum i = ValueInt (toEnum i)
-
   fromEnum (ValueInt i) = fromEnum i
   fromEnum _ = error "Type mismatch"
 
@@ -112,7 +109,6 @@ instance Real Value where
 instance Integral Value where
   toInteger (ValueInt i) = toInteger i
   toInteger _ = error "Type mismatch"
-
   quotRem (ValueInt il) (ValueInt ir) =
     let (rl, rr) = quotRem il ir
     in (ValueInt rl, ValueInt rr)
@@ -141,10 +137,14 @@ data FunctionImpl
   = FunctionBody (LayerID, [Statement])
   | FunctionForeign ForeignFun
 
-data Function = Function (Maybe VarType) [VarDecl] (Maybe FunctionImpl)
+data Function =
+  Function (Maybe VarType)
+           [VarDecl]
+           (Maybe FunctionImpl)
 
 argsMatch :: [VarDecl] -> [VarDecl] -> Bool
-argsMatch largs rargs = map (\(VarDecl t _) -> t) largs == map (\(VarDecl t _) -> t) rargs
+argsMatch largs rargs =
+  map (\(VarDecl t _) -> t) largs == map (\(VarDecl t _) -> t) rargs
 
 functionTypesMatch :: Function -> Function -> Bool
 functionTypesMatch (Function lrettype lparams _) (Function rrettype rparams _) =
@@ -163,36 +163,65 @@ readVariableFromLayer l name = Map.lookup name (varEnv l)
 
 writeVariableToLayer :: Layer -> VarName -> Value -> Maybe Layer
 writeVariableToLayer l name value =
-  let (moldvalue, newvarenv) = Map.insertLookupWithKey (\_ newVal oldVal -> convert newVal (typeof oldVal)) name value (varEnv l)
+  let (moldvalue, newvarenv) =
+        Map.insertLookupWithKey
+          (\_ newVal oldVal -> convert newVal (typeof oldVal))
+          name
+          value
+          (varEnv l)
   in case moldvalue of
        Nothing -> Nothing
-       Just _ -> Just $ l { varEnv = newvarenv }
+       Just _ ->
+         Just $
+         l
+         { varEnv = newvarenv
+         }
 
 addVariableToLayer :: Layer -> VarName -> VarType -> Maybe Layer
 addVariableToLayer l name vtype =
-  let (oldvalue, newvarenv) = Map.insertLookupWithKey (\_ a _ -> a) name (defaultValueFromType vtype) (varEnv l)
-  in maybe (Just $ l { varEnv = newvarenv }) (const Nothing) oldvalue
+  let (oldvalue, newvarenv) =
+        Map.insertLookupWithKey
+          (\_ a _ -> a)
+          name
+          (defaultValueFromType vtype)
+          (varEnv l)
+  in maybe
+       (Just $
+        l
+        { varEnv = newvarenv
+        })
+       (const Nothing)
+       oldvalue
 
 getFunctionFromLayer :: Layer -> FunctionName -> Maybe Function
 getFunctionFromLayer l name = Map.lookup name (funEnv l)
 
 addFunctionToLayer :: Layer -> FunctionName -> Function -> Maybe Layer
 addFunctionToLayer l name f@(Function _ _ body) =
-  let (oldvalue, newfunenv) = Map.insertLookupWithKey (\_ a _ -> a) name f (funEnv l)
+  let (oldvalue, newfunenv) =
+        Map.insertLookupWithKey (\_ a _ -> a) name f (funEnv l)
   in case (oldvalue, body) of
-       (Nothing, _) -> Just $ l { funEnv = newfunenv }
+       (Nothing, _) ->
+         Just $
+         l
+         { funEnv = newfunenv
+         }
        (Just (Function _ _ (Just _)), Just _) -> Nothing
        (Just oldf@(Function _ _ (Just _)), Nothing)
-        | functionTypesMatch oldf f -> Just l
-        | otherwise -> Nothing
+         | functionTypesMatch oldf f -> Just l
+         | otherwise -> Nothing
        (Just oldf@(Function _ _ Nothing), _)
-        | functionTypesMatch oldf f -> Just $ l { funEnv = newfunenv }
-        | otherwise -> Nothing
+         | functionTypesMatch oldf f ->
+           Just $
+           l
+           { funEnv = newfunenv
+           }
+         | otherwise -> Nothing
 
 data Env = Env
- { envLibs :: [LibHandle]
- , envLayers :: [Layer]
- }
+  { envLibs :: [LibHandle]
+  , envLayers :: [Layer]
+  }
 
 emptyEnv :: Env
 emptyEnv = Env [] []
@@ -201,39 +230,53 @@ modifyingLayer :: (Layer -> Maybe Layer) -> [Layer] -> Maybe [Layer]
 modifyingLayer _ [] = Nothing
 modifyingLayer f (l:ls) =
   case f l of
-    Nothing -> (l:) <$> modifyingLayer f ls
-    Just l' -> Just (l':ls)
+    Nothing -> (l :) <$> modifyingLayer f ls
+    Just l' -> Just (l' : ls)
 
 readVariableFromEnv :: Env -> VarName -> Maybe Value
-readVariableFromEnv Env { envLayers = curlayer:otherlayers } vname =
+readVariableFromEnv Env {envLayers = curlayer:otherlayers} vname =
   asum (map (`readVariableFromLayer` vname) (curlayer : otherlayers))
 readVariableFromEnv _ _ = error "Env broke"
 
 writeVariableToEnv :: Env -> VarName -> Value -> Maybe Env
-writeVariableToEnv env@Env { envLayers = curlayer:otherlayers} vname val =
-  case modifyingLayer (\l -> writeVariableToLayer l vname val) (curlayer : otherlayers) of
-    Just (curlayer' : otherlayers') -> Just (env { envLayers = curlayer':otherlayers'})
+writeVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname val =
+  case modifyingLayer
+         (\l -> writeVariableToLayer l vname val)
+         (curlayer : otherlayers) of
+    Just (curlayer':otherlayers') ->
+      Just
+        (env
+         { envLayers = curlayer' : otherlayers'
+         })
     Just _ -> error "Impossible"
     Nothing -> Nothing
 writeVariableToEnv _ _ _ = error "Env broke"
 
 addVariableToEnv :: Env -> VarName -> VarType -> Maybe Env
-addVariableToEnv env@Env { envLayers = curlayer:otherlayers} vname vtype =
+addVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname vtype =
   case addVariableToLayer curlayer vname vtype of
     Nothing -> Nothing
-    Just l' -> Just (env { envLayers = l':otherlayers})
+    Just l' ->
+      Just
+        (env
+         { envLayers = l' : otherlayers
+         })
 addVariableToEnv _ _ _ = error "Env broke"
 
 getFunctionFromEnv :: Env -> FunctionName -> Maybe Function
-getFunctionFromEnv Env { envLayers = curlayer:otherlayers} name =
+getFunctionFromEnv Env {envLayers = curlayer:otherlayers} name =
   asum (map (`getFunctionFromLayer` name) (curlayer : otherlayers))
 getFunctionFromEnv _ _ = error "Env broke"
 
 addFunctionToEnv :: Env -> FunctionName -> Function -> Maybe Env
-addFunctionToEnv env@Env { envLayers = curlayer:otherlayers } fname f =
+addFunctionToEnv env@Env {envLayers = curlayer:otherlayers} fname f =
   case addFunctionToLayer curlayer fname f of
     Nothing -> Nothing
-    Just l' -> Just $ env { envLayers = l':otherlayers }
+    Just l' ->
+      Just $
+      env
+      { envLayers = l' : otherlayers
+      }
 addFunctionToEnv _ _ _ = error "Env broke"
 
 type Execute a = ExceptT (Maybe Value) (StateT Env IO) a
@@ -245,12 +288,21 @@ withNewLayer m = do
   res <- m
   dropLayer
   newLid <- currentLayer
-  when (lid /= newLid) $
-    error "Scoping broke."
+  when (lid /= newLid) $ error "Scoping broke."
   pure res
- where
-  newLayer = State.modify (\env@Env { envLayers = layers} -> env { envLayers = emptyLayer:layers})
-  dropLayer = State.modify (\env@Env { envLayers = layers} -> env { envLayers = tail layers})
+  where
+    newLayer =
+      State.modify
+        (\env@Env {envLayers = layers} ->
+            env
+            { envLayers = emptyLayer : layers
+            })
+    dropLayer =
+      State.modify
+        (\env@Env {envLayers = layers} ->
+            env
+            { envLayers = tail layers
+            })
 
 currentLayer :: Execute LayerID
 currentLayer = (length . envLayers) <$> State.get
@@ -259,11 +311,19 @@ splitLayers :: LayerID -> Execute [Layer]
 splitLayers lid = do
   env@Env {envLayers = ls} <- State.get
   let (newenv, preserve) = List.splitAt lid $ List.reverse ls
-  State.put $ env { envLayers = List.reverse newenv }
+  State.put $
+    env
+    { envLayers = List.reverse newenv
+    }
   pure $ List.reverse preserve
 
 combineLayers :: [Layer] -> Execute ()
-combineLayers ls = State.modify (\env@Env {envLayers = layers} -> env { envLayers = ls++layers})
+combineLayers ls =
+  State.modify
+    (\env@Env {envLayers = layers} ->
+        env
+        { envLayers = ls ++ layers
+        })
 
 withLayer :: LayerID -> Execute a -> Execute a
 withLayer lid m = do
@@ -272,14 +332,17 @@ withLayer lid m = do
   res <- m
   combineLayers preserve
   newLid <- currentLayer
-  when (oldLid /= newLid) $
-    error "Scoping broke."
+  when (oldLid /= newLid) $ error "Scoping broke."
   pure res
 
 openLibrary :: String -> Execute ()
 openLibrary lib = do
   handle <- either error id <$> Trans.liftIO (dlopen lib)
-  State.modify (\env@Env { envLibs = libs } -> env { envLibs = handle:libs})
+  State.modify
+    (\env@Env {envLibs = libs} ->
+        env
+        { envLibs = handle : libs
+        })
 
 runExecute :: Env -> Execute a -> IO (Env, Maybe Value)
 runExecute env m = do
@@ -302,26 +365,41 @@ defineFunction :: FunctionDecl -> [Statement] -> Execute ()
 defineFunction (FunctionDecl rettype name params) body = do
   env <- State.get
   lid <- currentLayer
-  let Just env' = addFunctionToEnv env name (Function rettype params (Just $ FunctionBody (lid, body)))
+  let Just env' =
+        addFunctionToEnv
+          env
+          name
+          (Function rettype params (Just $ FunctionBody (lid, body)))
   State.put env'
 
 declareForeignFunction :: FunctionDecl -> Execute ()
 declareForeignFunction (FunctionDecl rettype name@(FunctionName strname) params) = do
-  env@Env { envLibs = libs } <- State.get
+  env@Env {envLibs = libs} <- State.get
   Just f <- Trans.liftIO $ findSymbol libs strname
-  let Just env' = addFunctionToEnv env name (Function rettype params (Just $ FunctionForeign f))
+  let Just env' =
+        addFunctionToEnv
+          env
+          name
+          (Function rettype params (Just $ FunctionForeign f))
   State.put env'
 
 printCall :: [Value] -> Execute ()
-printCall vals =
-  Trans.liftIO $ putStrLn $ unwords (map printValue vals)
+printCall vals = Trans.liftIO $ putStrLn $ unwords (map printValue vals)
 
 dlopenCall :: [Value] -> Execute ()
-dlopenCall vals = forM_ vals $ \case
-  (ValueString s) -> openLibrary s
-  _ -> error "Type mismatch"
+dlopenCall vals =
+  forM_ vals $
+  \case
+    (ValueString s) -> openLibrary s
+    _ -> error "Type mismatch"
 
-nativeFunctionCall :: Maybe VarType -> [VarDecl] -> [Value] -> LayerID -> [Statement] -> Execute (Maybe Value)
+nativeFunctionCall
+  :: Maybe VarType
+  -> [VarDecl]
+  -> [Value]
+  -> LayerID
+  -> [Statement]
+  -> Execute (Maybe Value)
 nativeFunctionCall rettype params vals lid body = do
   let varassignments = generateAssignments params vals
   let newbody = StatementBlock $ varassignments ++ body
@@ -331,17 +409,23 @@ nativeFunctionCall rettype params vals lid body = do
     (Just val, Just valtype) -> pure $ Just $ convert val valtype
     _ -> error "Type mismatch"
 
-foreignFunctionCall :: Maybe VarType -> [VarDecl] -> [Value] -> ForeignFun -> Execute (Maybe Value)
-foreignFunctionCall rettype params vals fun = Trans.liftIO $
+foreignFunctionCall :: Maybe VarType
+                    -> [VarDecl]
+                    -> [Value]
+                    -> ForeignFun
+                    -> Execute (Maybe Value)
+foreignFunctionCall rettype params vals fun =
+  Trans.liftIO $
   case (rettype, convertVals params vals) of
-    (Just VarTypeFloat, [ValueFloat f]) -> callForeignFun fun (realToFrac f :: CDouble) >>= floatReturnValue
+    (Just VarTypeFloat, [ValueFloat f]) ->
+      callForeignFun fun (realToFrac f :: CDouble) >>= floatReturnValue
     _ -> error "Extend supported FFI calls as needed"
- where
-  convertVals [] [] = []
-  convertVals (VarDecl vtype _:ps) (v:vs) = convert v vtype : convertVals ps vs
-  convertVals _ _ = error "Type mismatch"
-  floatReturnValue :: CDouble -> IO (Maybe Value)
-  floatReturnValue = pure . Just . ValueFloat . realToFrac
+  where
+    convertVals [] [] = []
+    convertVals (VarDecl vtype _:ps) (v:vs) = convert v vtype : convertVals ps vs
+    convertVals _ _ = error "Type mismatch"
+    floatReturnValue :: CDouble -> IO (Maybe Value)
+    floatReturnValue = pure . Just . ValueFloat . realToFrac
 
 functionCall :: FunctionCall -> Execute (Maybe Value)
 functionCall (FunctionCall (FunctionName "print") args) = do
@@ -362,13 +446,12 @@ functionCall (FunctionCall fname args) = do
 
 generateAssignment :: VarDecl -> Value -> [Statement]
 generateAssignment decl@(VarDecl _ name) val =
-  [ StatementVarDecl decl
-  , StatementAssign name (valueToExpr val)
-  ]
+  [StatementVarDecl decl, StatementAssign name (valueToExpr val)]
 
 generateAssignments :: [VarDecl] -> [Value] -> [Statement]
 generateAssignments [] [] = []
-generateAssignments (decl:decls) (val:vals) = generateAssignment decl val ++ generateAssignments decls vals
+generateAssignments (decl:decls) (val:vals) =
+  generateAssignment decl val ++ generateAssignments decls vals
 generateAssignments _ _ = error "Type mismatch"
 
 evaluateArgs :: [Expr] -> Execute [Value]
@@ -378,10 +461,10 @@ executeStatementWithReturn :: Statement -> Execute (Maybe Value)
 executeStatementWithReturn s = do
   lid <- currentLayer
   (execute s >> pure Nothing) `Except.catchError` restoreFromReturn lid
- where
-  restoreFromReturn lid val = do
-    _ <- splitLayers lid
-    pure val
+  where
+    restoreFromReturn lid val = do
+      _ <- splitLayers lid
+      pure val
 
 functionReturn :: Maybe Value -> Execute ()
 functionReturn = Except.throwError
@@ -416,7 +499,7 @@ evaluate (ExprEq el er) = ((fromBool .) . (==)) <$> evaluate el <*> evaluate er
 evaluate (ExprNeq el er) = ((fromBool .) . (/=)) <$> evaluate el <*> evaluate er
 evaluate (ExprLt el er) = ((fromBool .) . (<)) <$> evaluate el <*> evaluate er
 evaluate (ExprLeq el er) = ((fromBool .) . (<=)) <$> evaluate el <*> evaluate er
-evaluate (ExprGt el er) = ((fromBool .) . (>) )<$> evaluate el <*> evaluate er
+evaluate (ExprGt el er) = ((fromBool .) . (>)) <$> evaluate el <*> evaluate er
 evaluate (ExprGeq el er) = ((fromBool .) . (>=)) <$> evaluate el <*> evaluate er
 
 evaluateAsBool :: Expr -> Execute Bool
@@ -434,9 +517,9 @@ execute (StatementBlock stmts) = withNewLayer (forM_ stmts execute)
 execute (StatementFunctionCall fcall) = functionCall fcall >> pure ()
 execute s@(StatementWhile e stmt) = do
   res <- evaluateAsBool e
-  when res $ do
-    execute stmt
-    execute s
+  when res $
+    do execute stmt
+       execute s
 execute (StatementVarDecl varDecl) = declareVariable varDecl
 execute (StatementFunctionDecl funDecl) = declareFunction funDecl
 execute (StatementForeignFunctionDecl funDecl) = declareForeignFunction funDecl
@@ -445,17 +528,19 @@ execute (StatementAssign var e) = do
   writeVariable var res
 execute (StatementIfElse e strue sfalse) = do
   res <- evaluateAsBool e
-  if res then execute strue else execute sfalse
+  if res
+    then execute strue
+    else execute sfalse
 execute (StatementIf e s) = do
   res <- evaluateAsBool e
-  when res $
-    execute s
+  when res $ execute s
 execute (StatementFor v e1 e2 s) = do
   i1 <- evaluateAsInt e1
   i2 <- evaluateAsInt e2
-  forM_ [i1..i2] $ \i -> do
-    writeVariable v $ ValueInt i
-    execute s
+  forM_ [i1 .. i2] $
+    \i -> do
+      writeVariable v $ ValueInt i
+      execute s
 execute (StatementFunctionDef funDecl stmts) = defineFunction funDecl stmts
 execute (StatementReturn Nothing) = functionReturn Nothing
 execute (StatementReturn (Just e)) = do

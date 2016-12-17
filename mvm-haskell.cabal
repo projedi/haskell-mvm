@@ -29,6 +29,7 @@ library
                      , array
                      , containers
                      , filepath
+                     , hindent >= 5.2
                      , hlint
                      , inline-c
                      , mtl

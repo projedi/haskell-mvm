@@ -1,4 +1,6 @@
-{-# LANGUAGE MultiParamTypeClasses, QuasiQuotes, TemplateHaskell #-}
+{-# LANGUAGE MultiParamTypeClasses, QuasiQuotes, TemplateHaskell
+  #-}
+
 module ForeignEval
   ( LibHandle()
   , ForeignFun()
@@ -18,28 +20,38 @@ import System.IO (hPutStrLn, stderr)
 
 C.include "<dlfcn.h>"
 
-newtype LibHandle = LibHandle (Ptr ())
+newtype LibHandle =
+  LibHandle (Ptr ())
 
-newtype ForeignFun = ForeignFun (Ptr ())
+newtype ForeignFun =
+  ForeignFun (Ptr ())
 
 {-# ANN c_dlopen "HLint: ignore Use camelCase" #-}
+
 c_dlopen :: String -> IO LibHandle
-c_dlopen name = CString.withCString name $ \cname ->
-  LibHandle <$> [CU.exp| void* { dlopen($(const char *cname), RTLD_LAZY) } |]
+c_dlopen name =
+  CString.withCString name $
+  \cname ->
+     LibHandle <$> [CU.exp| void* { dlopen($(const char *cname), RTLD_LAZY) } |]
 
 {-# ANN c_dlclose "HLint: ignore Use camelCase" #-}
+
 c_dlclose :: LibHandle -> IO Bool
 c_dlclose (LibHandle handle) =
   (== 0) <$> [CU.exp| int { dlclose($(void *handle)) } |]
 
 {-# ANN c_dlerror "HLint: ignore Use camelCase" #-}
+
 c_dlerror :: IO String
 c_dlerror = [CU.exp| char* { dlerror() } |] >>= CString.peekCString
 
 {-# ANN c_dlsym "HLint: ignore Use camelCase" #-}
+
 c_dlsym :: LibHandle -> String -> IO ForeignFun
-c_dlsym (LibHandle handle) name = CString.withCString name $ \cname -> ForeignFun <$>
-  [CU.exp| void* { dlsym($(void *handle), $(char* cname)) } |]
+c_dlsym (LibHandle handle) name =
+  CString.withCString name $
+  \cname ->
+     ForeignFun <$> [CU.exp| void* { dlsym($(void *handle), $(char* cname)) } |]
 
 dlopen :: String -> IO (Either String LibHandle)
 dlopen lib = do
@@ -51,9 +63,9 @@ dlopen lib = do
 dlclose :: LibHandle -> IO ()
 dlclose handle = do
   res <- c_dlclose handle
-  unless res $ do
-    err <- c_dlerror
-    hPutStrLn stderr $ "WARNING: " ++ err
+  unless res $
+    do err <- c_dlerror
+       hPutStrLn stderr $ "WARNING: " ++ err
 
 findSymbol :: [LibHandle] -> String -> IO (Maybe ForeignFun)
 findSymbol [] _ = pure Nothing
@@ -63,7 +75,7 @@ findSymbol (lib:libs) name = do
     then pure $ Just $ ForeignFun res
     else findSymbol libs name
 
-class CallForeignFun args ret where
+class CallForeignFun args ret  where
   callForeignFun :: ForeignFun -> args -> IO ret
 
 instance CallForeignFun CDouble CDouble where

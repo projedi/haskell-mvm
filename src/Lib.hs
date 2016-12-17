@@ -17,5 +17,4 @@ evaluateFile fname = do
 someFunc :: IO ()
 someFunc = do
   args <- getArgs
-  forM_ args $ \fname ->
-    evaluateFile fname
+  forM_ args $ \fname -> evaluateFile fname

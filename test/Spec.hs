@@ -6,4 +6,4 @@ main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "Tests" [ GoldenTests.tests ]
+tests = testGroup "Tests" [GoldenTests.tests]
