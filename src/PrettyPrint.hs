@@ -74,6 +74,7 @@ prettyPrintStatement :: Int -> Statement -> String
 prettyPrintStatement n (StatementFunctionCall fcall) = indent n (prettyPrintSimple fcall ++ ";")
 prettyPrintStatement n (StatementVarDecl varDecl) = indent n (prettyPrintSimple varDecl ++ ";")
 prettyPrintStatement n (StatementFunctionDecl funDecl) = indent n (prettyPrintSimple funDecl ++ ";")
+prettyPrintStatement n (StatementForeignFunctionDecl funDecl) = indent n ("foreign " ++ prettyPrintSimple funDecl ++ ";")
 prettyPrintStatement n (StatementAssign var expr) = indent n (prettyPrintSimple var ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
 prettyPrintStatement n (StatementReturn Nothing) = indent n "return;"
 prettyPrintStatement n (StatementReturn (Just e)) = indent n ("return " ++ prettyPrintExpr 0 e ++ ";")

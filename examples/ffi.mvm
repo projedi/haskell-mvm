@@ -1,0 +1,28 @@
+dlopen("libm.so.6");
+
+foreign float sin(float x);
+
+print(sin(3));
+
+float sqrt(float x);
+foreign float sqrt(float x);
+
+print(sqrt(3));
+
+{
+  float sin(float x) {
+    print("Fake");
+    return 0;
+  }
+  print(sin(3));
+}
+
+float cos(float x) {
+  print("Fake");
+  return 0;
+}
+
+{
+  foreign float cos(float x);
+  print(cos(3));
+}

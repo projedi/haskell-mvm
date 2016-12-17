@@ -32,6 +32,7 @@ data Statement
   | StatementFor VarName Expr Expr Statement
   | StatementFunctionDef FunctionDecl [Statement]
   | StatementReturn (Maybe Expr)
+  | StatementForeignFunctionDecl FunctionDecl
   deriving (Eq, Show)
 
 data FunctionDecl

@@ -17,8 +17,7 @@ timeout = 5
 
 testList :: [String]
 testList =
-  [ "fib"
-  , "flops"
+  [ "flops"
   , "for"
   , "fundef"
   , "if"
@@ -28,6 +27,8 @@ testList =
   , "strops"
   , "vardef"
   , "while"
+  , "fib"
+  , "ffi"
   , "gnuplot/pm3d.8"
   ]
 

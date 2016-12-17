@@ -11,6 +11,7 @@ import Data.Foldable (asum)
 import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Foreign.C.Types (CDouble)
 import qualified Numeric
 
 import ForeignEval
@@ -136,7 +137,11 @@ defaultValueFromType VarTypeString = ValueString ""
 
 type LayerID = Int
 
-data Function = Function (Maybe VarType) [VarDecl] (Maybe (LayerID, [Statement]))
+data FunctionImpl
+  = FunctionBody (LayerID, [Statement])
+  | FunctionForeign ForeignFun
+
+data Function = Function (Maybe VarType) [VarDecl] (Maybe FunctionImpl)
 
 argsMatch :: [VarDecl] -> [VarDecl] -> Bool
 argsMatch largs rargs = map (\(VarDecl t _) -> t) largs == map (\(VarDecl t _) -> t) rargs
@@ -297,7 +302,14 @@ defineFunction :: FunctionDecl -> [Statement] -> Execute ()
 defineFunction (FunctionDecl rettype name params) body = do
   env <- State.get
   lid <- currentLayer
-  let Just env' = addFunctionToEnv env name (Function rettype params (Just (lid, body)))
+  let Just env' = addFunctionToEnv env name (Function rettype params (Just $ FunctionBody (lid, body)))
+  State.put env'
+
+declareForeignFunction :: FunctionDecl -> Execute ()
+declareForeignFunction (FunctionDecl rettype name@(FunctionName strname) params) = do
+  env@(Env { envLibs = libs }) <- State.get
+  Just f <- Trans.liftIO $ findSymbol libs strname
+  let Just env' = addFunctionToEnv env name (Function rettype params (Just $ FunctionForeign f))
   State.put env'
 
 printCall :: [Value] -> Execute ()
@@ -309,6 +321,28 @@ dlopenCall vals = forM_ vals $ \case
   (ValueString s) -> openLibrary s
   _ -> error "Type mismatch"
 
+nativeFunctionCall :: (Maybe VarType) -> [VarDecl] -> [Value] -> LayerID -> [Statement] -> Execute (Maybe Value)
+nativeFunctionCall rettype params vals lid body = do
+  let varassignments = generateAssignments params vals
+  let newbody = StatementBlock $ varassignments ++ body
+  res <- withLayer lid $ executeStatementWithReturn newbody
+  case (res, rettype) of
+    (Nothing, Nothing) -> pure res
+    (Just val, Just valtype) -> pure $ Just $ convert val valtype
+    _ -> error "Type mismatch"
+
+foreignFunctionCall :: (Maybe VarType) -> [VarDecl] -> [Value] -> ForeignFun -> Execute (Maybe Value)
+foreignFunctionCall rettype params vals fun = Trans.liftIO $
+  case (rettype, convertVals params vals) of
+    (Just VarTypeFloat, [ValueFloat f]) -> callForeignFun fun (realToFrac f :: CDouble) >>= floatReturnValue
+    _ -> error "Extend supported FFI calls as needed"
+ where
+  convertVals [] [] = []
+  convertVals ((VarDecl vtype _):ps) (v:vs) = convert v vtype : convertVals ps vs
+  convertVals _ _ = error "Type mismatch"
+  floatReturnValue :: CDouble -> IO (Maybe Value)
+  floatReturnValue = pure . Just . ValueFloat . realToFrac
+
 functionCall :: FunctionCall -> Execute (Maybe Value)
 functionCall (FunctionCall (FunctionName "print") args) = do
   vals <- evaluateArgs args
@@ -318,30 +352,13 @@ functionCall (FunctionCall (FunctionName "dlopen") args) = do
   vals <- evaluateArgs args
   dlopenCall vals
   pure Nothing
--- TODO: Implement them as FFI
-functionCall (FunctionCall (FunctionName "sin") [arg]) = do
-  val <- evaluate arg
-  case val of
-    ValueInt i -> pure $ Just $ ValueFloat $ sin $ fromIntegral i
-    ValueFloat f -> pure $ Just $ ValueFloat $ sin f
-    _ -> error "Type mismatch"
-functionCall (FunctionCall (FunctionName "sqrt") [arg]) = do
-  val <- evaluate arg
-  case val of
-    ValueInt i -> pure $ Just $ ValueFloat $ sqrt $ fromIntegral i
-    ValueFloat f -> pure $ Just $ ValueFloat $ sqrt f
-    _ -> error "Type mismatch"
 functionCall (FunctionCall fname args) = do
   env <- State.get
-  let Just (Function rettype params (Just (lid, body))) = getFunctionFromEnv env fname
   vals <- evaluateArgs args
-  let varassignments = generateAssignments params vals
-  let newbody = StatementBlock $ varassignments ++ body
-  res <- withLayer lid $ executeStatementWithReturn newbody
-  case (res, rettype) of
-    (Nothing, Nothing) -> pure res
-    (Just val, Just valtype) -> pure $ Just $ convert val valtype
-    _ -> error "Type mismatch"
+  let Just (Function rettype params (Just impl)) = getFunctionFromEnv env fname
+  case impl of
+    FunctionBody (lid, body) -> nativeFunctionCall rettype params vals lid body
+    FunctionForeign f -> foreignFunctionCall rettype params vals f
 
 generateAssignment :: VarDecl -> Value -> [Statement]
 generateAssignment decl@(VarDecl _ name) val =
@@ -422,6 +439,7 @@ execute s@(StatementWhile e stmt) = do
     execute s
 execute (StatementVarDecl varDecl) = declareVariable varDecl
 execute (StatementFunctionDecl funDecl) = declareFunction funDecl
+execute (StatementForeignFunctionDecl funDecl) = declareForeignFunction funDecl
 execute (StatementAssign var e) = do
   res <- evaluate e
   writeVariable var res

@@ -82,6 +82,8 @@ tokens :-
     { \p s -> TokenVoid p }
   return
     { \p s -> TokenReturn p }
+  foreign
+    { \p s -> TokenForeign p }
   $alpha [$alpha $digit \_ \']*
     { \p s -> TokenSym p s }
 
@@ -119,6 +121,7 @@ data Token
   | TokenString AlexPosn
   | TokenVoid AlexPosn
   | TokenReturn AlexPosn
+  | TokenForeign AlexPosn
   | TokenSym AlexPosn String
   deriving (Eq, Show)
 

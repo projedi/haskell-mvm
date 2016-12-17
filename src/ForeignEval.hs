@@ -1,8 +1,16 @@
-{-# LANGUAGE QuasiQuotes, TemplateHaskell #-}
-module ForeignEval where
+{-# LANGUAGE MultiParamTypeClasses, QuasiQuotes, TemplateHaskell #-}
+module ForeignEval
+  ( LibHandle()
+  , ForeignFun()
+  , dlclose
+  , dlopen
+  , callForeignFun
+  , findSymbol
+  ) where
 
 import Control.Monad
 import qualified Foreign.C.String as CString
+import Foreign.C.Types (CDouble)
 import Foreign.Ptr (Ptr, nullPtr)
 import qualified Language.C.Inline as C
 import qualified Language.C.Inline.Unsafe as CU
@@ -11,6 +19,8 @@ import System.IO (hPutStrLn, stderr)
 C.include "<dlfcn.h>"
 
 newtype LibHandle = LibHandle (Ptr ())
+
+newtype ForeignFun = ForeignFun (Ptr ())
 
 c_dlopen :: String -> IO LibHandle
 c_dlopen name = CString.withCString name $ \cname ->
@@ -23,8 +33,8 @@ c_dlclose (LibHandle handle) =
 c_dlerror :: IO String
 c_dlerror = [CU.exp| char* { dlerror() } |] >>= CString.peekCString
 
-c_dlsym :: LibHandle -> String -> IO (Ptr ())
-c_dlsym (LibHandle handle) name = CString.withCString name $ \cname ->
+c_dlsym :: LibHandle -> String -> IO (ForeignFun)
+c_dlsym (LibHandle handle) name = CString.withCString name $ \cname -> ForeignFun <$>
   [CU.exp| void* { dlsym($(void *handle), $(char* cname)) } |]
 
 dlopen :: String -> IO (Either String LibHandle)
@@ -40,3 +50,18 @@ dlclose handle = do
   unless res $ do
     err <- c_dlerror
     hPutStrLn stderr $ "WARNING: " ++ err
+
+findSymbol :: [LibHandle] -> String -> IO (Maybe ForeignFun)
+findSymbol [] _ = pure Nothing
+findSymbol (lib:libs) name = do
+  (ForeignFun res) <- c_dlsym lib name
+  if (res /= nullPtr)
+    then pure $ Just $ ForeignFun res
+    else findSymbol libs name
+
+class CallForeignFun args ret where
+  callForeignFun :: ForeignFun -> args -> IO ret
+
+instance CallForeignFun CDouble CDouble where
+  callForeignFun (ForeignFun f) a0 =
+    [CU.exp| double { (*((double(*)(double))($(void* f))))($(double a0)) } |]

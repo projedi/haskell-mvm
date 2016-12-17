@@ -76,6 +76,8 @@ import Syntax
     { TokenVoid _ }
   'return'
     { TokenReturn _ }
+  'foreign'
+    { TokenForeign _ }
   sym
     { TokenSym _ $$ }
 
@@ -121,6 +123,8 @@ defdecl
     { StatementFunctionDecl $1 }
   | vardecl ';'
     { StatementVarDecl $1 }
+  | 'foreign' fundecl ';'
+    { StatementForeignFunctionDecl $2 }
 
 fundecl
   : 'void' sym '(' params ')' { FunctionDecl Nothing (FunctionName $2) (reverse $4) }

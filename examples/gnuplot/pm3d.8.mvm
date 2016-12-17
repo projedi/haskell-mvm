@@ -1,3 +1,7 @@
+dlopen("libm.so.6");
+foreign float sin(float x);
+foreign float sqrt(float x);
+
 int ix;
 int iy;
 int range;
