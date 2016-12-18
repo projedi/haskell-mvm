@@ -82,7 +82,7 @@ emptyEnv =
   , currentRetType = Nothing
   , lastLabel = LabelID (-1)
   , lastVar = VarID (-1)
-  , lastFun = FunID (-1)
+  , lastFun = FunID 0
   , layers = [emptyLayer]
   , vars = IntMap.empty
   , funs = IntMap.empty
@@ -281,7 +281,7 @@ translateFunctionBody (FunctionDecl retType _ params) fid body = do
     }
   namespaceBlock $
     do vs <- mapM introduceVariable params
-       forM_ vs (addOp . OpLoad)
+       forM_ vs (addOp . OpStore)
        translateStatement $ StatementBlock body
   envAfter <- State.get
   State.put $
@@ -351,9 +351,10 @@ translateStatement (StatementFor vname eFrom eTo stmt) =
   namespaceBlock $
   do (vType, v) <- findVariable vname
      when (vType /= VarTypeInt) $ error "Type mismatch"
+     vCur <- newVariable VarTypeInt
      eFromType <- embedExpression eFrom
      when (eFromType /= VarTypeInt) $ error "Type mismatch"
-     addOp $ OpStore v
+     addOp $ OpStore vCur
      vTo <- newVariable VarTypeInt
      eToType <- embedExpression eTo
      when (eToType /= VarTypeInt) $ error "Type mismatch"
@@ -361,17 +362,19 @@ translateStatement (StatementFor vname eFrom eTo stmt) =
      labelLoopBegin <- newLabel
      labelAfterLoop <- newLabel
      addOp $ OpLabel labelLoopBegin
-     addOp $ OpLoad v
+     addOp $ OpLoad vCur
      addOp $ OpLoad vTo
      addOp OpLtInt
      addOp OpNotInt
      -- if vTo < v then loop is finished.
      addOp $ OpJumpIfZero labelAfterLoop
+     addOp $ OpLoad vCur
+     addOp $ OpStore v
      translateStatement stmt
-     addOp $ OpLoad v
+     addOp $ OpLoad vCur
      addOp $ OpPushInt 1
      addOp OpPlusInt
-     addOp $ OpStore v
+     addOp $ OpStore vCur
      addOp $ OpJump labelLoopBegin
      addOp $ OpLabel labelAfterLoop
 translateStatement (StatementVarDecl v) = introduceVariable v >> pure ()
@@ -628,6 +631,6 @@ translateExpression (ExprNeq lhs rhs) =
   translateExpression (ExprNot (ExprEq lhs rhs))
 translateExpression (ExprGt lhs rhs) = translateExpression (ExprLt rhs lhs)
 translateExpression (ExprLeq lhs rhs) =
-  translateExpression (ExprNot (ExprGt rhs lhs))
+  translateExpression (ExprNot (ExprGt lhs rhs))
 translateExpression (ExprGeq lhs rhs) =
-  translateExpression (ExprNot (ExprLt rhs lhs))
+  translateExpression (ExprNot (ExprLt lhs rhs))
