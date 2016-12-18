@@ -3,9 +3,9 @@ int j;
 
 j = 3;
 
-print ('Begin.\n');
+print ("Begin.\n");
 for (i in -3..4)  {
-    j += i; print(i, ' ');
+    j += i; print(i, " ");
 }
-print('\n', j, '\n');
-print ('The end.\n');
+print("\n", j, "\n");
+print ("The end.\n");

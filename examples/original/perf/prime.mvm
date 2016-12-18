@@ -63,20 +63,20 @@ function void factorize(int n, int printResult)  {
     int least;
     least = n;
     if (printResult != 0) {
-        print(n, ' = 1');
+        print(n, " = 1");
     }
     while (n > 1) {
         least = leastFactor(n);
         if (n % least != 0) {
-            print('Bug!\n');
+            print("Bug!\n");
         }
         if (printResult != 0) {
-            print(' * ', least);
+            print(" * ", least);
         }
         n = n / least;
     }
     if (printResult != 0) {
-        print('\n');
+        print("\n");
     }
 }
 
@@ -87,4 +87,4 @@ for (n in 10000000..(10000000+count)) {
     factorize(n, 0);
 }
 int end = timestamp();
-print('factorize ', count, ' numbers took ', end - start, 'us\n');
+print("factorize ", count, " numbers took ", end - start, "us\n");

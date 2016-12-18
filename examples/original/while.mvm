@@ -4,13 +4,13 @@ int y;
 x = 3;
 
 while (x < 19) {
-    print(x,'\n');
+    print(x,"\n");
     x += 1;
 }
 
 y = 4;
 
 while (x > 0 && (x + 1) > y) {
-    print(x,'\n');
+    print(x,"\n");
     x -= 1;
 }

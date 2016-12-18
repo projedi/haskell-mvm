@@ -8,4 +8,4 @@ function int closured(int y) {
 
 x = 20 + 30;
 
-print('The closured function returns ', closured(30), '\n');
+print("The closured function returns ", closured(30), "\n");

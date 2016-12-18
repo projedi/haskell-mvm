@@ -28,6 +28,6 @@ for (repeat in 0 .. 100000) {
   root = newton(10 + repeat / 400.0);
 }
 int end = timestamp();
-print('root=', root, '\n');
+print("root=", root, "\n");
 
-print('Newton took ', end - start, 'us\n');
+print("Newton took ", end - start, "us\n");

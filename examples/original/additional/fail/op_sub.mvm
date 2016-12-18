@@ -1,4 +1,4 @@
 string x;
 
-x = 'abc';
+x = "abc";
 print(-x);

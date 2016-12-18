@@ -15,4 +15,4 @@ function void fib(int x) {
 }
 
 fib(100000);
-print(r, '\n');
+print(r, "\n");

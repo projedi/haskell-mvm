@@ -42,7 +42,7 @@ function void drawFrame() {
 
 
 if (videoInitFramebuffer(WIDTH, HEIGHT, BPP, 0) == 0) {
-   print('Cannot init video\n');
+   print("Cannot init video\n");
    return;
 }
 
@@ -52,7 +52,7 @@ while (videoCheckEvent() == 0) {
     drawFrame();
     int fps; 
     fps = frames * 1000000 / (timestamp() - start);
-    print('FPS ', fps, '\r');
+    print("FPS ", fps, "\r");
     frames += 1;
 }
 

@@ -2,4 +2,4 @@ function void foo(int x) {
     print(x);
 }
 
-foo('hi');
+foo("hi");

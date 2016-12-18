@@ -72,7 +72,7 @@ function void plotter(double xmin, double ymin, double xmax, double ymax) {
 }
 
 if (videoInitFramebuffer(WIDTH, HEIGHT, BPP, 0) == 0) {
-   print('Cannot init video\n');
+   print("Cannot init video\n");
    return;
 }
 
@@ -83,7 +83,7 @@ for (repeat in 0 .. 1000) {
 }
 int end = timestamp();
 
-print('Drawing took ', end - start, 'us\n');
+print("Drawing took ", end - start, "us\n");
 
 //while (videoCheckEvent() == 0) {}
 

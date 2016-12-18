@@ -16,7 +16,7 @@ function void videoReleaseFramebuffer() native 'unsafe_videoReleaseFramebuffer';
 function void setPixel(int mem, int x, int y, int r, int g, int b) {
     int color;
     if (y >= HEIGHT || x >= WIDTH) {
-      //print('out of bounds ', x, ' ', y, '\n');
+      //print("out of bounds ", x, " ", y, "\n");
       return;
     }
     color = (r % 256) * 65536 + (g % 256) *256 + (b % 256);
@@ -99,7 +99,7 @@ function void drawFrame() {
   int fb;
   fb = videoGrabFramebuffer();
   if (!fb) {
-    print('fb', fb, '\n');
+    print("fb", fb, "\n");
     return;
   }
   double tOld;
@@ -117,7 +117,7 @@ function void drawFrame() {
 
 
 if (videoInitFramebuffer(WIDTH, HEIGHT, BPP, 0) == 0) {
-  print('Cannot init video\n');
+  print("Cannot init video\n");
   return;
 }
 
@@ -132,9 +132,9 @@ while (videoCheckEvent() == 0) {
     drawFrame();
     chainsaw += 0.01;
   }
-  print('Rendered all lissajous by ', 
+  print("Rendered all lissajous by ", 
     (timestamp() - start) / 1000000,
-    ' secs', '\r\n');
+    " secs", "\r\n");
 }
 
 videoDenitFramebuffer();

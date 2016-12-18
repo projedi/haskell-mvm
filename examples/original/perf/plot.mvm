@@ -27,7 +27,7 @@ function void drawFrame() {
    int fb;
    fb = videoGrabFramebuffer();
    if (!fb) {
-      print('fb', fb, '\n');
+      print("fb", fb, "\n");
       return;
    }
    int y; int x;
@@ -42,7 +42,7 @@ function void drawFrame() {
 
 
 if (videoInitFramebuffer(WIDTH, HEIGHT, BPP, 0) == 0) {
-   print('Cannot init video\n');
+   print("Cannot init video\n");
    return;
 }
 
@@ -54,10 +54,10 @@ while (videoCheckEvent() == 0 && frames < 100) {
     drawFrame();
     int fps;
     fps = frames * 1000000 / (timestamp() - start);
-    print('FPS ', fps, '\r');
+    print("FPS ", fps, "\r");
     frames += 1;
 }
 int end = timestamp();
-print('render 100 frames took ', end - start, 'us\n');
+print("render 100 frames took ", end - start, "us\n");
 
 videoDenitFramebuffer();
