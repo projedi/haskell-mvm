@@ -305,7 +305,7 @@ translateReturnWithValue expr = do
     Just expectedType -> do
       actualType <- embedExpression expr
       _ <- embedExpressionTranslator $ convert actualType expectedType
-      addOp OpReturnWithValue
+      addOp OpReturn
 
 translateStatement :: Statement -> Translator ()
 translateStatement (StatementBlock stmts) = namespaceBlock $ forM_ stmts translateStatement
@@ -519,7 +519,6 @@ opRetType (OpPushFloat _) = VarTypeFloat
 opRetType (OpPushString _) = VarTypeString
 opRetType OpPop = error "Type mismatch"
 opRetType OpReturn = error "Type mismatch"
-opRetType OpReturnWithValue = error "Type mismatch"
 opRetType OpPrintCall = error "Type mismatch"
 opRetType OpDlopenCall = error "Type mismatch"
 opRetType (OpCall _) = error "Type mismatch"

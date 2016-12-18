@@ -39,7 +39,6 @@ data Op
   | OpIntroVar VarID
                Syntax.VarType
   | OpReturn
-  | OpReturnWithValue
   | OpForeignCall String
   | OpPrintCall -- ^ count of args, string args.
   | OpDlopenCall -- ^ count of args, string args.
@@ -79,7 +78,6 @@ instance Show Op where
   show (OpCall (FunID f)) = "call " ++ show f
   show (OpIntroVar (VarID v) t) = "var " ++ show v ++ " : " ++ show t
   show OpReturn = "ret"
-  show OpReturnWithValue = "retv"
   show (OpForeignCall name) = "fcall " ++ name
   show OpPrintCall = "print"
   show OpDlopenCall = "dlopen"
