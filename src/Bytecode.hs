@@ -6,7 +6,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Monoid ((<>))
 
-import qualified Syntax as Syntax
+import qualified Syntax
 
 newtype Bytecode =
   Bytecode (IntMap BytecodeFunction)

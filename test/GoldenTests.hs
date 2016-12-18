@@ -31,7 +31,12 @@ testList =
   ]
 
 tests :: TestTree
-tests = testGroup "Golden tests" [testsWithParams "Dumb evaluate" 5 "--dumb"]
+tests =
+  testGroup
+    "Golden tests"
+    [ testsWithParams "Dumb evaluate" 5 "--dumb"
+    , testsWithParams "Bytecode interpret" 5 ""
+    ]
 
 testsWithParams :: String -> Integer -> String -> TestTree
 testsWithParams name timeout flags =
