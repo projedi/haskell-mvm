@@ -238,13 +238,15 @@ newVariable vtype = do
   env <- State.get
   let (v, env') = newVariableInEnv env vtype
   State.put env'
+  addOp $ OpIntroVar v vtype
   pure v
 
 introduceVariable :: VarDecl -> Translator VarID
-introduceVariable vdecl = do
+introduceVariable vdecl@(VarDecl vtype _) = do
   env <- State.get
   let (v, env') = introduceVariableInEnv env vdecl
   State.put env'
+  addOp $ OpIntroVar v vtype
   pure v
 
 introduceFunction :: FunctionDecl -> Translator FunID
@@ -527,6 +529,7 @@ opRetType (OpJump _) = error "Type mismatch"
 opRetType (OpJumpIfZero _) = error "Type mismatch"
 opRetType (OpStore _) = error "Type mismatch"
 opRetType (OpLoad _) = error "Type mismatch"
+opRetType (OpIntroVar _ _) = error "Type mismatch"
 
 addOpWithoutType :: Op -> ExpressionTranslator ()
 addOpWithoutType op = addCode (BytecodeFunction [op])

@@ -18,7 +18,12 @@ data VarType
   = VarTypeInt
   | VarTypeFloat
   | VarTypeString
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
+
+instance Show VarType where
+  show VarTypeInt = "int"
+  show VarTypeFloat = "float"
+  show VarTypeString = "string"
 
 data VarDecl =
   VarDecl VarType

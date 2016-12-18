@@ -76,9 +76,7 @@ instance PrettyPrintSimple VarDecl where
     prettyPrintSimple vtype ++ " " ++ prettyPrintSimple name
 
 instance PrettyPrintSimple VarType where
-  prettyPrintSimple VarTypeInt = "int"
-  prettyPrintSimple VarTypeFloat = "float"
-  prettyPrintSimple VarTypeString = "string"
+  prettyPrintSimple = show
 
 instance PrettyPrintSimple (Maybe VarType) where
   prettyPrintSimple (Just vtype) = prettyPrintSimple vtype

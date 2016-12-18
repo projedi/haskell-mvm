@@ -6,6 +6,8 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Monoid ((<>))
 
+import qualified Syntax as Syntax
+
 newtype Bytecode =
   Bytecode (IntMap BytecodeFunction)
   deriving (Show)
@@ -34,6 +36,8 @@ newtype VarID =
 -- Args are in pop order. Return value is on top of the stack.
 data Op
   = OpCall FunID
+  | OpIntroVar VarID
+               Syntax.VarType
   | OpReturn
   | OpReturnWithValue
   | OpForeignCall String
@@ -73,6 +77,7 @@ data Op
 
 instance Show Op where
   show (OpCall (FunID f)) = "call " ++ show f
+  show (OpIntroVar (VarID v) t) = "var " ++ show v ++ " : " ++ show t
   show OpReturn = "ret"
   show OpReturnWithValue = "retv"
   show (OpForeignCall name) = "fcall " ++ name
