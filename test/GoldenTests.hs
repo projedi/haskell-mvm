@@ -34,8 +34,8 @@ tests :: TestTree
 tests =
   testGroup
     "Golden tests"
-    [ testsWithParams "Dumb evaluate" 5 "--dumb"
-    , testsWithParams "Bytecode interpret" 5 ""
+    [ testsWithParams "Dumb evaluate" 30 "--dumb"
+    , testsWithParams "Bytecode interpret" 30 ""
     ]
 
 testsWithParams :: String -> Integer -> String -> TestTree

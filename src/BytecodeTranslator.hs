@@ -443,9 +443,10 @@ dlopenCall :: [Expr] -> ExpressionTranslator ()
 dlopenCall = builtinCall OpDlopenCall
 
 foreignFunctionCall :: FunctionDecl -> [Expr] -> ExpressionTranslator ()
-foreignFunctionCall (FunctionDecl _ (FunctionName fname) params) args = do
-  translateArgs args $ map (\(VarDecl vtype _) -> vtype) params
-  addOpWithoutType $ OpForeignCall fname
+foreignFunctionCall (FunctionDecl rettype (FunctionName fname) params) args = do
+  let types = map (\(VarDecl vtype _) -> vtype) params
+  translateArgs args types
+  addOpWithoutType $ OpForeignCall fname rettype types
 
 nativeFunctionCall :: FunctionDecl -> FunID -> [Expr] -> ExpressionTranslator ()
 nativeFunctionCall (FunctionDecl _ _ params) fid args = do
@@ -525,7 +526,7 @@ opRetType OpReturn = error "Type mismatch"
 opRetType OpPrintCall = error "Type mismatch"
 opRetType OpDlopenCall = error "Type mismatch"
 opRetType (OpCall _) = error "Type mismatch"
-opRetType (OpForeignCall _) = error "Type mismatch"
+opRetType (OpForeignCall _ _ _) = error "Type mismatch"
 opRetType (OpLabel _) = error "Type mismatch"
 opRetType (OpJump _) = error "Type mismatch"
 opRetType (OpJumpIfZero _) = error "Type mismatch"

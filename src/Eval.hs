@@ -14,7 +14,6 @@ import Data.Foldable (asum)
 import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Foreign.C.Types (CDouble)
 
 import ForeignEval
 import Syntax
@@ -315,17 +314,11 @@ foreignFunctionCall :: Maybe VarType
                     -> ForeignFun
                     -> Execute (Maybe Value)
 foreignFunctionCall rettype params vals fun =
-  Trans.liftIO $
-  case (rettype, convertVals params vals) of
-    (Just VarTypeFloat, [ValueFloat f]) ->
-      callForeignFun fun (realToFrac f :: CDouble) >>= floatReturnValue
-    _ -> error "Extend supported FFI calls as needed"
+  Trans.liftIO $ call fun rettype (convertVals params vals)
   where
     convertVals [] [] = []
     convertVals (VarDecl vtype _:ps) (v:vs) = convert v vtype : convertVals ps vs
     convertVals _ _ = error "Type mismatch"
-    floatReturnValue :: CDouble -> IO (Maybe Value)
-    floatReturnValue = pure . Just . ValueFloat . realToFrac
 
 functionCall :: FunctionCall -> Execute (Maybe Value)
 functionCall (FunctionCall (FunctionName "print") args) = do

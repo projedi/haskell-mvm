@@ -236,9 +236,23 @@ introduceVariable v vtype =
 performReturn :: Interpreter ()
 performReturn = Except.throwError ()
 
--- TODO: This is currently unimplementable. Not enough information.
-foreignFunctionCall :: String -> Interpreter ()
-foreignFunctionCall = _
+findForeignFunction :: String -> Interpreter ForeignFun
+findForeignFunction fname = do
+  ls <- libs <$> State.get
+  Just f <- Trans.liftIO $ findSymbol ls fname
+  pure f
+
+foreignFunctionCall :: String -> Maybe VarType -> [VarType] -> Interpreter ()
+foreignFunctionCall fname rettype argtypes = do
+  fun <- findForeignFunction fname
+  vals <- forM argtypes $ \expectedType -> do
+    v <- pop
+    when (typeof v /= expectedType) $ error "Type mismatch"
+    pure v
+  retVal <- Trans.liftIO $ call fun rettype vals
+  case retVal of
+    Nothing -> pure ()
+    Just v -> push v
 
 getStringArgs :: Interpreter [String]
 getStringArgs = do
@@ -292,7 +306,7 @@ interpretOp :: Op -> Interpreter ()
 interpretOp (OpCall f) = interpretFunction f
 interpretOp (OpIntroVar v vtype) = introduceVariable v vtype
 interpretOp OpReturn = performReturn
-interpretOp (OpForeignCall f) = foreignFunctionCall f
+interpretOp (OpForeignCall f rettype argtypes) = foreignFunctionCall f rettype argtypes
 interpretOp OpPrintCall = printCall
 interpretOp OpDlopenCall = dlopenCall
 interpretOp (OpLabel _) = pure ()  -- Resolved already

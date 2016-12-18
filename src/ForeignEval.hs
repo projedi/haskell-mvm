@@ -6,7 +6,7 @@ module ForeignEval
   , ForeignFun()
   , dlclose
   , dlopen
-  , callForeignFun
+  , call
   , findSymbol
   ) where
 
@@ -17,6 +17,9 @@ import Foreign.Ptr (Ptr, nullPtr)
 import qualified Language.C.Inline as C
 import qualified Language.C.Inline.Unsafe as CU
 import System.IO (hPutStrLn, stderr)
+
+import Syntax (VarType(..))
+import Value
 
 C.include "<dlfcn.h>"
 
@@ -81,3 +84,13 @@ class CallForeignFun args ret  where
 instance CallForeignFun CDouble CDouble where
   callForeignFun (ForeignFun f) a0 =
     [CU.exp| double { (*((double(*)(double))($(void* f))))($(double a0)) } |]
+
+call :: ForeignFun -> Maybe VarType -> [Value] -> IO (Maybe Value)
+call fun rettype vals =
+  case (rettype, vals) of
+    (Just VarTypeFloat, [ValueFloat f]) ->
+      callForeignFun fun (realToFrac f :: CDouble) >>= floatReturnValue
+    _ -> error "Extend supported FFI calls as needed"
+  where
+    floatReturnValue :: CDouble -> IO (Maybe Value)
+    floatReturnValue = pure . Just . ValueFloat . realToFrac
