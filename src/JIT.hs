@@ -1,4 +1,6 @@
-module JIT (interpret) where
+module JIT
+  ( interpret
+  ) where
 
 import Bytecode
 

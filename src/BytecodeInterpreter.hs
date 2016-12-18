@@ -85,14 +85,18 @@ resolveLabelInOp _ _ = IntMap.empty
 
 resolveLabelsInFun :: FunID -> BytecodeFunction -> IntMap Pos
 resolveLabelsInFun f (BytecodeFunction ops) =
-  mconcat $ map (\(l,op) -> resolveLabelInOp (Pos f l) op) $ zip [0..] ops
+  mconcat $ map (\(l, op) -> resolveLabelInOp (Pos f l) op) $ zip [0 ..] ops
 
 resolveLabels :: Bytecode -> IntMap Pos
 resolveLabels (Bytecode funs) =
-  mconcat $ map (\(k,v) -> resolveLabelsInFun (FunID k) v) $ IntMap.toList funs
+  mconcat $ map (\(k, v) -> resolveLabelsInFun (FunID k) v) $ IntMap.toList funs
 
 createConstEnv :: Bytecode -> ConstEnv
-createConstEnv bc = ConstEnv { labels = resolveLabels bc, bytecode = bc }
+createConstEnv bc =
+  ConstEnv
+  { labels = resolveLabels bc
+  , bytecode = bc
+  }
 
 data Env = Env
   { libs :: [LibHandle]
@@ -153,7 +157,8 @@ jumpToLabelInEnv cenv env (LabelID l) =
 type Interpreter a = ExceptT () (StateT Env (ReaderT ConstEnv IO)) a
 
 runInterpreter :: Interpreter a -> Bytecode -> Env -> IO Env
-runInterpreter m bc env = runReaderT (execStateT (runExceptT m) env) (createConstEnv bc)
+runInterpreter m bc env =
+  runReaderT (execStateT (runExceptT m) env) (createConstEnv bc)
 
 pop :: Interpreter Value
 pop = do
@@ -245,10 +250,12 @@ findForeignFunction fname = do
 foreignFunctionCall :: String -> Maybe VarType -> [VarType] -> Interpreter ()
 foreignFunctionCall fname rettype argtypes = do
   fun <- findForeignFunction fname
-  vals <- forM argtypes $ \expectedType -> do
-    v <- pop
-    when (typeof v /= expectedType) $ error "Type mismatch"
-    pure v
+  vals <-
+    forM argtypes $
+    \expectedType -> do
+      v <- pop
+      when (typeof v /= expectedType) $ error "Type mismatch"
+      pure v
   retVal <- Trans.liftIO $ call fun rettype vals
   case retVal of
     Nothing -> pure ()
@@ -309,7 +316,7 @@ interpretOp OpReturn = performReturn
 interpretOp (OpForeignCall f rettype argtypes) = foreignFunctionCall f rettype argtypes
 interpretOp OpPrintCall = printCall
 interpretOp OpDlopenCall = dlopenCall
-interpretOp (OpLabel _) = pure ()  -- Resolved already
+interpretOp (OpLabel _) = pure () -- Resolved already
 interpretOp (OpJump l) = jump l
 interpretOp (OpJumpIfZero l) = do
   ValueInt i <- pop

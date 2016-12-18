@@ -39,8 +39,10 @@ data Op
   | OpIntroVar VarID
                Syntax.VarType
   | OpReturn
-  -- TODO: That's a very long op.
-  | OpForeignCall String (Maybe Syntax.VarType) [Syntax.VarType]
+    -- TODO: That's a very long op.
+  | OpForeignCall String
+                  (Maybe Syntax.VarType)
+                  [Syntax.VarType]
   | OpPrintCall -- ^ count of args, string args.
   | OpDlopenCall -- ^ count of args, string args.
   | OpLabel LabelID
@@ -79,7 +81,8 @@ instance Show Op where
   show (OpCall (FunID f)) = "call " ++ show f
   show (OpIntroVar (VarID v) t) = "var " ++ show v ++ " : " ++ show t
   show OpReturn = "ret"
-  show (OpForeignCall name rettype types) = "foreign " ++ name ++ " : " ++ show rettype ++ " " ++ show types
+  show (OpForeignCall name rettype types) =
+    "foreign " ++ name ++ " : " ++ show rettype ++ " " ++ show types
   show OpPrintCall = "print"
   show OpDlopenCall = "dlopen"
   show (OpLabel (LabelID l)) = "lbl " ++ show l
