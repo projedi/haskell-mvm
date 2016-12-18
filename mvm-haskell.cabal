@@ -22,6 +22,7 @@ library
                      , BytecodeTranslator
                      , Eval
                      , ForeignEval
+                     , JIT
                      , Lexer
                      , Parser
                      , PrettyPrint

@@ -6,9 +6,10 @@ import Control.Monad (forM_)
 import System.Environment (getArgs)
 
 import BytecodePrinter (prettyPrint)
-import BytecodeInterpreter (interpret)
+import qualified BytecodeInterpreter as Bytecode
 import BytecodeTranslator (translate)
 import Eval (eval)
+import qualified JIT
 import Parser (parseExpr)
 
 evaluateFile :: FilePath -> IO ()
@@ -22,7 +23,14 @@ interpretBytecode fname = do
   contents <- readFile fname
   let expr = parseExpr contents
   let bc = translate expr
-  interpret bc
+  Bytecode.interpret bc
+
+jit :: FilePath -> IO ()
+jit fname = do
+  contents <- readFile fname
+  let expr = parseExpr contents
+  let bc = translate expr
+  JIT.interpret bc
 
 dumpBytecode :: FilePath -> IO ()
 dumpBytecode fname = do
@@ -37,7 +45,8 @@ dumpBytecode fname = do
 getOperation :: [String] -> (FilePath -> IO (), [String])
 getOperation ("--dumb":args) = (evaluateFile, args)
 getOperation ("--dump":args) = (dumpBytecode, args)
-getOperation args = (interpretBytecode, args)
+getOperation ("--eval":args) = (interpretBytecode, args)
+getOperation args = (jit, args)
 
 someFunc :: IO ()
 someFunc = do
