@@ -32,6 +32,52 @@ testList =
   , "gnuplot/pm3d.8"
   ]
 
+originalTestList :: [String]
+originalTestList =
+  [ "original/add"
+  , "original/additional/ackermann"
+  , "original/additional/ackermann_closure"
+  , "original/additional/casts"
+  , "original/additional/closure"
+  , "original/additional/complex"
+  , "original/additional/complex2"
+  , "original/additional/fail/for_range"
+  , "original/additional/fail/for_var"
+  , "original/additional/fail/function-cast"
+  , "original/additional/fail/function-return-void"
+  , "original/additional/fail/if-fun"
+  , "original/additional/fail/op_bin"
+  , "original/additional/fail/op_not"
+  , "original/additional/fail/op_streq"
+  , "original/additional/fail/op_sub"
+  , "original/additional/fail/range"
+  , "original/additional/fail/vars"
+  , "original/additional/fib"
+  , "original/additional/fib_closure"
+  , "original/additional/function-call"
+  , "original/additional/function-cast"
+  , "original/additional/function"
+  , "original/additional/vars"
+  , "original/assign"
+  , "original/bitwise"
+  , "original/div"
+  , "original/expr"
+  , "original/for"
+  , "original/function"
+  , "original/if"
+  , "original/literal"
+  , "original/mul"
+  , "original/optional/function_native"
+  , "original/optional/plot"
+  , "original/perf/graph_plot"
+  , "original/perf/lissajous"
+  , "original/perf/newton"
+  , "original/perf/plot"
+  , "original/perf/prime"
+  , "original/sub"
+  , "original/while"
+  ]
+
 tests :: TestTree
 tests =
   testGroup
@@ -44,7 +90,7 @@ tests =
 testsWithParams :: String -> Integer -> String -> TestTree
 testsWithParams name timeout flags =
   localOption (mkTimeout (1000000 * timeout)) $
-  testGroup name $ map (test flags) testList
+  testGroup name $ map (test flags) (testList ++ originalTestList)
 
 test :: String -> String -> TestTree
 test flags name =
