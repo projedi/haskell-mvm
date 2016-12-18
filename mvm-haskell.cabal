@@ -25,6 +25,7 @@ library
                      , Parser
                      , PrettyPrint
                      , Syntax
+                     , Value
   c-sources:           src/ForeignEval.c
   build-depends:       base >= 4.7 && < 5
                        -- for hlint
