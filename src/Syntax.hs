@@ -87,6 +87,10 @@ data Expr
   | ExprMod Expr
             Expr
   | ExprNot Expr
+  | ExprAnd Expr
+            Expr
+  | ExprOr Expr
+           Expr
   | ExprEq Expr
            Expr
   | ExprNeq Expr

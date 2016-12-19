@@ -42,6 +42,10 @@ import Syntax
     { TokenMod _ }
   '!'
     { TokenNot _ }
+  '&&'
+    { TokenAnd _ }
+  '||'
+    { TokenOr _ }
   '=='
     { TokenEq _ }
   '!='
@@ -87,7 +91,10 @@ import Syntax
   sym
     { TokenSym _ $$ }
 
-%left '==' '!=' '<' '<=' '>' '>='
+%left '||'
+%left '&&'
+%left '==' '!='
+%left '<' '<=' '>' '>='
 %left '+' '-'
 %left '*' '/' '%'
 %left NEG '!'
@@ -195,6 +202,10 @@ expr
     { ExprMod $1 $3 }
   | '!' expr
     { ExprNot $2 }
+  | expr '&&' expr
+    { ExprAnd $1 $3 }
+  | expr '||' expr
+    { ExprOr $1 $3 }
   | expr '==' expr
     { ExprEq $1 $3 }
   | expr '!=' expr

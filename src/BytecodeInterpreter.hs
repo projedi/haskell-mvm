@@ -342,6 +342,10 @@ interpretOp OpDivInt = interpretBinOp (/)
 interpretOp OpDivFloat = interpretBinOp (/)
 interpretOp OpModInt = interpretBinOp rem
 interpretOp OpNotInt = interpretUnaryOp (fromBool . not . toBool)
+interpretOp OpAndInt =
+  interpretBinOp (\lhs rhs -> fromBool (toBool lhs && toBool rhs))
+interpretOp OpOrInt =
+  interpretBinOp (\lhs rhs -> fromBool (toBool lhs || toBool rhs))
 interpretOp OpEqInt = interpretCompOp (==)
 interpretOp OpEqFloat = interpretCompOp (==)
 interpretOp OpEqString = interpretCompOp (==)

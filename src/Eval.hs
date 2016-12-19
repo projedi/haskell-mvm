@@ -394,6 +394,12 @@ evaluate (ExprNot e) = do
     ValueInt 0 -> pure $ ValueInt 1
     ValueInt _ -> pure $ ValueInt 0
     _ -> error "Type mismatch"
+evaluate (ExprAnd el er) =
+  (\lhs rhs -> fromBool (toBool lhs && toBool rhs)) <$> evaluate el <*>
+  evaluate er
+evaluate (ExprOr el er) =
+  (\lhs rhs -> fromBool (toBool lhs || toBool rhs)) <$> evaluate el <*>
+  evaluate er
 evaluate (ExprEq el er) = ((fromBool .) . (==)) <$> evaluate el <*> evaluate er
 evaluate (ExprNeq el er) = ((fromBool .) . (/=)) <$> evaluate el <*> evaluate er
 evaluate (ExprLt el er) = ((fromBool .) . (<)) <$> evaluate el <*> evaluate er

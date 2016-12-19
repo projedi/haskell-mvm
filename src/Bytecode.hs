@@ -67,6 +67,8 @@ data Op
   | OpDivFloat
   | OpModInt
   | OpNotInt
+  | OpAndInt
+  | OpOrInt
   | OpEqInt
   | OpEqFloat
   | OpEqString
@@ -107,6 +109,8 @@ instance Show Op where
   show OpDivFloat = "fdiv"
   show OpModInt = "mod"
   show OpNotInt = "not"
+  show OpAndInt = "and"
+  show OpOrInt = "or"
   show OpEqInt = "ieq"
   show OpEqFloat = "feq"
   show OpEqString = "seq"

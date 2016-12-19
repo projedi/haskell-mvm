@@ -48,6 +48,10 @@ tokens :-
     { \p s -> TokenMod p }
   "!"
     { \p s -> TokenNot p }
+  "&&"
+    { \p s -> TokenAnd p }
+  "||"
+    { \p s -> TokenOr p }
   "=="
     { \p s -> TokenEq p }
   "!="
@@ -110,6 +114,8 @@ data Token
   | TokenDiv AlexPosn
   | TokenMod AlexPosn
   | TokenNot AlexPosn
+  | TokenAnd AlexPosn
+  | TokenOr AlexPosn
   | TokenEq AlexPosn
   | TokenNeq AlexPosn
   | TokenLt AlexPosn

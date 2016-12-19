@@ -25,30 +25,34 @@ prettyPrintExpr _ (ExprVar varName) = prettyPrintSimple varName
 prettyPrintExpr _ (ExprInt n) = show n
 prettyPrintExpr _ (ExprFloat n) = show n
 prettyPrintExpr _ (ExprString str) = show str
-prettyPrintExpr n (ExprNeg e) = parenIfNeeded n 3 $ "-" ++ prettyPrintExpr 3 e
+prettyPrintExpr n (ExprNeg e) = parenIfNeeded n 6 $ "-" ++ prettyPrintExpr 6 e
 prettyPrintExpr n (ExprPlus el er) =
-  parenIfNeeded n 1 $ prettyPrintExpr 1 el ++ " + " ++ prettyPrintExpr 1 er
+  parenIfNeeded n 4 $ prettyPrintExpr 4 el ++ " + " ++ prettyPrintExpr 4 er
 prettyPrintExpr n (ExprMinus el er) =
-  parenIfNeeded n 1 $ prettyPrintExpr 1 el ++ " - " ++ prettyPrintExpr 1 er
+  parenIfNeeded n 4 $ prettyPrintExpr 4 el ++ " - " ++ prettyPrintExpr 4 er
 prettyPrintExpr n (ExprTimes el er) =
-  parenIfNeeded n 2 $ prettyPrintExpr 2 el ++ " * " ++ prettyPrintExpr 2 er
+  parenIfNeeded n 5 $ prettyPrintExpr 5 el ++ " * " ++ prettyPrintExpr 5 er
 prettyPrintExpr n (ExprDiv el er) =
-  parenIfNeeded n 2 $ prettyPrintExpr 2 el ++ " / " ++ prettyPrintExpr 2 er
+  parenIfNeeded n 5 $ prettyPrintExpr 5 el ++ " / " ++ prettyPrintExpr 5 er
 prettyPrintExpr n (ExprMod el er) =
-  parenIfNeeded n 2 $ prettyPrintExpr 2 el ++ " % " ++ prettyPrintExpr 2 er
-prettyPrintExpr n (ExprNot e) = parenIfNeeded n 3 $ "!" ++ prettyPrintExpr 3 e
+  parenIfNeeded n 5 $ prettyPrintExpr 5 el ++ " % " ++ prettyPrintExpr 5 er
+prettyPrintExpr n (ExprNot e) = parenIfNeeded n 6 $ "!" ++ prettyPrintExpr 6 e
+prettyPrintExpr n (ExprAnd el er) =
+  parenIfNeeded n 1 $ prettyPrintExpr 1 el ++ " && " ++ prettyPrintExpr 1 er
+prettyPrintExpr n (ExprOr el er) =
+  parenIfNeeded n 0 $ prettyPrintExpr 0 el ++ " || " ++ prettyPrintExpr 0 er
 prettyPrintExpr n (ExprEq el er) =
-  parenIfNeeded n 0 $ prettyPrintExpr 0 el ++ " == " ++ prettyPrintExpr 0 er
+  parenIfNeeded n 2 $ prettyPrintExpr 2 el ++ " == " ++ prettyPrintExpr 2 er
 prettyPrintExpr n (ExprNeq el er) =
-  parenIfNeeded n 0 $ prettyPrintExpr 0 el ++ " != " ++ prettyPrintExpr 0 er
+  parenIfNeeded n 2 $ prettyPrintExpr 2 el ++ " != " ++ prettyPrintExpr 2 er
 prettyPrintExpr n (ExprLt el er) =
-  parenIfNeeded n 0 $ prettyPrintExpr 0 el ++ " < " ++ prettyPrintExpr 0 er
+  parenIfNeeded n 3 $ prettyPrintExpr 3 el ++ " < " ++ prettyPrintExpr 3 er
 prettyPrintExpr n (ExprLeq el er) =
-  parenIfNeeded n 0 $ prettyPrintExpr 0 el ++ " <= " ++ prettyPrintExpr 0 er
+  parenIfNeeded n 3 $ prettyPrintExpr 3 el ++ " <= " ++ prettyPrintExpr 3 er
 prettyPrintExpr n (ExprGt el er) =
-  parenIfNeeded n 0 $ prettyPrintExpr 0 el ++ " > " ++ prettyPrintExpr 0 er
+  parenIfNeeded n 3 $ prettyPrintExpr 3 el ++ " > " ++ prettyPrintExpr 3 er
 prettyPrintExpr n (ExprGeq el er) =
-  parenIfNeeded n 0 $ prettyPrintExpr 0 el ++ " >= " ++ prettyPrintExpr 0 er
+  parenIfNeeded n 3 $ prettyPrintExpr 3 el ++ " >= " ++ prettyPrintExpr 3 er
 
 class PrettyPrintSimple a  where
   prettyPrintSimple :: a -> String

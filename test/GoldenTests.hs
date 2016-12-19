@@ -16,7 +16,8 @@ import Test.Tasty.Golden.Advanced
 
 testList :: [String]
 testList =
-  [ "flops"
+  [ "boolops"
+  , "flops"
   , "for"
   , "fundef"
   , "if"
