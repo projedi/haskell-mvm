@@ -62,6 +62,10 @@ tokens :-
     { \p s -> TokenGeq p }
   "="
     { \p s -> TokenAssign p }
+  "+="
+    { \p s -> TokenAssignPlus p }
+  "-="
+    { \p s -> TokenAssignMinus p }
   ".."
     { \p s -> TokenRange p }
   in
@@ -113,6 +117,8 @@ data Token
   | TokenGt AlexPosn
   | TokenGeq AlexPosn
   | TokenAssign AlexPosn
+  | TokenAssignPlus AlexPosn
+  | TokenAssignMinus AlexPosn
   | TokenRange AlexPosn
   | TokenIn AlexPosn
   | TokenIf AlexPosn

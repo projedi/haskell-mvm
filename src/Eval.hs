@@ -425,6 +425,10 @@ execute (StatementForeignFunctionDecl funDecl) = declareForeignFunction funDecl
 execute (StatementAssign var e) = do
   res <- evaluate e
   writeVariable var res
+execute (StatementAssignPlus var e) =
+  execute (StatementAssign var (ExprPlus (ExprVar var) e))
+execute (StatementAssignMinus var e) =
+  execute (StatementAssign var (ExprMinus (ExprVar var) e))
 execute (StatementIfElse e strue sfalse) = do
   res <- evaluateAsBool e
   if res

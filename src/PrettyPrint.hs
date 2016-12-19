@@ -102,6 +102,10 @@ prettyPrintStatement n (StatementForeignFunctionDecl funDecl) =
   indent n ("foreign " ++ prettyPrintSimple funDecl ++ ";")
 prettyPrintStatement n (StatementAssign var expr) =
   indent n (prettyPrintSimple var ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
+prettyPrintStatement n (StatementAssignPlus var expr) =
+  indent n (prettyPrintSimple var ++ " += " ++ prettyPrintExpr 0 expr ++ ";")
+prettyPrintStatement n (StatementAssignMinus var expr) =
+  indent n (prettyPrintSimple var ++ " -= " ++ prettyPrintExpr 0 expr ++ ";")
 prettyPrintStatement n (StatementReturn Nothing) = indent n "return;"
 prettyPrintStatement n (StatementReturn (Just e)) =
   indent n ("return " ++ prettyPrintExpr 0 e ++ ";")

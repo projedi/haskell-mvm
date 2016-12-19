@@ -329,6 +329,10 @@ translateStatement (StatementAssign vname expr) = do
   (vType, v) <- findVariable vname
   _ <- embedExpressionTranslator (convert eType vType)
   addOp $ OpStore v
+translateStatement (StatementAssignPlus vname expr) =
+  translateStatement (StatementAssign vname (ExprPlus (ExprVar vname) expr))
+translateStatement (StatementAssignMinus vname expr) =
+  translateStatement (StatementAssign vname (ExprMinus (ExprVar vname) expr))
 translateStatement (StatementIfElse e stmtTrue stmtFalse) = do
   labelElseBranch <- newLabel
   labelAfterIf <- newLabel

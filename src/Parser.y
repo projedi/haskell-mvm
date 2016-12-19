@@ -56,6 +56,10 @@ import Syntax
     { TokenGeq _ }
   '='
     { TokenAssign _ }
+  '+='
+    { TokenAssignPlus _ }
+  '-='
+    { TokenAssignMinus _ }
   '..'
     { TokenRange _ }
   'in'
@@ -107,6 +111,10 @@ stmt
     { StatementWhile $3 $5 }
   | sym '=' expr ';'
     { StatementAssign (VarName $1) $3 }
+  | sym '+=' expr ';'
+    { StatementAssignPlus (VarName $1) $3 }
+  | sym '-=' expr ';'
+    { StatementAssignMinus (VarName $1) $3 }
   | 'if' '(' expr ')' stmt 'else' stmt
     { StatementIfElse $3 $5 $7 }
   | 'if' '(' expr ')' stmt

@@ -39,6 +39,10 @@ data Statement
   | StatementFunctionDecl FunctionDecl
   | StatementAssign VarName
                     Expr
+  | StatementAssignPlus VarName
+                        Expr
+  | StatementAssignMinus VarName
+                         Expr
   | StatementIfElse Expr
                     Statement
                     Statement

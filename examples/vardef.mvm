@@ -10,3 +10,7 @@ i = i + 1;
 j = j * 1.4;
 str = str + "def";
 print(i, " ", j, " ", str, "\n");
+
+i += 1;
+j -= 1;
+print(i, " ", j, "\n");
