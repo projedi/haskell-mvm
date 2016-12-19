@@ -12,6 +12,7 @@ import System.FilePath ((</>), (<.>), replaceExtension)
 import System.Exit (ExitCode(..))
 import qualified System.Process
 import Test.Tasty
+import Test.Tasty.ExpectedFailure (expectFail)
 import Test.Tasty.Golden.Advanced
 
 testList :: [String]
@@ -27,37 +28,18 @@ testList =
   , "strops"
   , "vardef"
   , "while"
-  , "fib"
   , "ffi"
-  , "gnuplot/pm3d.8"
   ]
 
 originalTestList :: [String]
 originalTestList =
   [ "original/add"
-  , "original/additional/ackermann"
-  , "original/additional/ackermann_closure"
   , "original/additional/casts"
   , "original/additional/closure"
   , "original/additional/complex"
-  , "original/additional/complex2"
-  , "original/additional/fail/for_range"
-  , "original/additional/fail/for_var"
-  , "original/additional/fail/function-cast"
-  , "original/additional/fail/function-return-void"
-  , "original/additional/fail/if-fun"
-  , "original/additional/fail/op_bin"
-  , "original/additional/fail/op_not"
-  , "original/additional/fail/op_streq"
-  , "original/additional/fail/op_sub"
-  , "original/additional/fail/range"
-  , "original/additional/fail/vars"
-  , "original/additional/fib"
-  , "original/additional/fib_closure"
   , "original/additional/function-call"
   , "original/additional/function-cast"
   , "original/additional/function"
-  , "original/additional/vars"
   , "original/assign"
   , "original/bitwise"
   , "original/div"
@@ -78,19 +60,77 @@ originalTestList =
   , "original/while"
   ]
 
-tests :: TestTree
-tests =
-  testGroup
-    "Golden tests"
-    [ testsWithParams "Dumb evaluate" 30 "--dumb"
-    , testsWithParams "Bytecode interpret" 30 "--eval"
-    , testsWithParams "JIT" 30 ""
-    ]
+intensiveTestList :: [String]
+intensiveTestList = ["fib", "gnuplot/pm3d.8"]
 
-testsWithParams :: String -> Integer -> String -> TestTree
-testsWithParams name timeout flags =
+originalIntensiveTestList :: [String]
+originalIntensiveTestList =
+  [ "original/additional/ackermann"
+  , "original/additional/ackermann_closure"
+  , "original/additional/complex2"
+  , "original/additional/fib"
+  , "original/additional/fib_closure"
+  , "original/additional/vars"
+  ]
+
+failTestList :: [String]
+failTestList = []
+
+originalFailTestList :: [String]
+originalFailTestList =
+  [ "original/additional/fail/for_range"
+  , "original/additional/fail/for_var"
+  , "original/additional/fail/function-cast"
+  , "original/additional/fail/function-return-void"
+  , "original/additional/fail/if-fun"
+  , "original/additional/fail/op_bin"
+  , "original/additional/fail/op_not"
+  , "original/additional/fail/op_streq"
+  , "original/additional/fail/op_sub"
+  , "original/additional/fail/range"
+  , "original/additional/fail/vars"
+  ]
+
+tests :: TestTree
+tests = testGroup "Golden" [passTests, failTests, intensiveTests]
+
+passTests :: TestTree
+passTests =
+  testGroup
+    "Pass"
+    [ testsWithParams "Dumb" 1 "--dumb" names
+    , testsWithParams "Bytecode" 1 "--eval" names
+    , testsWithParams "JIT" 1 "" names
+    ]
+  where
+    names = testList ++ originalTestList
+
+failTests :: TestTree
+failTests = expectFail $
+  testGroup
+    "Fail"
+    [ testsWithParams "Dumb" 30 "--dumb" names
+    , testsWithParams "Bytecode" 30 "--eval" names
+    , testsWithParams "JIT" 30 "" names
+    ]
+  where
+    names = failTestList ++ originalFailTestList
+
+intensiveTests :: TestTree
+intensiveTests =
+  testGroup
+    "Intensive"
+    [ testsWithParams "Dumb" 300 "--dumb" names
+    , testsWithParams "Bytecode" 300 "--eval" names
+    , testsWithParams "JIT" 300 "" names
+    ]
+  where
+    names = intensiveTestList ++ originalIntensiveTestList
+
+testsWithParams :: String -> Integer -> String -> [String] -> TestTree
+testsWithParams name timeout flags names =
   localOption (mkTimeout (1000000 * timeout)) $
-  testGroup name $ map (test flags) (testList ++ originalTestList)
+  testGroup name $ map (test flags) names
 
 test :: String -> String -> TestTree
 test flags name =
