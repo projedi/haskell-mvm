@@ -1,21 +1,21 @@
 int i;
 i = 0;
 {
-  print(i);
+  print(i, "\n");
   int i;
   i = 1;
-  print(i);
+  print(i, "\n");
 }
-print(i);
+print(i, "\n");
 
 int f();
 i = 0;
 int f() {
   return i + 1;
 }
-print(f());
+print(f(), "\n");
 i = 1;
-print(f());
+print(f(), "\n");
 
 int j;
 int g(int i) {
@@ -24,19 +24,19 @@ int g(int i) {
 int g(int i);
 i = 0;
 j = 1;
-print(g(3));
+print(g(3), "\n");
 i = 10;
 j = 20;
-print(g(3));
+print(g(3), "\n");
 
 void h() {
   i = i + 1;
 }
 i = 0;
 h();
-print(i);
+print(i, "\n");
 h();
-print(i);
+print(i, "\n");
 
 {
   int i;
@@ -54,9 +54,9 @@ print(i);
       // f here must modify i from it's own scope, not ours.
       f();
       f();
-      print(i);
+      print(i, "\n");
     }
     g();
   }
-  print(i);
+  print(i, "\n");
 }

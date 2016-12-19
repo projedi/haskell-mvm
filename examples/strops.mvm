@@ -1,8 +1,8 @@
-print("abc" + "def", "abc" + "", "" + "def");
+print("abc" + "def", " ", "abc" + "", " ", "" + "def", "\n");
 
-print("abc" == "abc", "abc" == "abcd", "abcd" == "abc", "abc" == "def", "def" == "abc");
-print("abc" != "abc", "abc" != "abcd", "abcd" != "abc", "abc" != "def", "def" != "abc");
-print("abc" < "abc", "abc" < "abcd", "abcd" < "abc", "abc" < "def", "def" < "abc");
-print("abc" <= "abc", "abc" <= "abcd", "abcd" <= "abc", "abc" <= "def", "def" <= "abc");
-print("abc" > "abc", "abc" > "abcd", "abcd" > "abc", "abc" > "def", "def" > "abc");
-print("abc" >= "abc", "abc" >= "abcd", "abcd" >= "abc", "abc" >= "def", "def" >= "abc");
+print("abc" == "abc", " ", "abc" == "abcd", " ", "abcd" == "abc", " ", "abc" == "def", " ", "def" == "abc", "\n");
+print("abc" != "abc", " ", "abc" != "abcd", " ", "abcd" != "abc", " ", "abc" != "def", " ", "def" != "abc", "\n");
+print("abc" < "abc", " ", "abc" < "abcd", " ", "abcd" < "abc", " ", "abc" < "def", " ", "def" < "abc", "\n");
+print("abc" <= "abc", " ", "abc" <= "abcd", " ", "abcd" <= "abc", " ", "abc" <= "def", " ", "def" <= "abc", "\n");
+print("abc" > "abc", " ", "abc" > "abcd", " ", "abcd" > "abc", " ", "abc" > "def", " ", "def" > "abc", "\n");
+print("abc" >= "abc", " ", "abc" >= "abcd", " ", "abcd" >= "abc", " ", "abc" >= "def", " ", "def" >= "abc", "\n");

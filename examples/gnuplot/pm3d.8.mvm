@@ -21,7 +21,7 @@ for (ix in -final_range..final_range) {
     double y;
     y = iy;
     y = y / multisampling;
-    print(x, y, sin(sqrt(x * x + y * y)) / sqrt (x * x + y * y));
+    print(x, " ", y, " ", sin(sqrt(x * x + y * y)) / sqrt (x * x + y * y), "\n");
   }
-  print("");
+  print("\n");
 }

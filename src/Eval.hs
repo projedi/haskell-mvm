@@ -283,7 +283,7 @@ declareForeignFunction (FunctionDecl rettype name@(FunctionName strname) params)
   State.put env'
 
 printCall :: [Value] -> Execute ()
-printCall vals = Trans.liftIO $ putStrLn $ unwords (map show vals)
+printCall vals = Trans.liftIO $ putStr $ concatMap show vals
 
 dlopenCall :: [Value] -> Execute ()
 dlopenCall vals =

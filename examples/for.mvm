@@ -1,15 +1,15 @@
 int i;
 for (i in 0..1)
-  print(i);
-print(i);
+  print(i, "\n");
+print(i, "\n");
 for (i in 5..4)
-  print(i);
-print(i);
+  print(i, "\n");
+print(i, "\n");
 for (i in -1..1)
-  print(i);
+  print(i, "\n");
 for (i in (2 - 1)..(0 + 2))
-  print(i);
+  print(i, "\n");
 for (i in 0..1) {
-  print(i);
-  print(-i);
+  print(i, "\n");
+  print(-i, "\n");
 }

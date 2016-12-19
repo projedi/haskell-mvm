@@ -272,7 +272,7 @@ getStringArgs = do
 printCall :: Interpreter ()
 printCall = do
   args <- getStringArgs
-  Trans.liftIO $ putStrLn $ unwords args
+  Trans.liftIO $ putStr $ concat args
 
 dlopenCall :: Interpreter ()
 dlopenCall = do
