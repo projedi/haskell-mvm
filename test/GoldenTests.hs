@@ -9,6 +9,7 @@ import qualified Data.Algorithm.DiffOutput as DiffOutput
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
 import System.FilePath ((</>), (<.>), replaceExtension)
+import System.Exit (ExitCode(..))
 import qualified System.Process
 import Test.Tasty
 import Test.Tasty.Golden.Advanced
@@ -56,11 +57,17 @@ test flags name =
     goldenFile = "examples" </> name <.> "expected"
 
 runEvaluateWithFlags :: String -> FilePath -> IO String
-runEvaluateWithFlags flags fname =
-  System.Process.readCreateProcess
-    (System.Process.shell $
-     "stack exec mvm-haskell-exe -- " ++ flags ++ " " ++ fname)
-    ""
+runEvaluateWithFlags flags fname = do
+  (ec, res, err) <-
+    System.Process.readCreateProcessWithExitCode
+      (System.Process.shell $
+       "stack exec mvm-haskell-exe -- " ++ flags ++ " " ++ fname)
+      ""
+  case (ec, err) of
+    (ExitSuccess, []) -> pure res
+    (ExitSuccess, _) -> putStrLn err >> pure res
+    (_, []) -> error $ show ec
+    (_, _) -> error $ show ec ++ ":\n" ++ err
 
 compareResult :: String -> String -> IO (Maybe String)
 compareResult lhs rhs = do
