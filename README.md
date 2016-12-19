@@ -1,4 +1,4 @@
-Pretty much the MVM language https://code.google.com/archive/p/mathvm/.
+MVM is pretty much the mathvm language https://code.google.com/archive/p/mathvm/.
 
 Types: `int`, `double`, `string`
 Conditional statements: `if`, `for`, `while`
@@ -30,3 +30,9 @@ Scoping:
   print(f()); // prints 2
 }
 ```
+
+Differences from mathvm:
+* No `function` keyword
+* Use `""` instead of `''` for strings
+* Foreign functions are defined as `foreign <fundecl>` instead of `<fundecl> native 'name'`
+* Has `dlopen()` call to link to shared libraries. Used to bind foreign function.
