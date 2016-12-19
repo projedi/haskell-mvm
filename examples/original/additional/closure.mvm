@@ -2,7 +2,7 @@ int x;
 
 x = 10;
 
-function int closured(int y) {
+int closured(int y) {
   return x + y;
 }
 

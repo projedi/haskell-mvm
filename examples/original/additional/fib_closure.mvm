@@ -1,7 +1,7 @@
 int r;
 int r1;
 
-function void fib(int x) {
+void fib(int x) {
     if (x == 0) {
         r = 0;
         r1 = 1;

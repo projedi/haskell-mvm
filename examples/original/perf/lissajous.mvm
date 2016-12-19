@@ -5,15 +5,15 @@ HEIGHT = 480;
 int BPP;
 BPP = 32;
 
-function void setMem(int base, int offset, int value, int width) native 'unsafe_setMem';
-function int getMem(int base, int offset, int width) native 'unsafe_getMem';
-function int videoInitFramebuffer(int width, int height, int bpp, int fullscreen) native 'unsafe_videoInitFramebuffer';
-function void videoDenitFramebuffer() native 'unsafe_videoDeinitFramebuffer';
-function int videoCheckEvent() native 'unsafe_videoCheckEvent';
-function int videoGrabFramebuffer() native 'unsafe_videoGrabFramebuffer';
-function void videoReleaseFramebuffer() native 'unsafe_videoReleaseFramebuffer';
+void setMem(int base, int offset, int value, int width) native 'unsafe_setMem';
+int getMem(int base, int offset, int width) native 'unsafe_getMem';
+int videoInitFramebuffer(int width, int height, int bpp, int fullscreen) native 'unsafe_videoInitFramebuffer';
+void videoDenitFramebuffer() native 'unsafe_videoDeinitFramebuffer';
+int videoCheckEvent() native 'unsafe_videoCheckEvent';
+int videoGrabFramebuffer() native 'unsafe_videoGrabFramebuffer';
+void videoReleaseFramebuffer() native 'unsafe_videoReleaseFramebuffer';
 
-function void setPixel(int mem, int x, int y, int r, int g, int b) {
+void setPixel(int mem, int x, int y, int r, int g, int b) {
     int color;
     if (y >= HEIGHT || x >= WIDTH) {
       //print("out of bounds ", x, " ", y, "\n");
@@ -23,12 +23,12 @@ function void setPixel(int mem, int x, int y, int r, int g, int b) {
     setMem(mem, (x + y*WIDTH) * BPP / 8 , color, 4);
 }
 
-function int timestamp() native 'native_timestamp';
+int timestamp() native 'native_timestamp';
 
-function double sinNative(double x) native 'sin';
-function double cosNative(double x) native 'cos';
+double sinNative(double x) native 'sin';
+double cosNative(double x) native 'cos';
 
-function int fact(int n) {
+int fact(int n) {
   int res;
   int i;
   res = 1;
@@ -37,12 +37,12 @@ function int fact(int n) {
   }
   return res;
 }
-function double pow(double x, double y) native 'pow';
+double pow(double x, double y) native 'pow';
 
 int PREC;
 PREC = 10;
 
-function double sinMvm(double x) {
+double sinMvm(double x) {
   int i;
   double res;
   res = 0;
@@ -59,7 +59,7 @@ function double sinMvm(double x) {
   return res;
 }
 
-function double cosMvm(double x) {
+double cosMvm(double x) {
   int i;
   double res;
   res = 0;
@@ -77,7 +77,7 @@ function double cosMvm(double x) {
 }
 
 
-function int int(double d) {
+int int(double d) {
     return 0 + d;
 }
 
@@ -86,7 +86,7 @@ t = 0.0;
 double chainsaw;
 chainsaw = 0.01;
 
-function void clrScr(int fb) {
+void clrScr(int fb) {
   int y; int x;
   for (y in 0..(HEIGHT-1)) {
     for (x in 0..(WIDTH-1)) {
@@ -95,7 +95,7 @@ function void clrScr(int fb) {
   }
 }
 
-function void drawFrame() {
+void drawFrame() {
   int fb;
   fb = videoGrabFramebuffer();
   if (!fb) {

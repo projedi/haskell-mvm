@@ -1,4 +1,4 @@
-function void foo(int x) {
+void foo(int x) {
     return x;
 }
 

@@ -1,4 +1,4 @@
-function int ack(int m, int n) {
+int ack(int m, int n) {
     if (m == 0) {
         return n + 1;
     }

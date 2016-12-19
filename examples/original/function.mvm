@@ -1,12 +1,12 @@
-function int add(int x, int y) {
+int add(int x, int y) {
     return x + y;
 }
 
-function void doit() {
+void doit() {
     print("Hi\n");
 }
 
-function double mul5(int max, double x1, double x2, double x3, double x4, double x5) {
+double mul5(int max, double x1, double x2, double x3, double x4, double x5) {
     double r;
 
     r = 1.0;
@@ -34,7 +34,7 @@ function double mul5(int max, double x1, double x2, double x3, double x4, double
     return r;
 }
 
-function int fact(int n) {
+int fact(int n) {
     if (n < 3) {
         return n;
     }

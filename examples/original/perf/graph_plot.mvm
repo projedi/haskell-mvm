@@ -2,37 +2,37 @@ int WIDTH = 600;
 int HEIGHT = 600;
 int BPP = 32;
 
-function void setMem(int base, int offset, int value, int width) native 'unsafe_setMem';
-function int getMem(int base, int offset, int width) native 'unsafe_getMem';
-function int videoInitFramebuffer(int width, int height, int bpp, int fullscreen) native 'unsafe_videoInitFramebuffer';
-function void videoDenitFramebuffer() native 'unsafe_videoDeinitFramebuffer';
-function int videoCheckEvent() native 'unsafe_videoCheckEvent';
-function int videoGrabFramebuffer() native 'unsafe_videoGrabFramebuffer';
-function void videoReleaseFramebuffer() native 'unsafe_videoReleaseFramebuffer';
-function int timestamp() native 'native_timestamp';
-function double sin(double x) native 'sin';
+void setMem(int base, int offset, int value, int width) native 'unsafe_setMem';
+int getMem(int base, int offset, int width) native 'unsafe_getMem';
+int videoInitFramebuffer(int width, int height, int bpp, int fullscreen) native 'unsafe_videoInitFramebuffer';
+void videoDenitFramebuffer() native 'unsafe_videoDeinitFramebuffer';
+int videoCheckEvent() native 'unsafe_videoCheckEvent';
+int videoGrabFramebuffer() native 'unsafe_videoGrabFramebuffer';
+void videoReleaseFramebuffer() native 'unsafe_videoReleaseFramebuffer';
+int timestamp() native 'native_timestamp';
+double sin(double x) native 'sin';
 
-function void setPixel(int mem, int x, int y, int r, int g, int b) {
+void setPixel(int mem, int x, int y, int r, int g, int b) {
     int color;
     color = (r % 256) * 65536 + (g % 256) *256 + (b % 256);
     setMem(mem, (x + y*WIDTH) * BPP / 8 , color, 4);
 }
 
-function void plotter(double xmin, double ymin, double xmax, double ymax) {
-  function double func(double d) {
+void plotter(double xmin, double ymin, double xmax, double ymax) {
+  double func(double d) {
       //return d * sin(1.0 / d);
       return sin(d) / d;
   }
 
-  function int getX(double x) {
+  int getX(double x) {
     return (x - xmin) / (xmax - xmin) * WIDTH;
   }
 
-  function int getY(double y) {
+  int getY(double y) {
     return (1.0 - (y - ymin) / (ymax - ymin)) * HEIGHT;
   }
 
-  function void drawAxis(int fb) {
+  void drawAxis(int fb) {
     int xstart = getX(xmin);
     int ystart = getY(ymax); 
     int xend = getX(xmax);
@@ -49,7 +49,7 @@ function void plotter(double xmin, double ymin, double xmax, double ymax) {
     }
   }
 
-  function void drawFunc(int fb) {
+  void drawFunc(int fb) {
     double step = (xmax - xmin) / WIDTH / 8;
     double x = xmin;
     while (x < xmax) {

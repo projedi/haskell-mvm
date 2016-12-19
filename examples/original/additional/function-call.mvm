@@ -1,9 +1,9 @@
-function int foo() {
+int foo() {
     print(1, "\n");
     return 2;
 }
 
-function void bar() {
+void bar() {
     print(3, "\n");
 }
 

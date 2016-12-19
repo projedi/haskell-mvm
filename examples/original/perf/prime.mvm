@@ -1,15 +1,15 @@
-function double sqrt(double x) native 'sqrt';
-function int timestamp() native 'native_timestamp';
+double sqrt(double x) native 'sqrt';
+int timestamp() native 'native_timestamp';
 
-function int int(double d) {
+int int(double d) {
     return 0 + d;
 }
 
-function double double(int i) {
+double double(int i) {
     return 0.0 + i;
 }
 
-function int leastFactor(int n) {
+int leastFactor(int n) {
   if (n == 0) {
       return 0;  
   }
@@ -59,7 +59,7 @@ function int leastFactor(int n) {
   return n;
 }
 
-function void factorize(int n, int printResult)  {
+void factorize(int n, int printResult)  {
     int least;
     least = n;
     if (printResult != 0) {

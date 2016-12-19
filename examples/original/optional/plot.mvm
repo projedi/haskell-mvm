@@ -7,25 +7,25 @@ BPP = 32;
 int BYTESPP;
 BYTESPP = BPP / 8;
 
-function void setMem(string base, int offset, int value, int w) native 'unsafe_setMem';
+void setMem(string base, int offset, int value, int w) native 'unsafe_setMem';
 
-function int videoInitFramebuffer(int width, int height, int bpp, int fullscreen) native 'unsafe_videoInitFramebuffer';
-function void videoDenitFramebuffer() native 'unsafe_videoDeinitFramebuffer';
-function int videoCheckEvent() native 'unsafe_videoCheckEvent';
-function string videoGrabFramebuffer() native 'unsafe_videoGrabFramebuffer';
-function void videoReleaseFramebuffer() native 'unsafe_videoReleaseFramebuffer';
+int videoInitFramebuffer(int width, int height, int bpp, int fullscreen) native 'unsafe_videoInitFramebuffer';
+void videoDenitFramebuffer() native 'unsafe_videoDeinitFramebuffer';
+int videoCheckEvent() native 'unsafe_videoCheckEvent';
+string videoGrabFramebuffer() native 'unsafe_videoGrabFramebuffer';
+void videoReleaseFramebuffer() native 'unsafe_videoReleaseFramebuffer';
 
 
-function void setPixel(string mem, int x, int y, int r, int g, int b) {
+void setPixel(string mem, int x, int y, int r, int g, int b) {
     int color;
     color = (r ) * 65536 + (g ) * 256 + (b );
     setMem(mem, (x + y*WIDTH) * BYTESPP , color, 4);
 }
 
-function int timestamp() native 'native_timestamp';
+int timestamp() native 'native_timestamp';
 
 int h; h = 0;
-function void drawFrame() {
+void drawFrame() {
    string fb; fb = videoGrabFramebuffer();
    if (!fb) {
       return;

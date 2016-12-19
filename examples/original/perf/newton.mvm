@@ -1,9 +1,9 @@
-function double fabs(double x) native 'fabs';
-function double sin(double x) native 'sin';
-function int timestamp() native 'native_timestamp';
+double fabs(double x) native 'fabs';
+double sin(double x) native 'sin';
+int timestamp() native 'native_timestamp';
 
-function double newton(double xbase) {
-  function double func(double d) {
+double newton(double xbase) {
+  double func(double d) {
       return d*d - d*d*d + 2 + sin(d);
   }
   double x = xbase;

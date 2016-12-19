@@ -1,5 +1,5 @@
-function double bar() {
-    function int foo(double x) {
+double bar() {
+    int foo(double x) {
         print(x, "\n");
         return 2;
     }

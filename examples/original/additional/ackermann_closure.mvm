@@ -1,7 +1,7 @@
 int m;
 int n;
 
-function void ack() {
+void ack() {
     if (m > 0) {
         if (n > 0) {
             int k;
