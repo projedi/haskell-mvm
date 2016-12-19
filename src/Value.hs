@@ -71,7 +71,7 @@ instance Integral Value where
 
 instance Fractional Value where
   fromRational r = ValueFloat (fromRational r)
-  (ValueInt il) / (ValueInt ir) = ValueInt (il `div` ir)
+  (ValueInt il) / (ValueInt ir) = ValueInt (il `quot` ir)
   (ValueFloat fl) / (ValueInt ir) = ValueFloat (fl / fromIntegral ir)
   (ValueInt il) / (ValueFloat fr) = ValueFloat (fromIntegral il / fr)
   (ValueFloat fl) / (ValueFloat fr) = ValueFloat (fl / fr)
