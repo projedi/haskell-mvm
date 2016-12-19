@@ -98,20 +98,21 @@ passTests :: TestTree
 passTests =
   testGroup
     "Pass"
-    [ testsWithParams "Dumb" 1 "--dumb" names
-    , testsWithParams "Bytecode" 1 "--eval" names
-    , testsWithParams "JIT" 1 "" names
+    [ testsWithParams "Dumb" 1 ["--dumb"] names
+    , testsWithParams "Bytecode" 1 ["--eval"] names
+    , testsWithParams "JIT" 1 [] names
     ]
   where
     names = testList ++ originalTestList
 
 failTests :: TestTree
-failTests = expectFail $
+failTests =
+  expectFail $
   testGroup
     "Fail"
-    [ testsWithParams "Dumb" 30 "--dumb" names
-    , testsWithParams "Bytecode" 30 "--eval" names
-    , testsWithParams "JIT" 30 "" names
+    [ testsWithParams "Dumb" 30 ["--dumb"] names
+    , testsWithParams "Bytecode" 30 ["--eval"] names
+    , testsWithParams "JIT" 30 [] names
     ]
   where
     names = failTestList ++ originalFailTestList
@@ -120,19 +121,19 @@ intensiveTests :: TestTree
 intensiveTests =
   testGroup
     "Intensive"
-    [ testsWithParams "Dumb" 300 "--dumb" names
-    , testsWithParams "Bytecode" 300 "--eval" names
-    , testsWithParams "JIT" 300 "" names
+    [ testsWithParams "Dumb" 300 ["--dumb"] names
+    , testsWithParams "Bytecode" 300 ["--eval"] names
+    , testsWithParams "JIT" 300 [] names
     ]
   where
     names = intensiveTestList ++ originalIntensiveTestList
 
-testsWithParams :: String -> Integer -> String -> [String] -> TestTree
+testsWithParams :: String -> Integer -> [String] -> [String] -> TestTree
 testsWithParams name timeout flags names =
   localOption (mkTimeout (1000000 * timeout)) $
   testGroup name $ map (test flags) names
 
-test :: String -> String -> TestTree
+test :: [String] -> String -> TestTree
 test flags name =
   goldenTest
     name
@@ -143,12 +144,12 @@ test flags name =
   where
     goldenFile = "examples" </> name <.> "expected"
 
-runEvaluateWithFlags :: String -> FilePath -> IO String
+runEvaluateWithFlags :: [String] -> FilePath -> IO String
 runEvaluateWithFlags flags fname = do
   (ec, res, err) <-
-    System.Process.readCreateProcessWithExitCode
-      (System.Process.shell $
-       "stack exec mvm-haskell-exe -- " ++ flags ++ " " ++ fname)
+    System.Process.readProcessWithExitCode
+      "mvm-haskell-exe"
+      (flags ++ [fname])
       ""
   case (ec, err) of
     (ExitSuccess, []) -> pure res
