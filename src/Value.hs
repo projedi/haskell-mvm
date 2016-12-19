@@ -8,10 +8,8 @@ module Value
   , convert
   ) where
 
-import qualified Data.List as List
-import qualified Numeric
-
 import Syntax (VarType(..))
+import Util
 
 data Value
   = ValueInt Int
@@ -87,18 +85,9 @@ fromBool :: Bool -> Value
 fromBool True = ValueInt 1
 fromBool False = ValueInt 0
 
-printDouble :: Double -> String
-printDouble f
-  | stripedAfter == "." = before
-  | otherwise = before ++ stripedAfter
-  where
-    str = Numeric.showFFloat (Just 3) f ""
-    (before, after) = List.span (/= '.') str
-    stripedAfter = List.dropWhileEnd (== '0') after
-
 instance Show Value where
   show (ValueInt i) = show i
-  show (ValueFloat f) = printDouble f
+  show (ValueFloat f) = doubleToString f
   show (ValueString s) = s
 
 typeIs :: Value -> VarType -> Bool
