@@ -22,7 +22,7 @@ data VarType
 
 instance Show VarType where
   show VarTypeInt = "int"
-  show VarTypeFloat = "float"
+  show VarTypeFloat = "double"
   show VarTypeString = "string"
 
 data VarDecl =

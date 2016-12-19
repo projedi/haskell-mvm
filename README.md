@@ -1,6 +1,6 @@
 Pretty much the MVM language https://code.google.com/archive/p/mathvm/.
 
-Types: `int`, `float`, `string`
+Types: `int`, `double`, `string`
 Conditional statements: `if`, `for`, `while`
 Operators: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`
 Builtins: `print` (variadic func)

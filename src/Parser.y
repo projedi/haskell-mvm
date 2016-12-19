@@ -26,7 +26,7 @@ import Syntax
     { TokenRBrace _ }
   intlit
     { TokenIntLiteral _ $$ }
-  floatlit
+  doublelit
     { TokenFloatLiteral _ $$ }
   strlit
     { TokenStringLiteral _ $$ }
@@ -70,8 +70,8 @@ import Syntax
     { TokenWhile _ }
   'int'
     { TokenInt _ }
-  'float'
-    { TokenFloat _ }
+  'double'
+    { TokenDouble _ }
   'string'
     { TokenString _ }
   'void'
@@ -147,7 +147,7 @@ vardecl : vartype sym { VarDecl $1 (VarName $2) }
 vartype
   : 'int'
     { VarTypeInt }
-  | 'float'
+  | 'double'
     { VarTypeFloat }
   | 'string'
     { VarTypeString }
@@ -167,7 +167,7 @@ expr
     { ExprVar (VarName $1) }
   | intlit
     { ExprInt $1 }
-  | floatlit
+  | doublelit
     { ExprFloat $1 }
   | strlit
     { ExprString $1 }

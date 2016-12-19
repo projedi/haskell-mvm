@@ -76,8 +76,8 @@ tokens :-
     { \p s -> TokenWhile p }
   int
     { \p s -> TokenInt p }
-  float
-    { \p s -> TokenFloat p }
+  double
+    { \p s -> TokenDouble p }
   string
     { \p s -> TokenString p }
   void
@@ -120,7 +120,7 @@ data Token
   | TokenFor AlexPosn
   | TokenWhile AlexPosn
   | TokenInt AlexPosn
-  | TokenFloat AlexPosn
+  | TokenDouble AlexPosn
   | TokenString AlexPosn
   | TokenVoid AlexPosn
   | TokenReturn AlexPosn

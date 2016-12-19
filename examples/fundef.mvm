@@ -1,6 +1,6 @@
-float k(int i, float j);
+double k(int i, double j);
 
-void f(int i, float j, string str) {
+void f(int i, double j, string str) {
   i = i + 1;
   j = j * 1.4;
   str = str + "def";
@@ -9,7 +9,7 @@ void f(int i, float j, string str) {
 
 f(0, 3.1, "abc");
 int i;
-float j;
+double j;
 string str;
 i = 0;
 j = 3.1;
@@ -17,7 +17,7 @@ str = "abc";
 f(i, j, str);
 print(i, j, str);
 
-float g(int i, float j) {
+double g(int i, double j) {
   return i * j;
 }
 

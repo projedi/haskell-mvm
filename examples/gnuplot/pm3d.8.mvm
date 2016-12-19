@@ -1,6 +1,6 @@
 dlopen("libm.so.6");
-foreign float sin(float x);
-foreign float sqrt(float x);
+foreign double sin(double x);
+foreign double sqrt(double x);
 
 int ix;
 int iy;
@@ -14,11 +14,11 @@ multisampling = 10;
 final_range = range * multisampling;
 
 for (ix in -final_range..final_range) {
-  float x;
+  double x;
   x = ix;
   x = x / multisampling;
   for (iy in -final_range..final_range) {
-    float y;
+    double y;
     y = iy;
     y = y / multisampling;
     print(x, y, sin(sqrt(x * x + y * y)) / sqrt (x * x + y * y));

@@ -1,5 +1,5 @@
 int i;
-float j;
+double j;
 string str;
 
 i = 0;
