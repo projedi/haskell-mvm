@@ -13,6 +13,8 @@ $alpha = [a-zA-Z]
 $eol = [\n]
 $string = $printable # \"
 
+@exponent = e[\-\+]?$digit+
+
 tokens :-
   $white+
     ;
@@ -32,7 +34,8 @@ tokens :-
     { \p s -> TokenRBrace p }
   $digit+
     { \p s -> TokenIntLiteral p (read s) }
-  $digit+\.$digit+
+  $digit+\.$digit+@exponent?
+  | $digit+@exponent?
     { \p s -> TokenFloatLiteral p (read s) }
   \" $string* \"
     { \p s -> TokenStringLiteral p (read s) }
