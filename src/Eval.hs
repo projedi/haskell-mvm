@@ -273,8 +273,8 @@ defineFunction (FunctionDecl rettype name params) body = do
 
 declareForeignFunction :: FunctionDecl -> Execute ()
 declareForeignFunction (FunctionDecl rettype name@(FunctionName strname) params) = do
-  env@Env {envLibs = libs} <- State.get
-  Just f <- Trans.liftIO $ findSymbol libs strname
+  env <- State.get
+  Just f <- Trans.liftIO $ findSymbol strname
   let Just env' =
         addFunctionToEnv
           env

@@ -243,8 +243,7 @@ performReturn = Except.throwError ()
 
 findForeignFunction :: String -> Interpreter ForeignFun
 findForeignFunction fname = do
-  ls <- libs <$> State.get
-  Just f <- Trans.liftIO $ findSymbol ls fname
+  Just f <- Trans.liftIO $ findSymbol fname
   pure f
 
 foreignFunctionCall :: String -> Maybe VarType -> [VarType] -> Interpreter ()

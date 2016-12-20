@@ -1,5 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, QuasiQuotes, TemplateHaskell
-  #-}
+{-# LANGUAGE Rank2Types, ScopedTypeVariables #-}
 
 module ForeignEval
   ( LibHandle()
@@ -10,87 +9,50 @@ module ForeignEval
   , findSymbol
   ) where
 
-import Control.Monad
-import qualified Foreign.C.String as CString
-import Foreign.C.Types (CDouble)
-import Foreign.Ptr (Ptr, nullPtr)
-import qualified Language.C.Inline as C
-import qualified Language.C.Inline.Unsafe as CU
-import System.IO (hPutStrLn, stderr)
+import Control.Exception (catch, tryJust)
+import qualified Foreign.LibFFI as FFI
+import Foreign.Ptr (FunPtr())
+import System.IO.Error (IOError, ioeGetErrorString)
+import qualified System.Posix.DynamicLinker as DL
 
 import Syntax (VarType(..))
 import Value
 
-C.include "<dlfcn.h>"
-
 newtype LibHandle =
-  LibHandle (Ptr ())
+  LibHandle DL.DL
 
 newtype ForeignFun =
-  ForeignFun (Ptr ())
-
-{-# ANN c_dlopen "HLint: ignore Use camelCase" #-}
-
-c_dlopen :: String -> IO LibHandle
-c_dlopen name =
-  CString.withCString name $
-  \cname ->
-     LibHandle <$> [CU.exp| void* { dlopen($(const char *cname), RTLD_LAZY) } |]
-
-{-# ANN c_dlclose "HLint: ignore Use camelCase" #-}
-
-c_dlclose :: LibHandle -> IO Bool
-c_dlclose (LibHandle handle) =
-  (== 0) <$> [CU.exp| int { dlclose($(void *handle)) } |]
-
-{-# ANN c_dlerror "HLint: ignore Use camelCase" #-}
-
-c_dlerror :: IO String
-c_dlerror = [CU.exp| char* { dlerror() } |] >>= CString.peekCString
-
-{-# ANN c_dlsym "HLint: ignore Use camelCase" #-}
-
-c_dlsym :: LibHandle -> String -> IO ForeignFun
-c_dlsym (LibHandle handle) name =
-  CString.withCString name $
-  \cname ->
-     ForeignFun <$> [CU.exp| void* { dlsym($(void *handle), $(char* cname)) } |]
+  ForeignFun (FunPtr ())
 
 dlopen :: String -> IO (Either String LibHandle)
-dlopen lib = do
-  (LibHandle handle) <- c_dlopen lib
-  if handle /= nullPtr
-    then pure $ Right $ LibHandle handle
-    else Left <$> c_dlerror
+dlopen name =
+  tryJust (Just . ioeGetErrorString) $
+  LibHandle <$> DL.dlopen name [DL.RTLD_LAZY]
 
 dlclose :: LibHandle -> IO ()
-dlclose handle = do
-  res <- c_dlclose handle
-  unless res $
-    do err <- c_dlerror
-       hPutStrLn stderr $ "WARNING: " ++ err
+dlclose (LibHandle handle) = DL.dlclose handle
 
-findSymbol :: [LibHandle] -> String -> IO (Maybe ForeignFun)
-findSymbol [] _ = pure Nothing
-findSymbol (lib:libs) name = do
-  (ForeignFun res) <- c_dlsym lib name
-  if res /= nullPtr
-    then pure $ Just $ ForeignFun res
-    else findSymbol libs name
+findSymbol :: String -> IO (Maybe ForeignFun)
+findSymbol name =
+  catch ((Just . ForeignFun) <$> DL.dlsym DL.Default name) $
+  \(_ :: IOError) -> pure Nothing
 
-class CallForeignFun args ret  where
-  callForeignFun :: ForeignFun -> args -> IO ret
+withValue :: Value -> (FFI.Arg -> IO a) -> IO a
+withValue (ValueInt i) fun = fun (FFI.argInt i)
+withValue (ValueFloat f) fun = fun (FFI.argCDouble $ realToFrac f)
+withValue (ValueString s) fun = fun (FFI.argString s)
 
-instance CallForeignFun CDouble CDouble where
-  callForeignFun (ForeignFun f) a0 =
-    [CU.exp| double { (*((double(*)(double))($(void* f))))($(double a0)) } |]
+withValues :: [Value] -> ([FFI.Arg] -> IO a) -> IO a
+withValues [] f = f []
+withValues (v:vs) f = withValue v $ \a -> withValues vs $ \as -> f (a : as)
+
+call' :: Maybe VarType -> (forall a. FFI.RetType a -> IO a) -> IO (Maybe Value)
+call' Nothing fun = fun FFI.retVoid >> pure Nothing
+call' (Just VarTypeInt) fun = (Just . ValueInt) <$> fun FFI.retInt
+call' (Just VarTypeFloat) fun = (Just . ValueFloat . realToFrac) <$> fun FFI.retCDouble
+-- The returned char* is not freed. So it might be leaky.
+call' (Just VarTypeString) fun = (Just . ValueString) <$> fun FFI.retString
 
 call :: ForeignFun -> Maybe VarType -> [Value] -> IO (Maybe Value)
-call fun rettype vals =
-  case (rettype, vals) of
-    (Just VarTypeFloat, [ValueFloat f]) ->
-      callForeignFun fun (realToFrac f :: CDouble) >>= floatReturnValue
-    _ -> error "Extend supported FFI calls as needed"
-  where
-    floatReturnValue :: CDouble -> IO (Maybe Value)
-    floatReturnValue = pure . Just . ValueFloat . realToFrac
+call (ForeignFun fun) rettype vals =
+  withValues vals $ \args -> call' rettype (\r -> FFI.callFFI fun r args)

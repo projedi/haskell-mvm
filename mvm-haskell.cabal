@@ -40,7 +40,9 @@ library
                      , hindent >= 5.2
                      , hlint
                      , inline-c
+                     , libffi
                      , mtl
+                     , unix
   extra-libraries:     dl
   build-tools:         alex, happy
   default-language:    Haskell2010
