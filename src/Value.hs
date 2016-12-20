@@ -20,12 +20,16 @@ data Value
 
 instance Eq Value where
   (ValueInt il) == (ValueInt ir) = il == ir
+  (ValueInt il) == (ValueFloat fr) = fromIntegral il == fr
+  (ValueFloat fl) == (ValueInt ir) = fl == fromIntegral ir
   (ValueFloat fl) == (ValueFloat fr) = fl == fr
   (ValueString sl) == (ValueString sr) = sl == sr
   _ == _ = error "Type mismatch"
 
 instance Ord Value where
   compare (ValueInt il) (ValueInt ir) = compare il ir
+  compare (ValueInt il) (ValueFloat fr) = compare (fromIntegral il) fr
+  compare (ValueFloat fl) (ValueInt ir) = compare fl (fromIntegral ir)
   compare (ValueFloat fl) (ValueFloat fr) = compare fl fr
   compare (ValueString sl) (ValueString sr) = compare sl sr
   compare _ _ = error "Type mismatch"
