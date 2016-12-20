@@ -30,9 +30,9 @@ tokens :-
     { \p s -> TokenLBrace p }
   \}
     { \p s -> TokenRBrace p }
-  "-"?$digit+
+  $digit+
     { \p s -> TokenIntLiteral p (read s) }
-  "-"?$digit+.$digit+
+  $digit+\.$digit+
     { \p s -> TokenFloatLiteral p (read s) }
   \" $string* \"
     { \p s -> TokenStringLiteral p (read s) }
