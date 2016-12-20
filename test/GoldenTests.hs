@@ -50,12 +50,6 @@ originalTestList =
   , "original/literal"
   , "original/mul"
   , "original/optional/function_native"
-  , "original/optional/plot"
-  , "original/perf/graph_plot"
-  , "original/perf/lissajous"
-  , "original/perf/newton"
-  , "original/perf/plot"
-  , "original/perf/prime"
   , "original/sub"
   , "original/while"
   ]
@@ -90,6 +84,24 @@ originalFailTestList =
   , "original/additional/fail/range"
   , "original/additional/fail/vars"
   ]
+
+{- These require custom SDL bindings. So disable them for now.
+sdlTestList :: [String]
+sdlTestList =
+  [ "original/optional/plot"
+  , "original/perf/graph_plot"
+  , "original/perf/lissajous"
+  , "original/perf/plot"
+  ]
+-}
+
+{- These are perf tests which are better be executed via stack bench.
+originalPerfTestList :: [String]
+originalPerfTestList =
+  [ "original/perf/newton"
+  , "original/perf/prime"
+  ]
+-}
 
 tests :: TestTree
 tests = testGroup "Golden" [passTests, failTests, intensiveTests]
