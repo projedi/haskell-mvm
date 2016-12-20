@@ -506,6 +506,9 @@ opRetType OpMinusInt = VarTypeInt
 opRetType OpTimesInt = VarTypeInt
 opRetType OpDivInt = VarTypeInt
 opRetType OpModInt = VarTypeInt
+opRetType OpBitAndInt = VarTypeInt
+opRetType OpBitOrInt = VarTypeInt
+opRetType OpBitXorInt = VarTypeInt
 opRetType OpNotInt = VarTypeInt
 opRetType OpAndInt = VarTypeInt
 opRetType OpOrInt = VarTypeInt
@@ -616,6 +619,15 @@ translateExpression (ExprDiv lhs rhs) =
 translateExpression (ExprMod lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList [((VarTypeInt, VarTypeInt), (VarTypeInt, OpModInt))]
+translateExpression (ExprBitAnd lhs rhs) =
+  translateBinOp lhs rhs $
+  Map.fromList [((VarTypeInt, VarTypeInt), (VarTypeInt, OpBitAndInt))]
+translateExpression (ExprBitOr lhs rhs) =
+  translateBinOp lhs rhs $
+  Map.fromList [((VarTypeInt, VarTypeInt), (VarTypeInt, OpBitOrInt))]
+translateExpression (ExprBitXor lhs rhs) =
+  translateBinOp lhs rhs $
+  Map.fromList [((VarTypeInt, VarTypeInt), (VarTypeInt, OpBitXorInt))]
 translateExpression (ExprAnd lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList [((VarTypeInt, VarTypeInt), (VarTypeInt, OpAndInt))]

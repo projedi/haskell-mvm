@@ -40,6 +40,12 @@ import Syntax
     { TokenDiv _ }
   '%'
     { TokenMod _ }
+  '&'
+    { TokenBitAnd _ }
+  '|'
+    { TokenBitOr _ }
+  '^'
+    { TokenBitXor _ }
   '!'
     { TokenNot _ }
   '&&'
@@ -91,8 +97,12 @@ import Syntax
   sym
     { TokenSym _ $$ }
 
+-- This follows C operator precedence.
 %left '||'
 %left '&&'
+%left '|'
+%left '^'
+%left '&'
 %left '==' '!='
 %left '<' '<=' '>' '>='
 %left '+' '-'
@@ -200,6 +210,12 @@ expr
     { ExprDiv $1 $3 }
   | expr '%' expr
     { ExprMod $1 $3 }
+  | expr '&' expr
+    { ExprBitAnd $1 $3 }
+  | expr '|' expr
+    { ExprBitOr $1 $3 }
+  | expr '^' expr
+    { ExprBitXor $1 $3 }
   | '!' expr
     { ExprNot $2 }
   | expr '&&' expr

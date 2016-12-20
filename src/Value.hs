@@ -8,6 +8,8 @@ module Value
   , convert
   ) where
 
+import Data.Bits
+
 import Syntax (VarType(..))
 import Util
 
@@ -76,6 +78,30 @@ instance Fractional Value where
   (ValueInt il) / (ValueFloat fr) = ValueFloat (fromIntegral il / fr)
   (ValueFloat fl) / (ValueFloat fr) = ValueFloat (fl / fr)
   _ / _ = error "Type mismatch"
+
+instance Bits Value where
+  (ValueInt il) .&. (ValueInt ir) = ValueInt (il .&. ir)
+  _ .&. _ = error "Type mismatch"
+  (ValueInt il) .|. (ValueInt ir) = ValueInt (il .|. ir)
+  _ .|. _ = error "Type mismatch"
+  (ValueInt il) `xor` (ValueInt ir) = ValueInt (il `xor` ir)
+  _ `xor` _ = error "Type mismatch"
+  complement (ValueInt i) = ValueInt (complement i)
+  complement _ = error "Type mismatch"
+  shift (ValueInt i) b = ValueInt (shift i b)
+  shift _ _ = error "Type mismatch"
+  rotate (ValueInt i) b = ValueInt (rotate i b)
+  rotate _ _ = error "Type mismatch"
+  bitSizeMaybe (ValueInt i) = bitSizeMaybe i
+  bitSizeMaybe _ = error "Type mismatch"
+  bitSize _ = undefined
+  isSigned (ValueInt i) = isSigned i
+  isSigned _ = error "Type mismatch"
+  testBit (ValueInt i) b = testBit i b
+  testBit _ _ = error "Type mismatch"
+  bit = ValueInt . bit
+  popCount (ValueInt i) = popCount i
+  popCount _ = error "Type mismatch"
 
 toBool :: Value -> Bool
 toBool (ValueInt i) = i /= 0

@@ -10,6 +10,7 @@ import qualified Control.Monad.Reader as Reader
 import Control.Monad.State (StateT, execStateT)
 import qualified Control.Monad.State as State
 import qualified Control.Monad.Trans as Trans
+import Data.Bits
 import Data.Foldable (asum)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -340,6 +341,9 @@ interpretOp OpTimesFloat = interpretBinOp (*)
 interpretOp OpDivInt = interpretBinOp (/)
 interpretOp OpDivFloat = interpretBinOp (/)
 interpretOp OpModInt = interpretBinOp rem
+interpretOp OpBitAndInt = interpretBinOp (.&.)
+interpretOp OpBitOrInt = interpretBinOp (.|.)
+interpretOp OpBitXorInt = interpretBinOp xor
 interpretOp OpNotInt = interpretUnaryOp (fromBool . not . toBool)
 interpretOp OpAndInt =
   interpretBinOp (\lhs rhs -> fromBool (toBool lhs && toBool rhs))

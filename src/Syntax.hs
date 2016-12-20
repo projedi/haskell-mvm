@@ -86,6 +86,9 @@ data Expr
             Expr
   | ExprMod Expr
             Expr
+  | ExprBitAnd Expr Expr
+  | ExprBitOr Expr Expr
+  | ExprBitXor Expr Expr
   | ExprNot Expr
   | ExprAnd Expr
             Expr

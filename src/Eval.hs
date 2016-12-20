@@ -10,6 +10,7 @@ import qualified Control.Monad.State as State
 import Control.Monad.Except (ExceptT, runExceptT)
 import qualified Control.Monad.Except as Except
 import qualified Control.Monad.Trans as Trans
+import Data.Bits
 import Data.Foldable (asum)
 import qualified Data.List as List
 import Data.Map (Map)
@@ -388,6 +389,9 @@ evaluate (ExprMinus el er) = (-) <$> evaluate el <*> evaluate er
 evaluate (ExprTimes el er) = (*) <$> evaluate el <*> evaluate er
 evaluate (ExprDiv el er) = (/) <$> evaluate el <*> evaluate er
 evaluate (ExprMod el er) = rem <$> evaluate el <*> evaluate er
+evaluate (ExprBitAnd el er) = (.&.) <$> evaluate el <*> evaluate er
+evaluate (ExprBitOr el er) = (.|.) <$> evaluate el <*> evaluate er
+evaluate (ExprBitXor el er) = xor <$> evaluate el <*> evaluate er
 evaluate (ExprNot e) = do
   val <- evaluate e
   case val of

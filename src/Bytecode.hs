@@ -66,6 +66,9 @@ data Op
   | OpDivInt
   | OpDivFloat
   | OpModInt
+  | OpBitAndInt
+  | OpBitOrInt
+  | OpBitXorInt
   | OpNotInt
   | OpAndInt
   | OpOrInt
@@ -108,6 +111,9 @@ instance Show Op where
   show OpDivInt = "idiv"
   show OpDivFloat = "fdiv"
   show OpModInt = "mod"
+  show OpBitAndInt = "band"
+  show OpBitOrInt = "bor"
+  show OpBitXorInt = "bxor"
   show OpNotInt = "not"
   show OpAndInt = "and"
   show OpOrInt = "or"

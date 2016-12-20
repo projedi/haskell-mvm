@@ -49,6 +49,12 @@ tokens :-
     { \p s -> TokenDiv p }
   "%"
     { \p s -> TokenMod p }
+  "&"
+    { \p s -> TokenBitAnd p }
+  "|"
+    { \p s -> TokenBitOr p }
+  "^"
+    { \p s -> TokenBitXor p }
   "!"
     { \p s -> TokenNot p }
   "&&"
@@ -116,6 +122,9 @@ data Token
   | TokenTimes AlexPosn
   | TokenDiv AlexPosn
   | TokenMod AlexPosn
+  | TokenBitAnd AlexPosn
+  | TokenBitOr AlexPosn
+  | TokenBitXor AlexPosn
   | TokenNot AlexPosn
   | TokenAnd AlexPosn
   | TokenOr AlexPosn
