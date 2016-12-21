@@ -99,14 +99,6 @@ sdlTestList =
   ]
 -}
 
-{- These are perf tests which are better be executed via stack bench.
-originalPerfTestList :: [String]
-originalPerfTestList =
-  [ "original/perf/newton"
-  , "original/perf/prime"
-  ]
--}
-
 tests :: TestTree
 tests = testGroup "Golden" [passTests, failTests, intensiveTests, graphicsTests]
 

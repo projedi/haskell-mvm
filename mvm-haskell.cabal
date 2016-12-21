@@ -74,6 +74,18 @@ test-suite mvm-haskell-test
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 
+benchmark mvm-haskell-bench
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      bench
+  main-is:             Bench.hs
+  build-depends:       base
+                     , mvm-haskell
+                     , criterion
+                     , filepath
+                     , process
+  ghc-options:         -O2
+  default-language:    Haskell2010
+
 source-repository head
   type:     git
   location: https://github.com/projedi/mvm-haskell
