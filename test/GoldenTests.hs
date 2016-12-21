@@ -62,6 +62,7 @@ originalIntensiveTestList =
   [ "original/additional/ackermann"
   , "original/additional/ackermann_closure"
   , "original/additional/complex2"
+  , "original/additional/fail/vars" -- we don't consider it as failure
   , "original/additional/fib"
   , "original/additional/fib_closure"
   , "original/additional/vars"
@@ -82,7 +83,6 @@ originalFailTestList =
   , "original/additional/fail/op_streq"
   , "original/additional/fail/op_sub"
   , "original/additional/fail/range"
-  , "original/additional/fail/vars"
   ]
 
 {- These require custom SDL bindings. So disable them for now.
