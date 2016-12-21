@@ -9,13 +9,11 @@ import qualified Foreign.C.String as CString
 import Foreign.Marshal.Alloc (allocaBytes)
 import qualified Language.C.Inline as C
 import qualified Language.C.Inline.Unsafe as CU
-import System.IO.Unsafe (unsafePerformIO)
 
 C.include "<stdio.h>"
 
-doubleToString :: Double -> String
+doubleToString :: Double -> IO String
 doubleToString d =
-  unsafePerformIO $
   do let buflength = 50
      allocaBytes buflength $
        \(bufptr :: CString) -> do

@@ -26,11 +26,6 @@ eval (Program stmts) = do
   forM_ (envLibs finalEnv) dlclose
   pure ()
 
-valueToExpr :: Value -> Expr
-valueToExpr (ValueInt i) = ExprInt i
-valueToExpr (ValueFloat f) = ExprFloat f
-valueToExpr (ValueString s) = ExprString s
-
 type LayerID = Int
 
 data FunctionImpl
@@ -284,13 +279,15 @@ declareForeignFunction (FunctionDecl rettype name@(FunctionName strname) params)
   State.put env'
 
 printCall :: [Value] -> Execute ()
-printCall vals = Trans.liftIO $ putStr $ concatMap show vals
+printCall vals = Trans.liftIO $ do
+  str <- concat <$> mapM showIO vals
+  putStr str
 
 dlopenCall :: [Value] -> Execute ()
 dlopenCall vals =
   forM_ vals $
   \case
-    (ValueString s) -> openLibrary s
+    (ValueString (Right s)) -> openLibrary s
     _ -> error "Type mismatch"
 
 nativeFunctionCall
@@ -301,9 +298,9 @@ nativeFunctionCall
   -> [Statement]
   -> Execute (Maybe Value)
 nativeFunctionCall rettype params vals lid body = do
-  let varassignments = generateAssignments params vals
-  let newbody = StatementBlock $ varassignments ++ body
-  res <- withLayer lid $ executeStatementWithReturn newbody
+  res <- withLayer lid $ withNewLayer $ do
+    generateAssignments params vals
+    executeStatementWithReturn (StatementBlock body)
   case (res, rettype) of
     (Nothing, Nothing) -> pure res
     (Just val, Just valtype) -> pure $ Just $ convert val valtype
@@ -338,14 +335,16 @@ functionCall (FunctionCall fname args) = do
     FunctionBody (lid, body) -> nativeFunctionCall rettype params vals lid body
     FunctionForeign f -> foreignFunctionCall rettype params vals f
 
-generateAssignment :: VarDecl -> Value -> [Statement]
-generateAssignment decl@(VarDecl _ name) val =
-  [StatementVarDecl decl, StatementAssign name (valueToExpr val)]
+generateAssignment :: VarDecl -> Value -> Execute ()
+generateAssignment decl@(VarDecl _ name) val = do
+  declareVariable decl
+  writeVariable name val
 
-generateAssignments :: [VarDecl] -> [Value] -> [Statement]
-generateAssignments [] [] = []
-generateAssignments (decl:decls) (val:vals) =
-  generateAssignment decl val ++ generateAssignments decls vals
+generateAssignments :: [VarDecl] -> [Value] -> Execute ()
+generateAssignments [] [] = pure ()
+generateAssignments (decl:decls) (val:vals) = do
+  generateAssignment decl val
+  generateAssignments decls vals
 generateAssignments _ _ = error "Type mismatch"
 
 evaluateArgs :: [Expr] -> Execute [Value]
@@ -382,7 +381,7 @@ evaluate (ExprFunctionCall fcall) = do
 evaluate (ExprVar vname) = readVariable vname
 evaluate (ExprInt i) = pure $ ValueInt i
 evaluate (ExprFloat f) = pure $ ValueFloat f
-evaluate (ExprString s) = pure $ ValueString s
+evaluate (ExprString s) = pure $ ValueString $ Right s
 evaluate (ExprNeg e) = negate <$> evaluate e
 evaluate (ExprPlus el er) = (+) <$> evaluate el <*> evaluate er
 evaluate (ExprMinus el er) = (-) <$> evaluate el <*> evaluate er

@@ -6,9 +6,12 @@ module Value
   , typeof
   , defaultValueFromType
   , convert
+  , showIO
   ) where
 
 import Data.Bits
+import Foreign.C.String (CString)
+import qualified Foreign.C.String as CString
 
 import Syntax (VarType(..))
 import Util
@@ -16,7 +19,7 @@ import Util
 data Value
   = ValueInt Int
   | ValueFloat Double
-  | ValueString String
+  | ValueString (Either CString String)
 
 instance Eq Value where
   (ValueInt il) == (ValueInt ir) = il == ir
@@ -112,10 +115,11 @@ fromBool :: Bool -> Value
 fromBool True = ValueInt 1
 fromBool False = ValueInt 0
 
-instance Show Value where
-  show (ValueInt i) = show i
-  show (ValueFloat f) = doubleToString f
-  show (ValueString s) = s
+showIO :: Value -> IO String
+showIO (ValueInt i) = pure $ show i
+showIO (ValueFloat f) = doubleToString f
+showIO (ValueString (Left cs)) = CString.peekCString cs
+showIO (ValueString (Right s)) = pure s
 
 typeIs :: Value -> VarType -> Bool
 typeIs v vtype = typeof v == vtype
@@ -128,7 +132,7 @@ typeof (ValueString _) = VarTypeString
 defaultValueFromType :: VarType -> Value
 defaultValueFromType VarTypeInt = ValueInt 0
 defaultValueFromType VarTypeFloat = ValueFloat 0
-defaultValueFromType VarTypeString = ValueString ""
+defaultValueFromType VarTypeString = ValueString $ Right ""
 
 convert :: Value -> VarType -> Value
 convert v vtype

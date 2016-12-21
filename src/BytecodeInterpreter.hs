@@ -14,6 +14,7 @@ import Data.Bits
 import Data.Foldable (asum)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import qualified Foreign.C.String as CString
 
 import Bytecode
 import ForeignEval
@@ -266,8 +267,10 @@ getStringArgs = do
   ValueInt count <- pop
   forM [1 .. count] $
     \_ -> do
-      ValueString s <- pop
-      pure s
+      ValueString es <- pop
+      case es of
+        Left cs -> Trans.liftIO $ CString.peekCString cs
+        Right s -> pure s
 
 printCall :: Interpreter ()
 printCall = do
@@ -325,7 +328,7 @@ interpretOp (OpJumpIfZero l) = do
     else pure ()
 interpretOp (OpPushInt i) = push $ ValueInt i
 interpretOp (OpPushFloat f) = push $ ValueFloat f
-interpretOp (OpPushString s) = push $ ValueString s
+interpretOp (OpPushString s) = push $ ValueString $ Right s
 interpretOp OpPop = pop >> pure ()
 interpretOp (OpStore v) = store v
 interpretOp (OpLoad v) = load v
@@ -353,5 +356,11 @@ interpretOp OpEqFloat = interpretCompOp (==)
 interpretOp OpLtInt = interpretCompOp (<)
 interpretOp OpLtFloat = interpretCompOp (<)
 interpretOp OpIntToFloat = interpretUnaryOp (`convert` VarTypeFloat)
-interpretOp OpIntToString = interpretUnaryOp (ValueString . show)
-interpretOp OpFloatToString = interpretUnaryOp (ValueString . show)
+interpretOp OpIntToString = do
+  v <- pop
+  s <- Trans.liftIO $ showIO v
+  push $ ValueString $ Right s
+interpretOp OpFloatToString = do
+  v <- pop
+  s <- Trans.liftIO $ showIO v
+  push $ ValueString $ Right s

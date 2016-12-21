@@ -40,7 +40,10 @@ findSymbol name =
 withValue :: Value -> (FFI.Arg -> IO a) -> IO a
 withValue (ValueInt i) fun = fun (FFI.argInt i)
 withValue (ValueFloat f) fun = fun (FFI.argCDouble $ realToFrac f)
-withValue (ValueString s) fun = fun (FFI.argString s)
+-- If it's from literal, make a copy.
+withValue (ValueString (Right s)) fun = fun (FFI.argString s)
+-- It it's not, pass it directly.
+withValue (ValueString (Left cs)) fun = fun (FFI.argPtr cs)
 
 withValues :: [Value] -> ([FFI.Arg] -> IO a) -> IO a
 withValues [] f = f []
@@ -50,8 +53,7 @@ call' :: Maybe VarType -> (forall a. FFI.RetType a -> IO a) -> IO (Maybe Value)
 call' Nothing fun = fun FFI.retVoid >> pure Nothing
 call' (Just VarTypeInt) fun = (Just . ValueInt) <$> fun FFI.retInt
 call' (Just VarTypeFloat) fun = (Just . ValueFloat . realToFrac) <$> fun FFI.retCDouble
--- The returned char* is not freed. So it might be leaky.
-call' (Just VarTypeString) fun = (Just . ValueString) <$> fun FFI.retString
+call' (Just VarTypeString) fun = (Just . ValueString . Left) <$> fun FFI.retCString
 
 call :: ForeignFun -> Maybe VarType -> [Value] -> IO (Maybe Value)
 call (ForeignFun fun) rettype vals =
