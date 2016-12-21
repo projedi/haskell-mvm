@@ -8,7 +8,7 @@ str = "abc";
 print(i, " ", j, " ", str, "\n");
 i = i + 1;
 j = j * 1.4;
-str = str + "def";
+str = "def";
 print(i, " ", j, " ", str, "\n");
 
 i += 1;

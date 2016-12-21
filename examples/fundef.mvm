@@ -3,7 +3,7 @@ double k(int i, double j);
 void f(int i, double j, string str) {
   i = i + 1;
   j = j * 1.4;
-  str = str + "def";
+  str = "def";
   print(i, " ", j, " ", str, "\n");
 }
 

@@ -58,7 +58,6 @@ data Op
   | OpNegateFloat
   | OpPlusInt
   | OpPlusFloat
-  | OpPlusString
   | OpMinusInt
   | OpMinusFloat
   | OpTimesInt
@@ -74,10 +73,8 @@ data Op
   | OpOrInt
   | OpEqInt
   | OpEqFloat
-  | OpEqString
   | OpLtInt
   | OpLtFloat
-  | OpLtString
   | OpIntToFloat
   | OpIntToString
   | OpFloatToString
@@ -103,7 +100,6 @@ instance Show Op where
   show OpNegateFloat = "fneg"
   show OpPlusInt = "iplus"
   show OpPlusFloat = "fplus"
-  show OpPlusString = "splus"
   show OpMinusInt = "iminus"
   show OpMinusFloat = "fminus"
   show OpTimesInt = "imul"
@@ -119,10 +115,8 @@ instance Show Op where
   show OpOrInt = "or"
   show OpEqInt = "ieq"
   show OpEqFloat = "feq"
-  show OpEqString = "seq"
   show OpLtInt = "ilt"
   show OpLtFloat = "flt"
-  show OpLtString = "slt"
   show OpIntToFloat = "i2f"
   show OpIntToString = "i2s"
   show OpFloatToString = "f2s"

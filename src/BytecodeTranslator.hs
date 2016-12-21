@@ -498,9 +498,6 @@ opRetType OpTimesFloat = VarTypeFloat
 opRetType OpDivFloat = VarTypeFloat
 opRetType OpEqFloat = VarTypeInt
 opRetType OpLtFloat = VarTypeInt
-opRetType OpPlusString = VarTypeString
-opRetType OpEqString = VarTypeInt
-opRetType OpLtString = VarTypeInt
 opRetType OpIntToFloat = VarTypeFloat
 opRetType OpIntToString = VarTypeString
 opRetType OpFloatToString = VarTypeString
@@ -567,7 +564,6 @@ translateExpression (ExprPlus lhs rhs) =
     , ((VarTypeInt, VarTypeFloat), (VarTypeFloat, OpPlusFloat))
     , ((VarTypeFloat, VarTypeInt), (VarTypeFloat, OpPlusFloat))
     , ((VarTypeFloat, VarTypeFloat), (VarTypeFloat, OpPlusFloat))
-    , ((VarTypeString, VarTypeString), (VarTypeString, OpPlusString))
     ]
 translateExpression (ExprMinus lhs rhs) =
   translateBinOp lhs rhs $
@@ -618,7 +614,6 @@ translateExpression (ExprEq lhs rhs) =
     , ((VarTypeInt, VarTypeFloat), (VarTypeFloat, OpEqFloat))
     , ((VarTypeFloat, VarTypeInt), (VarTypeFloat, OpEqFloat))
     , ((VarTypeFloat, VarTypeFloat), (VarTypeFloat, OpEqFloat))
-    , ((VarTypeString, VarTypeString), (VarTypeString, OpEqString))
     ]
 translateExpression (ExprLt lhs rhs) =
   translateBinOp lhs rhs $
@@ -627,7 +622,6 @@ translateExpression (ExprLt lhs rhs) =
     , ((VarTypeInt, VarTypeFloat), (VarTypeFloat, OpLtFloat))
     , ((VarTypeFloat, VarTypeInt), (VarTypeFloat, OpLtFloat))
     , ((VarTypeFloat, VarTypeFloat), (VarTypeFloat, OpLtFloat))
-    , ((VarTypeString, VarTypeString), (VarTypeString, OpLtString))
     ]
 translateExpression (ExprNeq lhs rhs) =
   translateExpression (ExprNot (ExprEq lhs rhs))

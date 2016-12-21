@@ -25,7 +25,6 @@ testList =
   , "intops"
   , "print"
   , "scoping"
-  , "strops"
   , "vardef"
   , "while"
   , "ffi"
@@ -69,7 +68,7 @@ originalIntensiveTestList =
   ]
 
 failTestList :: [String]
-failTestList = []
+failTestList = [ "strops.fail" ]
 
 originalFailTestList :: [String]
 originalFailTestList =

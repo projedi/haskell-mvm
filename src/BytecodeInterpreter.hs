@@ -333,7 +333,6 @@ interpretOp OpNegateInt = interpretUnaryOp negate
 interpretOp OpNegateFloat = interpretUnaryOp negate
 interpretOp OpPlusInt = interpretBinOp (+)
 interpretOp OpPlusFloat = interpretBinOp (+)
-interpretOp OpPlusString = interpretBinOp (+)
 interpretOp OpMinusInt = interpretBinOp (-)
 interpretOp OpMinusFloat = interpretBinOp (-)
 interpretOp OpTimesInt = interpretBinOp (*)
@@ -351,10 +350,8 @@ interpretOp OpOrInt =
   interpretBinOp (\lhs rhs -> fromBool (toBool lhs || toBool rhs))
 interpretOp OpEqInt = interpretCompOp (==)
 interpretOp OpEqFloat = interpretCompOp (==)
-interpretOp OpEqString = interpretCompOp (==)
 interpretOp OpLtInt = interpretCompOp (<)
 interpretOp OpLtFloat = interpretCompOp (<)
-interpretOp OpLtString = interpretCompOp (<)
 interpretOp OpIntToFloat = interpretUnaryOp (`convert` VarTypeFloat)
 interpretOp OpIntToString = interpretUnaryOp (ValueString . show)
 interpretOp OpFloatToString = interpretUnaryOp (ValueString . show)
