@@ -68,7 +68,7 @@ originalIntensiveTestList =
   ]
 
 failTestList :: [String]
-failTestList = [ "strops.fail" ]
+failTestList = ["strops.fail"]
 
 originalFailTestList :: [String]
 originalFailTestList =

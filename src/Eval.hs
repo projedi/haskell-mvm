@@ -279,9 +279,10 @@ declareForeignFunction (FunctionDecl rettype name@(FunctionName strname) params)
   State.put env'
 
 printCall :: [Value] -> Execute ()
-printCall vals = Trans.liftIO $ do
-  str <- concat <$> mapM showIO vals
-  putStr str
+printCall vals =
+  Trans.liftIO $
+  do str <- concat <$> mapM showIO vals
+     putStr str
 
 dlopenCall :: [Value] -> Execute ()
 dlopenCall vals =
@@ -298,9 +299,11 @@ nativeFunctionCall
   -> [Statement]
   -> Execute (Maybe Value)
 nativeFunctionCall rettype params vals lid body = do
-  res <- withLayer lid $ withNewLayer $ do
-    generateAssignments params vals
-    executeStatementWithReturn (StatementBlock body)
+  res <-
+    withLayer lid $
+    withNewLayer $
+    do generateAssignments params vals
+       executeStatementWithReturn (StatementBlock body)
   case (res, rettype) of
     (Nothing, Nothing) -> pure res
     (Just val, Just valtype) -> pure $ Just $ convert val valtype

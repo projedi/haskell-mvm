@@ -13,11 +13,11 @@ import qualified Language.C.Inline.Unsafe as CU
 C.include "<stdio.h>"
 
 doubleToString :: Double -> IO String
-doubleToString d =
-  do let buflength = 50
-     allocaBytes buflength $
-       \(bufptr :: CString) -> do
-         let cbuflength = fromIntegral buflength
-             cd = C.CDouble d
-         [CU.block| void { snprintf($(char* bufptr), $(int cbuflength), "%g", $(double cd)); } |]
-         CString.peekCString bufptr
+doubleToString d = do
+  let buflength = 50
+  allocaBytes buflength $
+    \(bufptr :: CString) -> do
+      let cbuflength = fromIntegral buflength
+          cd = C.CDouble d
+      [CU.block| void { snprintf($(char* bufptr), $(int cbuflength), "%g", $(double cd)); } |]
+      CString.peekCString bufptr
