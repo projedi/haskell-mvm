@@ -1,6 +1,5 @@
-double fabs(double x) native 'fabs';
-double sin(double x) native 'sin';
-int timestamp() native 'native_timestamp';
+foreign double fabs(double x);
+foreign double sin(double x);
 
 double newton(double xbase) {
   double func(double d) {
@@ -21,13 +20,9 @@ double newton(double xbase) {
   }
   return x;
 }
-int start = timestamp();
 int repeat;
 double root;
 for (repeat in 0 .. 100000) {
   root = newton(10 + repeat / 400.0);
 }
-int end = timestamp();
 print("root=", root, "\n");
-
-print("Newton took ", end - start, "us\n");
