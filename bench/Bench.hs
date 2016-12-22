@@ -30,6 +30,7 @@ testWithParams name flags names = bgroup name $ map (test flags) names
 
 test :: [String] -> String -> Benchmark
 test flags name = bgroup name
-  [ MVMBench.test "MVM" flags name
+  [ MVMBench.test "MVM-pure" flags (name ++ "-pure")
+  , MVMBench.test "MVM-ffi" flags (name ++ "-ffi")
   , CBench.test "C" ["-lm"] name
   ]
