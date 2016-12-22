@@ -88,13 +88,12 @@ graphicsTestList :: [String]
 graphicsTestList = ["graphics/pm3d.8"]
 
 originalGraphicsTestList :: [String]
-originalGraphicsTestList = []
+originalGraphicsTestList = ["original/optional/plot"]
 
 {- These require custom SDL bindings. So disable them for now.
 sdlTestList :: [String]
 sdlTestList =
-  [ "original/optional/plot"
-  , "original/perf/graph_plot"
+  [ "original/perf/graph_plot"
   , "original/perf/lissajous"
   , "original/perf/plot"
   ]
