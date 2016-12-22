@@ -1,6 +1,9 @@
 int PREC;
 PREC = 10;
 
+// Deal with it.
+foreign double floor(double x);
+
 double pow(double x, int y) {
   double res = 1;
   for (i in 1..y) {
@@ -29,7 +32,7 @@ double sin(double x) {
   int i;
   double res;
   res = 0;
-  x = x - 6.28 * int(x / 6.28)
+  x = x - 6.28 * floor(x / 6.28);
   for(i in 0..PREC) {
     res += pow(-1.0, i) / fact(2*i + 1) * pow(x, 2*i + 1);
   }
