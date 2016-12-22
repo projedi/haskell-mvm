@@ -78,6 +78,8 @@ benchmark mvm-haskell-bench
   type:                exitcode-stdio-1.0
   hs-source-dirs:      bench
   main-is:             Bench.hs
+  other-modules:       CBench
+                     , MVMBench
   build-depends:       base
                      , mvm-haskell
                      , criterion

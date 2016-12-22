@@ -1,7 +1,7 @@
 import Criterion.Main
-import System.Exit (ExitCode(..))
-import System.FilePath ((</>), (<.>), replaceExtension)
-import qualified System.Process
+
+import qualified CBench
+import qualified MVMBench
 
 main :: IO ()
 main = defaultMain [ perfTests ]
@@ -29,18 +29,7 @@ testWithParams :: String -> [String] -> [String] -> Benchmark
 testWithParams name flags names = bgroup name $ map (test flags) names
 
 test :: [String] -> String -> Benchmark
-test flags name =
-  bench name $ nfIO $ runEvaluateWithFlags flags ("examples" </> name <.> "mvm")
-
-runEvaluateWithFlags :: [String] -> FilePath -> IO String
-runEvaluateWithFlags flags fname = do
-  (ec, res, err) <-
-    System.Process.readProcessWithExitCode
-      "mvm-haskell-exe"
-      (flags ++ [fname])
-      ""
-  case (ec, err) of
-    (ExitSuccess, []) -> pure res
-    (ExitSuccess, _) -> putStrLn err >> pure res
-    (_, []) -> error $ show ec
-    (_, _) -> error $ show ec ++ ":\n" ++ err
+test flags name = bgroup name
+  [ MVMBench.test "MVM" flags name
+  , CBench.test "C" ["-lm"] name
+  ]
