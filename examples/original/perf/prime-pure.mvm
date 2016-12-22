@@ -1,5 +1,11 @@
 // Source http://www.cs.wustl.edu/~kjg/CS101_SP97/Notes/SquareRoot/sqrt.html
 
+double fabs(double x) {
+  if (x < 0)
+    return -x;
+  return x;
+}
+
 int closeEnough(double a, double b) {
     return fabs(a-b) < fabs(b * 0.0001);
 }

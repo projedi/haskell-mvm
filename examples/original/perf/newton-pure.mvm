@@ -5,6 +5,7 @@ PREC = 10;
 foreign double floor(double x);
 
 double pow(double x, int y) {
+  int i;
   double res = 1;
   for (i in 1..y) {
     res = res * x;
