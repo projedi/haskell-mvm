@@ -371,6 +371,11 @@ translateStatement (StatementFor vname eFrom eTo stmt) =
      addOp $ OpJump labelLoopBegin
      addOp $ OpLabel labelAfterLoop
 translateStatement (StatementVarDecl v) = introduceVariable v >> pure ()
+translateStatement (StatementVarDef vdef@(VarDecl vType _) expr) = do
+  v <- introduceVariable vdef
+  eType <- embedExpression expr
+  _ <- embedExpressionTranslator (convert eType vType)
+  addOp $ OpStore v
 translateStatement (StatementFunctionDecl f) = introduceFunction f >> pure ()
 translateStatement (StatementFunctionDef f body) = do
   fid <- introduceFunction f

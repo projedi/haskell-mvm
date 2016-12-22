@@ -106,6 +106,8 @@ prettyPrintStatement n (StatementFunctionCall fcall) =
   indent n (prettyPrintSimple fcall ++ ";")
 prettyPrintStatement n (StatementVarDecl varDecl) =
   indent n (prettyPrintSimple varDecl ++ ";")
+prettyPrintStatement n (StatementVarDef varDecl expr) =
+  indent n (prettyPrintSimple varDecl ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
 prettyPrintStatement n (StatementFunctionDecl funDecl) =
   indent n (prettyPrintSimple funDecl ++ ";")
 prettyPrintStatement n (StatementForeignFunctionDecl funDecl) =

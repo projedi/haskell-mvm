@@ -432,6 +432,10 @@ execute s@(StatementWhile e stmt) = do
     do execute stmt
        execute s
 execute (StatementVarDecl varDecl) = declareVariable varDecl
+execute (StatementVarDef varDecl@(VarDecl _ var) e) = do
+  declareVariable varDecl
+  res <- evaluate e
+  writeVariable var res
 execute (StatementFunctionDecl funDecl) = declareFunction funDecl
 execute (StatementForeignFunctionDecl funDecl) = declareForeignFunction funDecl
 execute (StatementAssign var e) = do

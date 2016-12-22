@@ -150,6 +150,8 @@ defdecl
     { StatementFunctionDecl $1 }
   | vardecl ';'
     { StatementVarDecl $1 }
+  | vardecl '=' expr ';'
+    { StatementVarDef $1 $3 }
   | 'foreign' fundecl ';'
     { StatementForeignFunctionDecl $2 }
 

@@ -1,5 +1,4 @@
-int i;
-i = 0;
+int i = 0;
 {
   print(i, "\n");
   int i;
@@ -46,9 +45,8 @@ print(i, "\n");
   }
   i = 0;
   {
-    int i;
+    int i = 10;
     int j;
-    i = 10;
     void g() {
       i = i + 1;
       // f here must modify i from it's own scope, not ours.

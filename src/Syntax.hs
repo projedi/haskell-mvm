@@ -36,6 +36,7 @@ data Statement
   | StatementWhile Expr
                    Statement
   | StatementVarDecl VarDecl
+  | StatementVarDef VarDecl Expr
   | StatementFunctionDecl FunctionDecl
   | StatementAssign VarName
                     Expr
