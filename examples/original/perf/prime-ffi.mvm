@@ -1,13 +1,4 @@
-double sqrt(double x) native 'sqrt';
-int timestamp() native 'native_timestamp';
-
-int int(double d) {
-    return 0 + d;
-}
-
-double double(int i) {
-    return 0.0 + i;
-}
+foreign double sqrt(double x);
 
 int leastFactor(int n) {
   if (n == 0) {
@@ -25,8 +16,7 @@ int leastFactor(int n) {
   if (n % 5 == 0) {
       return 5;  
   }
-  int m;
-  m = int(sqrt(double(n)));
+  double m = sqrt(n);
   int i;
   i = 7;
   while (i<=m) {
@@ -59,32 +49,23 @@ int leastFactor(int n) {
   return n;
 }
 
-void factorize(int n, int printResult)  {
+void factorize(int n)  {
     int least;
     least = n;
-    if (printResult != 0) {
-        print(n, " = 1");
-    }
+    print(n, " = 1");
     while (n > 1) {
         least = leastFactor(n);
         if (n % least != 0) {
             print("Bug!\n");
         }
-        if (printResult != 0) {
-            print(" * ", least);
-        }
+        print(" * ", least);
         n = n / least;
     }
-    if (printResult != 0) {
-        print("\n");
-    }
+    print("\n");
 }
 
 int n;
-int start = timestamp();
 int count = 1000000;
 for (n in 10000000..(10000000+count)) {
-    factorize(n, 0);
+    factorize(n);
 }
-int end = timestamp();
-print("factorize ", count, " numbers took ", end - start, "us\n");
