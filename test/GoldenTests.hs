@@ -54,7 +54,7 @@ originalTestList =
   ]
 
 intensiveTestList :: [String]
-intensiveTestList = ["fib", "gnuplot/pm3d.8"]
+intensiveTestList = ["fib"]
 
 originalIntensiveTestList :: [String]
 originalIntensiveTestList =
@@ -84,6 +84,12 @@ originalFailTestList =
   , "original/additional/fail/range"
   ]
 
+graphicsTestList :: [String]
+graphicsTestList = ["graphics/pm3d.8"]
+
+originalGraphicsTestList :: [String]
+originalGraphicsTestList = []
+
 {- These require custom SDL bindings. So disable them for now.
 sdlTestList :: [String]
 sdlTestList =
@@ -103,15 +109,15 @@ originalPerfTestList =
 -}
 
 tests :: TestTree
-tests = testGroup "Golden" [passTests, failTests, intensiveTests]
+tests = testGroup "Golden" [passTests, failTests, intensiveTests, graphicsTests]
 
 passTests :: TestTree
 passTests =
   testGroup
     "Pass"
-    [ testsWithParams "Dumb" 1 ["--dumb"] names
-    , testsWithParams "Bytecode" 1 ["--eval"] names
-    , testsWithParams "JIT" 1 [] names
+    [ testsWithParams "Dumb" 1 "expected" ["--dumb"] names
+    , testsWithParams "Bytecode" 1 "expected" ["--eval"] names
+    , testsWithParams "JIT" 1 "expected" [] names
     ]
   where
     names = testList ++ originalTestList
@@ -121,9 +127,9 @@ failTests =
   expectFail $
   testGroup
     "Fail"
-    [ testsWithParams "Dumb" 30 ["--dumb"] names
-    , testsWithParams "Bytecode" 30 ["--eval"] names
-    , testsWithParams "JIT" 30 [] names
+    [ testsWithParams "Dumb" 30 "expected" ["--dumb"] names
+    , testsWithParams "Bytecode" 30 "expected" ["--eval"] names
+    , testsWithParams "JIT" 30 "expected" [] names
     ]
   where
     names = failTestList ++ originalFailTestList
@@ -132,20 +138,31 @@ intensiveTests :: TestTree
 intensiveTests =
   testGroup
     "Intensive"
-    [ testsWithParams "Dumb" 300 ["--dumb"] names
-    , testsWithParams "Bytecode" 300 ["--eval"] names
-    , testsWithParams "JIT" 300 [] names
+    [ testsWithParams "Dumb" 300 "expected" ["--dumb"] names
+    , testsWithParams "Bytecode" 300 "expected" ["--eval"] names
+    , testsWithParams "JIT" 300 "expected" [] names
     ]
   where
     names = intensiveTestList ++ originalIntensiveTestList
 
-testsWithParams :: String -> Integer -> [String] -> [String] -> TestTree
-testsWithParams name timeout flags names =
-  localOption (mkTimeout (1000000 * timeout)) $
-  testGroup name $ map (test flags) names
+graphicsTests :: TestTree
+graphicsTests =
+  testGroup
+    "Graphics"
+    [ testsWithParams "Dumb" 300 "ppm" ["--dumb"] names
+    , testsWithParams "Bytecode" 300 "ppm" ["--eval"] names
+    , testsWithParams "JIT" 300 "ppm" [] names
+    ]
+  where
+    names = graphicsTestList ++ originalGraphicsTestList
 
-test :: [String] -> String -> TestTree
-test flags name =
+testsWithParams :: String -> Integer -> String -> [String] -> [String] -> TestTree
+testsWithParams name timeout expectedExtension flags names =
+  localOption (mkTimeout (1000000 * timeout)) $
+  testGroup name $ map (test expectedExtension flags) names
+
+test :: String -> [String] -> String -> TestTree
+test expectedExtension flags name =
   goldenTest
     name
     (BS.unpack <$> BS.readFile goldenFile)
@@ -153,7 +170,7 @@ test flags name =
     compareResult
     (BS.writeFile goldenFile . BS.pack)
   where
-    goldenFile = "examples" </> name <.> "expected"
+    goldenFile = "examples" </> name <.> expectedExtension
 
 runEvaluateWithFlags :: [String] -> FilePath -> IO String
 runEvaluateWithFlags flags fname = do

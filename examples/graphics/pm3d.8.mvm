@@ -1,0 +1,48 @@
+// Based on http://www.gnuplot.info/demo/pm3d.8.gnu
+
+dlopen("libm.so.6");
+foreign double sin(double x);
+foreign double sqrt(double x);
+foreign double floor(double x);
+
+int ix;
+int iy;
+int range;
+int multisampling;
+int final_range;
+
+range = 15;
+multisampling = 10;
+
+final_range = range * multisampling;
+
+int color_count;
+double color_min;
+double color_max;
+
+color_count = 15;
+color_min = -0.3;
+color_max = 1;
+
+print("P2\n");
+print(final_range * 2 + 1, " ", final_range * 2 + 1, "\n");
+print(color_count, "\n");
+
+for (ix in -final_range..final_range) {
+  double x;
+  x = ix;
+  x = x / multisampling;
+  for (iy in -final_range..final_range) {
+    double y;
+    y = iy;
+    y = y / multisampling;
+    double v;
+    if (ix == 0 && iy == 0) {
+      v = 1;
+    } else {
+      v = sin(sqrt(x * x + y * y)) / sqrt(x * x + y * y);
+    }
+    print(floor((v - color_min) / (color_max - color_min) * color_count), " ");
+  }
+  print("\n");
+}
