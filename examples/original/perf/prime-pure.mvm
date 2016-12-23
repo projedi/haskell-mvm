@@ -86,8 +86,8 @@ void factorize(int n)  {
     print("\n");
 }
 
-int n;
+int n = 10000000;
 int count = 1000000;
-for (n in 10000000..(10000000+count)) {
+// for (n in 10000000..(10000000+count)) {
     factorize(n);
-}
+// }

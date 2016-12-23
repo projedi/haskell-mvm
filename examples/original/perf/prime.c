@@ -66,10 +66,10 @@ void factorize(int n)  {
 }
 
 int main() {
-  int n;
+  int n = 10000000;
   int count = 1000000;
-  for (n = 10000000; n <= (10000000+count); ++n) {
+  // for (n = 10000000; n <= (10000000+count); ++n) {
       factorize(n);
-  }
+  // }
   return 0;
 }

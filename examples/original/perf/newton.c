@@ -23,11 +23,11 @@ double newton(double xbase) {
 }
 
 int main() {
-  int repeat;
+  int repeat = 100000;
   double root;
-  for (repeat = 0; repeat <= 100000; ++repeat) {
+  // for (repeat = 0; repeat <= 100000; ++repeat) {
     root = newton(10 + repeat / 400.0);
-  }
+  // }
   printf("root=%g\n", root);
   return 0;
 }

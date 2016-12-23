@@ -65,9 +65,9 @@ double newton(double xbase) {
   }
   return x;
 }
-int repeat;
+int repeat = 100000;
 double root;
-for (repeat in 0 .. 100000) {
+// for (repeat in 0 .. 100000) {
   root = newton(10 + repeat / 400.0);
-}
+// }
 print("root=", root, "\n");
