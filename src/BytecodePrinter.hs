@@ -8,10 +8,23 @@ import qualified Data.IntMap as IntMap
 import Bytecode
 
 prettyPrint :: Bytecode -> String
-prettyPrint (Bytecode funs libs) = prettyPrintLibs libs ++ prettyPrintFuns funs
+prettyPrint bc =
+  unlines
+    [ prettyPrintLibs $ bytecodeLibraries bc
+    , prettyPrintConstants $ bytecodeConstants bc
+    , prettyPrintFuns $ bytecodeFunctions bc
+    ]
 
 prettyPrintLibs :: [String] -> String
 prettyPrintLibs libs = "Libraries: " ++ unwords libs
+
+prettyPrintConstants :: IntMap String -> String
+prettyPrintConstants consts =
+  "Constants: " ++
+  IntMap.foldrWithKey
+    (\key val rest -> rest ++ " " ++ show key ++ ":" ++ show val)
+    ""
+    consts
 
 prettyPrintFuns :: IntMap BytecodeFunction -> String
 prettyPrintFuns funs =

@@ -8,15 +8,26 @@ import Data.Monoid ((<>))
 
 import qualified Syntax
 
+newtype ConstID =
+  ConstID Int
+  deriving (Show)
+
 data Bytecode = Bytecode
   { bytecodeFunctions :: IntMap BytecodeFunction
   , bytecodeLibraries :: [String]
+  , bytecodeConstants :: IntMap String
   } deriving (Show)
 
 instance Monoid Bytecode where
-  mempty = Bytecode IntMap.empty []
-  (Bytecode lhs llibs) `mappend` (Bytecode rhs rlibs) =
-    Bytecode (IntMap.unionWith (<>) lhs rhs) (llibs <> rlibs)
+  mempty = Bytecode IntMap.empty [] IntMap.empty
+  lhs `mappend` rhs =
+    Bytecode
+    { bytecodeFunctions =
+      IntMap.unionWith (<>) (bytecodeFunctions lhs) (bytecodeFunctions rhs)
+    , bytecodeLibraries = bytecodeLibraries lhs ++ bytecodeLibraries rhs
+    , bytecodeConstants =
+      IntMap.union (bytecodeConstants lhs) (bytecodeConstants rhs)
+    }
 
 newtype BytecodeFunction =
   BytecodeFunction [Op]
@@ -50,7 +61,7 @@ data Op
   | OpJumpIfZero LabelID
   | OpPushInt Int
   | OpPushFloat Double
-  | OpPushString String
+  | OpPushString ConstID
   | OpPop
   | OpStore VarID
   | OpLoad VarID

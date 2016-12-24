@@ -95,7 +95,7 @@ resolveLabelsInFun f (BytecodeFunction ops) =
   mconcat $ map (\(l, op) -> resolveLabelInOp (Pos f l) op) $ zip [0 ..] ops
 
 resolveLabels :: Bytecode -> IntMap Pos
-resolveLabels (Bytecode funs _) =
+resolveLabels (Bytecode {bytecodeFunctions = funs}) =
   mconcat $ map (\(k, v) -> resolveLabelsInFun (FunID k) v) $ IntMap.toList funs
 
 createConstEnv :: Bytecode -> ConstEnv
@@ -205,7 +205,7 @@ interpretFunction f = do
 
 getCurrentOp :: Interpreter (Maybe Op)
 getCurrentOp = do
-  Bytecode funs _ <- bytecode <$> Reader.ask
+  funs <- (bytecodeFunctions . bytecode) <$> Reader.ask
   Pos (FunID f) l <- pos <$> State.get
   let Just (BytecodeFunction ops) = IntMap.lookup f funs
   if l >= length ops
@@ -271,6 +271,12 @@ printCall = do
   args <- getStringArgs
   Trans.liftIO $ putStr $ concat args
 
+getConstant :: ConstID -> Interpreter String
+getConstant (ConstID cid) = do
+  consts <- (bytecodeConstants . bytecode) <$> Reader.ask
+  let Just val = IntMap.lookup cid consts
+  pure val
+
 jump :: LabelID -> Interpreter ()
 jump l = do
   cEnv <- Reader.ask
@@ -316,7 +322,9 @@ interpretOp (OpJumpIfZero l) = do
     else pure ()
 interpretOp (OpPushInt i) = push $ ValueInt i
 interpretOp (OpPushFloat f) = push $ ValueFloat f
-interpretOp (OpPushString s) = push $ ValueString $ Right s
+interpretOp (OpPushString cid) = do
+  s <- getConstant cid
+  push $ ValueString $ Right s
 interpretOp OpPop = pop >> pure ()
 interpretOp (OpStore v) = store v
 interpretOp (OpLoad v) = load v

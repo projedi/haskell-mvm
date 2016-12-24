@@ -19,9 +19,11 @@ import Syntax
 
 translate :: Program -> Bytecode
 translate (Program stmts libs) =
-  let bc = execTranslator (translateStatement (StatementBlock stmts))
+  let (bc, finalEnv) =
+        runTranslator (translateStatement (StatementBlock stmts)) emptyEnv
   in bc
      { bytecodeLibraries = libs
+     , bytecodeConstants = consts finalEnv
      }
 
 data Layer = Layer
@@ -68,9 +70,11 @@ data Env = Env
   , lastLabel :: LabelID
   , lastVar :: VarID
   , lastFun :: FunID
+  , lastConst :: ConstID
   , layers :: [Layer]
   , vars :: IntMap VarType
   , funs :: IntMap (FunctionDecl, Bool) -- True if already defined
+  , consts :: IntMap String
   }
 
 emptyEnv :: Env
@@ -81,9 +85,11 @@ emptyEnv =
   , lastLabel = LabelID (-1)
   , lastVar = VarID (-1)
   , lastFun = FunID 0
+  , lastConst = ConstID (-1)
   , layers = [emptyLayer]
   , vars = IntMap.empty
   , funs = IntMap.empty
+  , consts = IntMap.empty
   }
 
 findVariableInEnv :: Env -> VarName -> (VarType, VarID)
@@ -182,12 +188,12 @@ stopBlockInEnv _ _ = error "Env broke"
 
 type Translator a = WriterT Bytecode (State Env) a
 
-execTranslator :: Translator a -> Bytecode
-execTranslator m = State.evalState (Writer.execWriterT m) emptyEnv
+runTranslator :: Translator a -> Env -> (Bytecode, Env)
+runTranslator m = State.runState (Writer.execWriterT m)
 
 addCodeTo :: BytecodeFunction -> FunID -> Translator ()
 addCodeTo code (FunID fid) =
-  Writer.tell $ Bytecode (IntMap.singleton fid code) []
+  Writer.tell $ Bytecode (IntMap.singleton fid code) [] IntMap.empty
 
 newLabel :: Translator LabelID
 newLabel = do
@@ -526,6 +532,19 @@ addOpWithoutType op = addCode (BytecodeFunction [op])
 addOpWithType :: Op -> ExpressionTranslator VarType
 addOpWithType op = addOpWithoutType op >> pure (opRetType op)
 
+newConstant :: String -> ExpressionTranslator ConstID
+newConstant str = do
+  newConst@(ConstID cid) <- (inc . lastConst) <$> State.get
+  State.modify $
+    \env ->
+       env
+       { lastConst = newConst
+       , consts = IntMap.insert cid str (consts env)
+       }
+  pure newConst
+  where
+    inc (ConstID cid) = ConstID (cid + 1)
+
 translateBinOp :: Expr
                -> Expr
                -> Map (VarType, VarType) (VarType, Op)
@@ -548,7 +567,9 @@ translateExpression (ExprFunctionCall fcall) = do
 translateExpression (ExprVar vname) = loadVar vname
 translateExpression (ExprInt i) = addOpWithType (OpPushInt i)
 translateExpression (ExprFloat f) = addOpWithType (OpPushFloat f)
-translateExpression (ExprString s) = addOpWithType (OpPushString s)
+translateExpression (ExprString s) = do
+  cid <- newConstant s
+  addOpWithType (OpPushString cid)
 translateExpression (ExprNeg e) = do
   eType <- translateExpression e
   case eType of
