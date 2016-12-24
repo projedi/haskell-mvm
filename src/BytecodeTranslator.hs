@@ -18,8 +18,11 @@ import Bytecode
 import Syntax
 
 translate :: Program -> Bytecode
-translate (Program stmts) =
-  execTranslator (translateStatement (StatementBlock stmts))
+translate (Program stmts libs) =
+  let bc = execTranslator (translateStatement (StatementBlock stmts))
+  in bc
+     { bytecodeLibraries = libs
+     }
 
 data Layer = Layer
   { varEnv :: Map VarName VarID
@@ -183,7 +186,8 @@ execTranslator :: Translator a -> Bytecode
 execTranslator m = State.evalState (Writer.execWriterT m) emptyEnv
 
 addCodeTo :: BytecodeFunction -> FunID -> Translator ()
-addCodeTo code (FunID fid) = Writer.tell $ Bytecode (IntMap.singleton fid code)
+addCodeTo code (FunID fid) =
+  Writer.tell $ Bytecode (IntMap.singleton fid code) []
 
 newLabel :: Translator LabelID
 newLabel = do
@@ -438,14 +442,9 @@ builtinCall op args = do
 printCall :: [Expr] -> ExpressionTranslator ()
 printCall = builtinCall OpPrintCall
 
-dlopenCall :: [Expr] -> ExpressionTranslator ()
-dlopenCall = builtinCall OpDlopenCall
-
 functionCall :: FunctionCall -> ExpressionTranslator (Maybe VarType)
 functionCall (FunctionCall (FunctionName "print") args) =
   printCall args >> pure Nothing
-functionCall (FunctionCall (FunctionName "dlopen") args) =
-  dlopenCall args >> pure Nothing
 functionCall (FunctionCall fname args) = do
   (fid, FunctionDecl rettype _ params) <- findFunction fname
   translateArgs args $ map (\(VarDecl vtype _) -> vtype) params
@@ -512,7 +511,6 @@ opRetType (OpPushString _) = VarTypeString
 opRetType OpPop = error "Type mismatch"
 opRetType OpReturn = error "Type mismatch"
 opRetType OpPrintCall = error "Type mismatch"
-opRetType OpDlopenCall = error "Type mismatch"
 opRetType (OpCall _) = error "Type mismatch"
 opRetType (OpForeignCall _ _ _) = error "Type mismatch"
 opRetType (OpLabel _) = error "Type mismatch"

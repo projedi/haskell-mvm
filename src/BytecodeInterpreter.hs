@@ -23,8 +23,13 @@ import Value
 
 interpret :: Bytecode -> IO ()
 interpret bc = do
-  finalEnv <- runInterpreter startInterpretation bc emptyEnv
-  forM_ (libs finalEnv) dlclose
+  libhandles <-
+    forM (bytecodeLibraries bc) $
+    \l -> do
+      Right h <- dlopen l
+      pure h
+  _ <- runInterpreter startInterpretation bc emptyEnv
+  forM_ libhandles dlclose
   pure ()
 
 data Layer = Layer
@@ -90,7 +95,7 @@ resolveLabelsInFun f (BytecodeFunction ops) =
   mconcat $ map (\(l, op) -> resolveLabelInOp (Pos f l) op) $ zip [0 ..] ops
 
 resolveLabels :: Bytecode -> IntMap Pos
-resolveLabels (Bytecode funs) =
+resolveLabels (Bytecode funs _) =
   mconcat $ map (\(k, v) -> resolveLabelsInFun (FunID k) v) $ IntMap.toList funs
 
 createConstEnv :: Bytecode -> ConstEnv
@@ -101,8 +106,7 @@ createConstEnv bc =
   }
 
 data Env = Env
-  { libs :: [LibHandle]
-  , layers :: [Layer]
+  { layers :: [Layer]
   , stack :: [Value]
   , pos :: Pos
   }
@@ -110,8 +114,7 @@ data Env = Env
 emptyEnv :: Env
 emptyEnv =
   Env
-  { libs = []
-  , layers = []
+  { layers = []
   , stack = []
   , pos = Pos (FunID 0) 0
   }
@@ -180,15 +183,6 @@ push v =
      { stack = v : stack env
      }
 
-openLibrary :: String -> Interpreter ()
-openLibrary lib = do
-  handle <- either error id <$> Trans.liftIO (dlopen lib)
-  State.modify $
-    \env ->
-       env
-       { libs = handle : libs env
-       }
-
 startInterpretation :: Interpreter ()
 startInterpretation = interpretFunction (FunID 0)
 
@@ -211,7 +205,7 @@ interpretFunction f = do
 
 getCurrentOp :: Interpreter (Maybe Op)
 getCurrentOp = do
-  Bytecode funs <- bytecode <$> Reader.ask
+  Bytecode funs _ <- bytecode <$> Reader.ask
   Pos (FunID f) l <- pos <$> State.get
   let Just (BytecodeFunction ops) = IntMap.lookup f funs
   if l >= length ops
@@ -277,11 +271,6 @@ printCall = do
   args <- getStringArgs
   Trans.liftIO $ putStr $ concat args
 
-dlopenCall :: Interpreter ()
-dlopenCall = do
-  args <- getStringArgs
-  forM_ args openLibrary
-
 jump :: LabelID -> Interpreter ()
 jump l = do
   cEnv <- Reader.ask
@@ -318,7 +307,6 @@ interpretOp (OpIntroVar v vtype) = introduceVariable v vtype
 interpretOp OpReturn = performReturn
 interpretOp (OpForeignCall f rettype argtypes) = foreignFunctionCall f rettype argtypes
 interpretOp OpPrintCall = printCall
-interpretOp OpDlopenCall = dlopenCall
 interpretOp (OpLabel _) = pure () -- Resolved already
 interpretOp (OpJump l) = jump l
 interpretOp (OpJumpIfZero l) = do

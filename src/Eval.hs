@@ -4,7 +4,7 @@ module Eval
   ( eval
   ) where
 
-import Control.Monad (forM_, when)
+import Control.Monad (forM, forM_, when)
 import Control.Monad.State (StateT, runStateT)
 import qualified Control.Monad.State as State
 import Control.Monad.Except (ExceptT, runExceptT)
@@ -21,9 +21,14 @@ import Syntax
 import Value
 
 eval :: Program -> IO ()
-eval (Program stmts) = do
-  (finalEnv, _) <- runExecute emptyEnv (execute (StatementBlock stmts))
-  forM_ (envLibs finalEnv) dlclose
+eval (Program stmts libs) = do
+  libhandles <-
+    forM libs $
+    \l -> do
+      Right h <- dlopen l
+      pure h
+  _ <- runExecute emptyEnv (execute (StatementBlock stmts))
+  forM_ libhandles dlclose
   pure ()
 
 type LayerID = Int
@@ -114,12 +119,11 @@ addFunctionToLayer l name f@(Function _ _ body) =
          | otherwise -> Nothing
 
 data Env = Env
-  { envLibs :: [LibHandle]
-  , envLayers :: [Layer]
+  { envLayers :: [Layer]
   }
 
 emptyEnv :: Env
-emptyEnv = Env [] []
+emptyEnv = Env []
 
 modifyingLayer :: (Layer -> Maybe Layer) -> [Layer] -> Maybe [Layer]
 modifyingLayer _ [] = Nothing
@@ -230,15 +234,6 @@ withLayer lid m = do
   when (oldLid /= newLid) $ error "Scoping broke."
   pure res
 
-openLibrary :: String -> Execute ()
-openLibrary lib = do
-  handle <- either error id <$> Trans.liftIO (dlopen lib)
-  State.modify
-    (\env@Env {envLibs = libs} ->
-        env
-        { envLibs = handle : libs
-        })
-
 runExecute :: Env -> Execute a -> IO (Env, Maybe Value)
 runExecute env m = do
   (val, env') <- runStateT (runExceptT m) env
@@ -284,13 +279,6 @@ printCall vals =
   do str <- concat <$> mapM showIO vals
      putStr str
 
-dlopenCall :: [Value] -> Execute ()
-dlopenCall vals =
-  forM_ vals $
-  \case
-    (ValueString (Right s)) -> openLibrary s
-    _ -> error "Type mismatch"
-
 nativeFunctionCall
   :: Maybe VarType
   -> [VarDecl]
@@ -325,10 +313,6 @@ functionCall :: FunctionCall -> Execute (Maybe Value)
 functionCall (FunctionCall (FunctionName "print") args) = do
   vals <- evaluateArgs args
   printCall vals
-  pure Nothing
-functionCall (FunctionCall (FunctionName "dlopen") args) = do
-  vals <- evaluateArgs args
-  dlopenCall vals
   pure Nothing
 functionCall (FunctionCall fname args) = do
   env <- State.get

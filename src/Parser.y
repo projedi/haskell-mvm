@@ -96,6 +96,8 @@ import Syntax
     { TokenForeign _ }
   sym
     { TokenSym _ $$ }
+  '#link'
+    { TokenLink _ }
 
 -- This follows C operator precedence.
 %left '||'
@@ -110,6 +112,20 @@ import Syntax
 %left NEG '!'
 
 %%
+
+program
+  : pragmas stmts
+    { Program (reverse $2) (reverse $1) }
+
+pragma
+  : '#link' strlit
+    { $2 }
+
+pragmas
+  : {- empty -}
+    { [] }
+  | pragmas pragma
+    { $2 : $1 }
 
 stmts
   : {- empty -}
@@ -243,5 +259,5 @@ parseError (l:ls) = error (show l)
 parseError [] = error "Unexpected end of Input"
 
 parseExpr :: String -> Program
-parseExpr = Program . reverse . program . scanTokens
+parseExpr = program . scanTokens
 }

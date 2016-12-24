@@ -105,6 +105,8 @@ tokens :-
     { \p s -> TokenForeign p }
   $alpha [$alpha $digit \_ \']*
     { \p s -> TokenSym p s }
+  \#link
+    { \p s -> TokenLink p }
 
 {
 data Token
@@ -150,6 +152,7 @@ data Token
   | TokenReturn AlexPosn
   | TokenForeign AlexPosn
   | TokenSym AlexPosn String
+  | TokenLink AlexPosn
   deriving (Eq, Show)
 
 scanTokens = alexScanTokens

@@ -8,14 +8,15 @@ import Data.Monoid ((<>))
 
 import qualified Syntax
 
-newtype Bytecode =
-  Bytecode (IntMap BytecodeFunction)
-  deriving (Show)
+data Bytecode = Bytecode
+  { bytecodeFunctions :: IntMap BytecodeFunction
+  , bytecodeLibraries :: [String]
+  } deriving (Show)
 
 instance Monoid Bytecode where
-  mempty = Bytecode IntMap.empty
-  (Bytecode lhs) `mappend` (Bytecode rhs) =
-    Bytecode (IntMap.unionWith (<>) lhs rhs)
+  mempty = Bytecode IntMap.empty []
+  (Bytecode lhs llibs) `mappend` (Bytecode rhs rlibs) =
+    Bytecode (IntMap.unionWith (<>) lhs rhs) (llibs <> rlibs)
 
 newtype BytecodeFunction =
   BytecodeFunction [Op]
@@ -44,7 +45,6 @@ data Op
                   (Maybe Syntax.VarType)
                   [Syntax.VarType]
   | OpPrintCall -- ^ count of args, string args.
-  | OpDlopenCall -- ^ count of args, string args.
   | OpLabel LabelID
   | OpJump LabelID
   | OpJumpIfZero LabelID
@@ -86,7 +86,6 @@ instance Show Op where
   show (OpForeignCall name rettype types) =
     "foreign " ++ name ++ " : " ++ show rettype ++ " " ++ show types
   show OpPrintCall = "print"
-  show OpDlopenCall = "dlopen"
   show (OpLabel (LabelID l)) = "lbl " ++ show l
   show (OpJump (LabelID l)) = "jmp " ++ show l
   show (OpJumpIfZero (LabelID l)) = "jz " ++ show l

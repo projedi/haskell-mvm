@@ -35,6 +35,6 @@ Differences from mathvm:
 * No `function` keyword
 * Use `""` instead of `''` for strings
 * Foreign functions are defined as `foreign <fundecl>` instead of `<fundecl> native 'name'`
-* Has `dlopen()` call to link to shared libraries. Used to bind foreign function.
+* Has `#link` pragma to link to shared libraries. Used to bind foreign function.
 * Functions must be declared before first usage.
 * Number of vars is not limited by 65536.

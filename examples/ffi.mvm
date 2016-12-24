@@ -1,4 +1,4 @@
-dlopen("libm.so.6");
+#link "libm.so.6"
 
 foreign double sin(double x);
 

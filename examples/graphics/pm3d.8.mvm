@@ -1,6 +1,6 @@
 // Based on http://www.gnuplot.info/demo/pm3d.8.gnu
 
-dlopen("libm.so.6");
+#link "libm.so.6"
 foreign double sin(double x);
 foreign double sqrt(double x);
 foreign double floor(double x);

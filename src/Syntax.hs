@@ -1,8 +1,9 @@
 module Syntax where
 
-data Program =
-  Program [Statement]
-  deriving (Show)
+data Program = Program
+  { programStatements :: [Statement]
+  , programLibraries :: [String]
+  } deriving (Show)
 
 type Symbol = String
 
@@ -36,7 +37,8 @@ data Statement
   | StatementWhile Expr
                    Statement
   | StatementVarDecl VarDecl
-  | StatementVarDef VarDecl Expr
+  | StatementVarDef VarDecl
+                    Expr
   | StatementFunctionDecl FunctionDecl
   | StatementAssign VarName
                     Expr

@@ -9,7 +9,10 @@ import qualified Data.List as List
 import Syntax
 
 prettyPrint :: Program -> String
-prettyPrint (Program stmts) = printProgram 0 stmts
+prettyPrint (Program stmts libs) = printLibs libs ++ printProgram 0 stmts
+
+printLibs :: [String] -> String
+printLibs = unlines . map ("#link " ++)
 
 paren :: String -> String
 paren str = "(" ++ str ++ ")"

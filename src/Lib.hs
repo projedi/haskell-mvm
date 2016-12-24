@@ -43,6 +43,7 @@ dumpBytecode fname = do
   putStrLn $ prettyPrint $ translate expr
 
 getOperation :: [String] -> (FilePath -> IO (), [String])
+getOperation [] = (const $ pure (), [])
 getOperation ("--dumb":args) = (evaluateFile, args)
 getOperation ("--dump":args) = (dumpBytecode, args)
 getOperation ("--eval":args) = (interpretBytecode, args)
