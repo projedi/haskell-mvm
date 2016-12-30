@@ -440,14 +440,23 @@ translateArgs args types = do
   let vals = convertArgs valsWithTypes types
   forM_ (reverse vals) addCode
 
+generatePrintfDesc :: [VarType] -> ExpressionTranslator ()
+generatePrintfDesc types = do
+  cid <- newConstant $ ValueString $ Right str
+  addOpWithoutType (OpPushString cid)
+ where desc VarTypeInt = "%ld"
+       desc VarTypeFloat = "%g"
+       desc VarTypeString = "%s"
+       str = concatMap desc types
+
 printCall :: [Expr] -> ExpressionTranslator ()
-printCall args =
-  forM_ args $ \arg -> do
-    atype <- translateExpression arg
-    case atype of
-      VarTypeInt -> addOpWithoutType OpPrintInt
-      VarTypeFloat -> addOpWithoutType OpPrintFloat
-      VarTypeString -> addOpWithoutType OpPrintString
+printCall [] = pure ()
+printCall args = do
+  valsWithTypes <- mapM (localTranslate . translateExpression) args
+  forM_ (reverse (map snd valsWithTypes)) addCode
+  let types = map fst valsWithTypes
+  generatePrintfDesc types
+  addOpWithoutType $ OpForeignCall "printf" Nothing (VarTypeString:types)
 
 functionCall :: FunctionCall -> ExpressionTranslator (Maybe VarType)
 functionCall (FunctionCall (FunctionName "print") args) =
@@ -513,9 +522,6 @@ opRetType (OpPushFloat _) = VarTypeFloat
 opRetType (OpPushString _) = VarTypeString
 opRetType OpPop = error "Type mismatch"
 opRetType OpReturn = error "Type mismatch"
-opRetType OpPrintInt = error "Type mismatch"
-opRetType OpPrintFloat = error "Type mismatch"
-opRetType OpPrintString = error "Type mismatch"
 opRetType (OpCall _) = error "Type mismatch"
 opRetType (OpForeignCall _ _ _) = error "Type mismatch"
 opRetType (OpLabel _) = error "Type mismatch"

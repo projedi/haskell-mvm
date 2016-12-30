@@ -56,9 +56,6 @@ data Op
   | OpForeignCall String
                   (Maybe Syntax.VarType)
                   [Syntax.VarType]
-  | OpPrintInt
-  | OpPrintFloat
-  | OpPrintString
   | OpLabel LabelID
   | OpJump LabelID
   | OpJumpIfZero LabelID
@@ -97,9 +94,6 @@ instance Show Op where
   show OpReturn = "ret"
   show (OpForeignCall name rettype types) =
     "foreign " ++ name ++ " : " ++ show rettype ++ " " ++ show types
-  show OpPrintInt = "iprint"
-  show OpPrintFloat = "fprint"
-  show OpPrintString = "sprint"
   show (OpLabel (LabelID l)) = "lbl " ++ show l
   show (OpJump (LabelID l)) = "jmp " ++ show l
   show (OpJumpIfZero (LabelID l)) = "jz " ++ show l

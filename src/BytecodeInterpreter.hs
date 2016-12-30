@@ -255,12 +255,6 @@ foreignFunctionCall fname rettype argtypes = do
     Nothing -> pure ()
     Just v -> push v
 
-printCall :: Interpreter ()
-printCall = do
-  v <- pop
-  s <- Trans.liftIO $ showIO v
-  Trans.liftIO $ putStr s
-
 pushConstant :: ConstID -> Interpreter ()
 pushConstant (ConstID cid) = do
   consts <- (bytecodeConstants . bytecode) <$> Reader.ask
@@ -302,9 +296,6 @@ interpretOp (OpCall f) = interpretFunction f
 interpretOp (OpIntroVar v vtype) = introduceVariable v vtype
 interpretOp OpReturn = performReturn
 interpretOp (OpForeignCall f rettype argtypes) = foreignFunctionCall f rettype argtypes
-interpretOp OpPrintInt = printCall
-interpretOp OpPrintFloat = printCall
-interpretOp OpPrintString = printCall
 interpretOp (OpLabel _) = pure () -- Resolved already
 interpretOp (OpJump l) = jump l
 interpretOp (OpJumpIfZero l) = do
