@@ -261,11 +261,11 @@ printCall = do
   s <- Trans.liftIO $ showIO v
   Trans.liftIO $ putStr s
 
-getConstant :: ConstID -> Interpreter String
-getConstant (ConstID cid) = do
+pushConstant :: ConstID -> Interpreter ()
+pushConstant (ConstID cid) = do
   consts <- (bytecodeConstants . bytecode) <$> Reader.ask
   let Just val = IntMap.lookup cid consts
-  pure val
+  push val
 
 jump :: LabelID -> Interpreter ()
 jump l = do
@@ -312,11 +312,9 @@ interpretOp (OpJumpIfZero l) = do
   if i == 0
     then jump l
     else pure ()
-interpretOp (OpPushInt i) = push $ ValueInt i
-interpretOp (OpPushFloat f) = push $ ValueFloat f
-interpretOp (OpPushString cid) = do
-  s <- getConstant cid
-  push $ ValueString $ Right s
+interpretOp (OpPushInt cid) = pushConstant cid
+interpretOp (OpPushFloat cid) = pushConstant cid
+interpretOp (OpPushString cid) = pushConstant cid
 interpretOp OpPop = pop >> pure ()
 interpretOp (OpStore v) = store v
 interpretOp (OpLoad v) = load v

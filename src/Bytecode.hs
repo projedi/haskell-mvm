@@ -7,6 +7,7 @@ import qualified Data.IntMap as IntMap
 import Data.Monoid ((<>))
 
 import qualified Syntax
+import Value (Value)
 
 newtype ConstID =
   ConstID Int
@@ -15,8 +16,8 @@ newtype ConstID =
 data Bytecode = Bytecode
   { bytecodeFunctions :: IntMap BytecodeFunction
   , bytecodeLibraries :: [String]
-  , bytecodeConstants :: IntMap String
-  } deriving (Show)
+  , bytecodeConstants :: IntMap Value
+  }
 
 instance Monoid Bytecode where
   mempty = Bytecode IntMap.empty [] IntMap.empty
@@ -61,8 +62,8 @@ data Op
   | OpLabel LabelID
   | OpJump LabelID
   | OpJumpIfZero LabelID
-  | OpPushInt Int
-  | OpPushFloat Double
+  | OpPushInt ConstID
+  | OpPushFloat ConstID
   | OpPushString ConstID
   | OpPop
   | OpStore VarID -- ^ Store top of the stack in the variable.

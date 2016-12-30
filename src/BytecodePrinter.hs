@@ -6,6 +6,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 
 import Bytecode
+import Value (Value)
 
 prettyPrint :: Bytecode -> String
 prettyPrint bc =
@@ -18,7 +19,7 @@ prettyPrint bc =
 prettyPrintLibs :: [String] -> String
 prettyPrintLibs libs = "Libraries: " ++ unwords libs
 
-prettyPrintConstants :: IntMap String -> String
+prettyPrintConstants :: IntMap Value -> String
 prettyPrintConstants consts =
   "Constants: " ++
   IntMap.foldrWithKey

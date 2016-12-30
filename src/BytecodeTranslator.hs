@@ -16,6 +16,7 @@ import qualified Data.Map as Map
 
 import Bytecode
 import Syntax
+import Value (Value(..))
 
 translate :: Program -> Bytecode
 translate (Program stmts libs) =
@@ -74,7 +75,7 @@ data Env = Env
   , layers :: [Layer]
   , vars :: IntMap VarType
   , funs :: IntMap (FunctionDecl, Bool) -- True if already defined
-  , consts :: IntMap String
+  , consts :: IntMap Value
   }
 
 emptyEnv :: Env
@@ -375,7 +376,8 @@ translateStatement (StatementFor vname eFrom eTo stmt) =
      addOp $ OpStore v
      translateStatement stmt
      addOp $ OpLoad vCur
-     addOp $ OpPushInt 1
+     cid <- embedExpressionTranslator $ newConstant (ValueInt 1)
+     addOp $ OpPushInt cid
      addOp OpPlusInt
      addOp $ OpStore vCur
      addOp $ OpJump labelLoopBegin
@@ -529,14 +531,14 @@ addOpWithoutType op = addCode (BytecodeFunction [op])
 addOpWithType :: Op -> ExpressionTranslator VarType
 addOpWithType op = addOpWithoutType op >> pure (opRetType op)
 
-newConstant :: String -> ExpressionTranslator ConstID
-newConstant str = do
+newConstant :: Value -> ExpressionTranslator ConstID
+newConstant val = do
   newConst@(ConstID cid) <- (inc . lastConst) <$> State.get
   State.modify $
     \env ->
        env
        { lastConst = newConst
-       , consts = IntMap.insert cid str (consts env)
+       , consts = IntMap.insert cid val (consts env)
        }
   pure newConst
   where
@@ -562,10 +564,14 @@ translateExpression (ExprFunctionCall fcall) = do
   Just rettype <- functionCall fcall
   pure rettype
 translateExpression (ExprVar vname) = loadVar vname
-translateExpression (ExprInt i) = addOpWithType (OpPushInt i)
-translateExpression (ExprFloat f) = addOpWithType (OpPushFloat f)
+translateExpression (ExprInt i) = do
+  cid <- newConstant $ ValueInt i
+  addOpWithType (OpPushInt cid)
+translateExpression (ExprFloat f) = do
+  cid <- newConstant $ ValueFloat f
+  addOpWithType (OpPushFloat cid)
 translateExpression (ExprString s) = do
-  cid <- newConstant s
+  cid <- newConstant $ ValueString $ Right s
   addOpWithType (OpPushString cid)
 translateExpression (ExprNeg e) = do
   eType <- translateExpression e

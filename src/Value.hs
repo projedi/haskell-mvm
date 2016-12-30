@@ -20,6 +20,7 @@ data Value
   = ValueInt Int
   | ValueFloat Double
   | ValueString (Either CString String)
+  deriving (Show)
 
 instance Eq Value where
   (ValueInt il) == (ValueInt ir) = il == ir
