@@ -55,7 +55,9 @@ data Op
   | OpForeignCall String
                   (Maybe Syntax.VarType)
                   [Syntax.VarType]
-  | OpPrintCall -- ^ count of args, string args.
+  | OpPrintInt
+  | OpPrintFloat
+  | OpPrintString
   | OpLabel LabelID
   | OpJump LabelID
   | OpJumpIfZero LabelID
@@ -63,8 +65,8 @@ data Op
   | OpPushFloat Double
   | OpPushString ConstID
   | OpPop
-  | OpStore VarID
-  | OpLoad VarID
+  | OpStore VarID -- ^ Store top of the stack in the variable.
+  | OpLoad VarID -- ^ Load variable onto the stack.
   | OpNegateInt
   | OpNegateFloat
   | OpPlusInt
@@ -87,8 +89,6 @@ data Op
   | OpLtInt
   | OpLtFloat
   | OpIntToFloat
-  | OpIntToString
-  | OpFloatToString
 
 instance Show Op where
   show (OpCall (FunID f)) = "call " ++ show f
@@ -96,7 +96,9 @@ instance Show Op where
   show OpReturn = "ret"
   show (OpForeignCall name rettype types) =
     "foreign " ++ name ++ " : " ++ show rettype ++ " " ++ show types
-  show OpPrintCall = "print"
+  show OpPrintInt = "iprint"
+  show OpPrintFloat = "fprint"
+  show OpPrintString = "sprint"
   show (OpLabel (LabelID l)) = "lbl " ++ show l
   show (OpJump (LabelID l)) = "jmp " ++ show l
   show (OpJumpIfZero (LabelID l)) = "jz " ++ show l
@@ -128,5 +130,3 @@ instance Show Op where
   show OpLtInt = "ilt"
   show OpLtFloat = "flt"
   show OpIntToFloat = "i2f"
-  show OpIntToString = "i2s"
-  show OpFloatToString = "f2s"

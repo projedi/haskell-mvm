@@ -14,7 +14,6 @@ import Data.Bits
 import Data.Foldable (asum)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import qualified Foreign.C.String as CString
 
 import Bytecode
 import ForeignEval
@@ -256,20 +255,11 @@ foreignFunctionCall fname rettype argtypes = do
     Nothing -> pure ()
     Just v -> push v
 
-getStringArgs :: Interpreter [String]
-getStringArgs = do
-  ValueInt count <- pop
-  forM [1 .. count] $
-    \_ -> do
-      ValueString es <- pop
-      case es of
-        Left cs -> Trans.liftIO $ CString.peekCString cs
-        Right s -> pure s
-
 printCall :: Interpreter ()
 printCall = do
-  args <- getStringArgs
-  Trans.liftIO $ putStr $ concat args
+  v <- pop
+  s <- Trans.liftIO $ showIO v
+  Trans.liftIO $ putStr s
 
 getConstant :: ConstID -> Interpreter String
 getConstant (ConstID cid) = do
@@ -312,7 +302,9 @@ interpretOp (OpCall f) = interpretFunction f
 interpretOp (OpIntroVar v vtype) = introduceVariable v vtype
 interpretOp OpReturn = performReturn
 interpretOp (OpForeignCall f rettype argtypes) = foreignFunctionCall f rettype argtypes
-interpretOp OpPrintCall = printCall
+interpretOp OpPrintInt = printCall
+interpretOp OpPrintFloat = printCall
+interpretOp OpPrintString = printCall
 interpretOp (OpLabel _) = pure () -- Resolved already
 interpretOp (OpJump l) = jump l
 interpretOp (OpJumpIfZero l) = do
@@ -352,11 +344,3 @@ interpretOp OpEqFloat = interpretCompOp (==)
 interpretOp OpLtInt = interpretCompOp (<)
 interpretOp OpLtFloat = interpretCompOp (<)
 interpretOp OpIntToFloat = interpretUnaryOp (`convert` VarTypeFloat)
-interpretOp OpIntToString = do
-  v <- pop
-  s <- Trans.liftIO $ showIO v
-  push $ ValueString $ Right s
-interpretOp OpFloatToString = do
-  v <- pop
-  s <- Trans.liftIO $ showIO v
-  push $ ValueString $ Right s

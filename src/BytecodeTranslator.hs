@@ -438,15 +438,14 @@ translateArgs args types = do
   let vals = convertArgs valsWithTypes types
   forM_ (reverse vals) addCode
 
-builtinCall :: Op -> [Expr] -> ExpressionTranslator ()
-builtinCall op args = do
-  let count = length args
-  translateArgs args $ replicate count VarTypeString
-  addOpWithoutType $ OpPushInt count
-  addOpWithoutType op
-
 printCall :: [Expr] -> ExpressionTranslator ()
-printCall = builtinCall OpPrintCall
+printCall args =
+  forM_ args $ \arg -> do
+    atype <- translateExpression arg
+    case atype of
+      VarTypeInt -> addOpWithoutType OpPrintInt
+      VarTypeFloat -> addOpWithoutType OpPrintFloat
+      VarTypeString -> addOpWithoutType OpPrintString
 
 functionCall :: FunctionCall -> ExpressionTranslator (Maybe VarType)
 functionCall (FunctionCall (FunctionName "print") args) =
@@ -473,8 +472,6 @@ convertOp VarTypeInt VarTypeInt = Nothing
 convertOp VarTypeFloat VarTypeFloat = Nothing
 convertOp VarTypeString VarTypeString = Nothing
 convertOp VarTypeInt VarTypeFloat = Just OpIntToFloat
-convertOp VarTypeInt VarTypeString = Just OpIntToString
-convertOp VarTypeFloat VarTypeString = Just OpFloatToString
 convertOp _ _ = error "Type mismatch"
 
 convert :: VarType -> VarType -> ExpressionTranslator VarType
@@ -509,14 +506,14 @@ opRetType OpDivFloat = VarTypeFloat
 opRetType OpEqFloat = VarTypeInt
 opRetType OpLtFloat = VarTypeInt
 opRetType OpIntToFloat = VarTypeFloat
-opRetType OpIntToString = VarTypeString
-opRetType OpFloatToString = VarTypeString
 opRetType (OpPushInt _) = VarTypeInt
 opRetType (OpPushFloat _) = VarTypeFloat
 opRetType (OpPushString _) = VarTypeString
 opRetType OpPop = error "Type mismatch"
 opRetType OpReturn = error "Type mismatch"
-opRetType OpPrintCall = error "Type mismatch"
+opRetType OpPrintInt = error "Type mismatch"
+opRetType OpPrintFloat = error "Type mismatch"
+opRetType OpPrintString = error "Type mismatch"
 opRetType (OpCall _) = error "Type mismatch"
 opRetType (OpForeignCall _ _ _) = error "Type mismatch"
 opRetType (OpLabel _) = error "Type mismatch"
