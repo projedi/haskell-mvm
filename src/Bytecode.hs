@@ -73,6 +73,9 @@ data Op
   | OpPop
   | OpStore VarID -- ^ Store top of the stack in the variable.
   | OpLoad VarID -- ^ Load variable onto the stack.
+  | OpStorePtr VarID
+  | OpLoadPtr VarID
+  | OpAddressOf VarID
   | OpNegateInt
   | OpNegateFloat
   | OpPlusInt
@@ -110,6 +113,9 @@ instance Show Op where
   show OpPop = "pop"
   show (OpStore v) = "store " ++ show v
   show (OpLoad v) = "load " ++ show v
+  show (OpStorePtr v) = "store *" ++ show v
+  show (OpLoadPtr v) = "load *" ++ show v
+  show (OpAddressOf v) = "&" ++ show v
   show OpNegateInt = "ineg"
   show OpNegateFloat = "fneg"
   show OpPlusInt = "iplus"

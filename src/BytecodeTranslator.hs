@@ -154,6 +154,7 @@ getPrintfDesc = concatMap desc
     desc VarTypeInt = "%ld"
     desc VarTypeFloat = "%g"
     desc VarTypeString = "%s"
+    desc VarTypePtr = error "Type mismatch"
 
 printCall :: [Expr] -> Translator ()
 printCall [] = pure ()

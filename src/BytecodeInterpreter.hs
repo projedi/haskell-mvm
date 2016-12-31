@@ -135,8 +135,8 @@ introduceVariableInEnv env@Env {layers = l:ls} v vtype =
       }
 introduceVariableInEnv _ _ _ = error "Env broke"
 
-writeVariableToEnv :: Env -> VarID -> Value -> Env
-writeVariableToEnv env@Env {layers = ls} v val =
+deepWriteVariableToEnv :: Env -> VarID -> Value -> Env
+deepWriteVariableToEnv env@Env {layers = ls} v val =
   case modifyingLayer (\l -> writeVariableToLayer l v val) ls of
     Just ls' ->
       env
@@ -144,9 +144,30 @@ writeVariableToEnv env@Env {layers = ls} v val =
       }
     Nothing -> error "Type mismatch"
 
+writePointerToEnv :: Env -> VarID -> Value -> Env
+writePointerToEnv env vptr val =
+  let ValuePtr v = readVariableFromEnv env vptr
+  in deepWriteVariableToEnv env (VarID v) val
+
+writeVariableToEnv :: Env -> VarID -> Value -> Env
+writeVariableToEnv env@Env {layers = ls} v val =
+  case writeVariableToLayer (head ls) v val of
+   Just l' -> env { layers = l' : tail ls }
+   Nothing -> error "Type mismatch"
+
+deepReadVariableFromEnv :: Env -> VarID -> Value
+deepReadVariableFromEnv Env {layers = ls} v =
+  let Just val = asum (map (`readVariableFromLayer` v) ls)
+  in val
+
+readPointerFromEnv :: Env -> VarID -> Value
+readPointerFromEnv env vptr =
+  let ValuePtr v = readVariableFromEnv env vptr
+  in deepReadVariableFromEnv env (VarID v)
+
 readVariableFromEnv :: Env -> VarID -> Value
 readVariableFromEnv Env {layers = ls} v =
-  let Just val = asum (map (`readVariableFromLayer` v) ls)
+  let Just val = readVariableFromLayer (head ls) v
   in val
 
 jumpToLabelInEnv :: ConstEnv -> Env -> LabelID -> Env
@@ -279,6 +300,20 @@ load v = do
   let val = readVariableFromEnv env v
   push val
 
+storePtr :: VarID -> Interpreter ()
+storePtr v = do
+  val <- pop
+  State.modify $ \env -> writePointerToEnv env v val
+
+loadPtr :: VarID -> Interpreter ()
+loadPtr v = do
+  env <- State.get
+  let val = readPointerFromEnv env v
+  push val
+
+addressOf :: VarID -> Interpreter ()
+addressOf (VarID v) = push $ ValuePtr v
+
 interpretUnaryOp :: (Value -> Value) -> Interpreter ()
 interpretUnaryOp f = do
   v <- pop
@@ -311,6 +346,9 @@ interpretOp (OpPushString cid) = pushConstant cid
 interpretOp OpPop = pop >> pure ()
 interpretOp (OpStore v) = store v
 interpretOp (OpLoad v) = load v
+interpretOp (OpStorePtr v) = storePtr v
+interpretOp (OpLoadPtr v) = loadPtr v
+interpretOp (OpAddressOf v) = addressOf v
 interpretOp OpNegateInt = interpretUnaryOp negate
 interpretOp OpNegateFloat = interpretUnaryOp negate
 interpretOp OpPlusInt = interpretBinOp (+)

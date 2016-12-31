@@ -19,12 +19,14 @@ data VarType
   = VarTypeInt
   | VarTypeFloat
   | VarTypeString
+  | VarTypePtr
   deriving (Eq, Ord)
 
 instance Show VarType where
   show VarTypeInt = "int"
   show VarTypeFloat = "double"
   show VarTypeString = "string"
+  show VarTypePtr = "ptr"
 
 data VarDecl =
   VarDecl VarType
