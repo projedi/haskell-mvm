@@ -170,6 +170,17 @@ translateReturnWithValue expr = do
 translateBlock :: Block -> Translator ()
 translateBlock block = namespaceBlock $ do
   forM_ (blockVariables block) introduceVariable
+  forM_ (blockForeignFunctions block) $ \(f, name) -> do
+    introduceFunction f
+    translateForeignFunctionBody f name
+  forM_ (blockFunctions block) $ \f -> do
+    let fd = FunctionDecl
+          { funDeclRetType = funDefRetType f
+          , funDeclName = funDefName f
+          , funDeclParams = map (\(VarDecl t _) -> t) $ funDefParams f
+          }
+    introduceFunction fd
+  forM_ (blockFunctions block) translateNativeFunctionBody
   forM_ (blockStatements block) translateStatement
 
 translateStatement :: Statement -> Translator ()
@@ -206,18 +217,6 @@ translateStatement (StatementIfElse e blockTrue blockFalse) = do
   addOp $ OpLabel labelElseBranch
   translateBlock blockFalse
   addOp $ OpLabel labelAfterIf
-translateStatement (StatementFunctionDecl f) = introduceFunction f
-translateStatement (StatementFunctionDef f) = do
-  let fd = FunctionDecl
-        { funDeclRetType = funDefRetType f
-        , funDeclName = funDefName f
-        , funDeclParams = map (\(VarDecl t _) -> t) $ funDefParams f
-        }
-  introduceFunction fd
-  translateNativeFunctionBody f
-translateStatement (StatementForeignFunctionDecl f name) = do
-  introduceFunction f
-  translateForeignFunctionBody f name
 translateStatement (StatementReturn Nothing) = translateReturn
 translateStatement (StatementReturn (Just expr)) = translateReturnWithValue expr
 

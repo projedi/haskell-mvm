@@ -4,11 +4,13 @@ module SyntaxResolver
 
 import Control.Monad.State (State, evalState)
 import qualified Control.Monad.State as State
+import Data.Either
 import Data.Foldable (asum)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe
 
 import qualified PreSyntax
 import qualified Syntax
@@ -60,9 +62,13 @@ newFunctionInLayer l@Layer {funEnv = lfuns} fname fid =
       }
     (Just _, _) -> Nothing
 
+data Function
+  = NativeFunction Syntax.FunctionDef
+  | ForeignFunction Syntax.FunctionDecl String
+
 data Env = Env
   { vars :: IntMap Syntax.VarType
-  , funs :: IntMap (PreSyntax.FunctionDecl, Bool) -- True if already defined
+  , funs :: IntMap (PreSyntax.FunctionDecl, Maybe Function)
   , lastVar :: Syntax.VarID
   , lastFun :: Syntax.FunID
   , layers :: [Layer]
@@ -119,7 +125,7 @@ newFunctionInEnv :: Env -> PreSyntax.FunctionDecl -> (Syntax.FunID, Env)
 newFunctionInEnv env fdecl =
   let (Syntax.FunID f) = inc $ lastFun env
       (Nothing, funs') =
-        IntMap.insertLookupWithKey (\_ val _ -> val) f (fdecl, False) (funs env)
+        IntMap.insertLookupWithKey (\_ val _ -> val) f (fdecl, Nothing) (funs env)
   in ( Syntax.FunID f
      , env
        { lastFun = Syntax.FunID f
@@ -140,13 +146,13 @@ introduceFunctionInEnv env fdecl@(PreSyntax.FunctionDecl _ fname _) =
            { layers = l' : ls
            })
 
-markFunctionAsDefinedInEnv :: Env -> Syntax.FunID -> Env
-markFunctionAsDefinedInEnv env (Syntax.FunID fid) =
+markFunctionAsDefinedInEnv :: Env -> Syntax.FunID -> Function -> Env
+markFunctionAsDefinedInEnv env (Syntax.FunID fid) f =
   env
   { funs = go $ funs env
   }
   where
-    go = IntMap.alter (\(Just (fdecl, False)) -> Just (fdecl, True)) fid
+    go = IntMap.alter (\(Just (fdecl, Nothing)) -> Just (fdecl, Just f)) fid
 
 findFunctionInEnv :: Env -> PreSyntax.FunctionName -> Syntax.FunID
 findFunctionInEnv env fname =
@@ -182,8 +188,8 @@ introduceFunction fdecl = do
   State.put env'
   pure f
 
-markFunctionAsDefined :: Syntax.FunID -> Resolver ()
-markFunctionAsDefined f = State.modify (`markFunctionAsDefinedInEnv` f)
+markFunctionAsDefined :: Syntax.FunID -> Function -> Resolver ()
+markFunctionAsDefined fid f = State.modify (\env -> markFunctionAsDefinedInEnv env fid f)
 
 findFunction :: PreSyntax.FunctionName -> Resolver Syntax.FunID
 findFunction fname = do
@@ -202,9 +208,12 @@ resolveBlock stmts = withLayer $ do
   stmts' <- concat <$> mapM resolveStatement stmts
   l <- (head . layers) <$> State.get
   lvars <- variablesInLayer l
+  (lfuns, lffuns) <- functionsInLayer l
   pure $ Syntax.Block
     { Syntax.blockVariables = lvars
     , Syntax.blockStatements = stmts'
+    , Syntax.blockFunctions = lfuns
+    , Syntax.blockForeignFunctions = lffuns
     }
 
 variablesInLayer :: Layer -> Resolver [Syntax.VarDecl]
@@ -216,10 +225,24 @@ variablesInLayer l = do
       let Just vtype = IntMap.lookup vid vs
       in Syntax.VarDecl vtype (Syntax.VarID vid)
 
+functionsInLayer :: Layer -> Resolver ([Syntax.FunctionDef], [(Syntax.FunctionDecl, String)])
+functionsInLayer l = do
+  fs <- funs <$> State.get
+  pure $ partitionEithers $ catMaybes $ map (\fid -> go fs fid) $ Map.elems (funEnv l)
+  where
+    go fs (Syntax.FunID fid) =
+      let Just (_, f) = IntMap.lookup fid fs
+      in case f of
+           Nothing -> Nothing
+           Just (NativeFunction fdef) -> Just $ Left fdef
+           Just (ForeignFunction fdecl name) -> Just $ Right (fdecl, name)
+
 noopBlock :: Syntax.Block
 noopBlock = Syntax.Block
   { Syntax.blockVariables = []
   , Syntax.blockStatements = []
+  , Syntax.blockFunctions = []
+  , Syntax.blockForeignFunctions = []
   }
 
 resolveStatement :: PreSyntax.Statement -> Resolver [Syntax.Statement]
@@ -238,8 +261,9 @@ resolveStatement (PreSyntax.StatementVarDef vdecl e) = do
   sequence
     [ Syntax.StatementAssign <$> introduceVariable vdecl <*> resolveExpr e
     ]
-resolveStatement (PreSyntax.StatementFunctionDecl fdecl) =
-  sequence [Syntax.StatementFunctionDecl <$> resolveFunctionDecl fdecl]
+resolveStatement (PreSyntax.StatementFunctionDecl fdecl) = do
+  _ <- introduceFunction fdecl
+  pure []
 resolveStatement (PreSyntax.StatementAssign vname e) = do
   sequence [Syntax.StatementAssign <$> findVariable vname <*> resolveExpr e]
 resolveStatement (PreSyntax.StatementAssignPlus vname e) =
@@ -263,25 +287,24 @@ resolveStatement (PreSyntax.StatementIf e s) =
       pure noopBlock
     ]
 resolveStatement (PreSyntax.StatementFor vname e1 e2 s) = resolveFor vname e1 e2 s
-resolveStatement (PreSyntax.StatementFunctionDef fdecl stmts) =
-  sequence
-    [ Syntax.StatementFunctionDef <$> resolveFunctionDef fdecl stmts
-    ]
+resolveStatement (PreSyntax.StatementFunctionDef fdecl stmts) = do
+  resolveFunctionDef fdecl stmts
+  pure []
 resolveStatement (PreSyntax.StatementReturn Nothing) =
   sequence [pure $ Syntax.StatementReturn Nothing]
 resolveStatement (PreSyntax.StatementReturn (Just e)) =
   sequence [(Syntax.StatementReturn . Just) <$> resolveExpr e]
-resolveStatement (PreSyntax.StatementForeignFunctionDecl fdecl) =
+resolveStatement (PreSyntax.StatementForeignFunctionDecl fdecl) = do
   resolveForeignFunctionDecl fdecl
+  pure []
 
-resolveFunctionDef :: PreSyntax.FunctionDecl -> [PreSyntax.Statement] -> Resolver Syntax.FunctionDef
+resolveFunctionDef :: PreSyntax.FunctionDecl -> [PreSyntax.Statement] -> Resolver ()
 resolveFunctionDef fdecl@(PreSyntax.FunctionDecl _ _ params) stmts = do
   fdecl' <- resolveFunctionDecl fdecl
-  markFunctionAsDefined (Syntax.funDeclName fdecl')
   withLayer $ do
     params' <- mapM introduceVariable params
     body <- resolveBlock stmts
-    pure $ Syntax.FunctionDef
+    markFunctionAsDefined (Syntax.funDeclName fdecl') $ NativeFunction $ Syntax.FunctionDef
       { Syntax.funDefRetType = Syntax.funDeclRetType fdecl'
       , Syntax.funDefName = Syntax.funDeclName fdecl'
       , Syntax.funDefParams = paramDecls (Syntax.funDeclParams fdecl') params'
@@ -292,11 +315,10 @@ resolveFunctionDef fdecl@(PreSyntax.FunctionDecl _ _ params) stmts = do
     paramDecls (t:ts) (n:ns) = Syntax.VarDecl t n : paramDecls ts ns
     paramDecls _ _ = error "Type mismatch"
 
-resolveForeignFunctionDecl :: PreSyntax.FunctionDecl -> Resolver [Syntax.Statement]
+resolveForeignFunctionDecl :: PreSyntax.FunctionDecl -> Resolver ()
 resolveForeignFunctionDecl fdecl@(PreSyntax.FunctionDecl _ (PreSyntax.FunctionName name) _) = do
   fdecl' <- resolveFunctionDecl fdecl
-  markFunctionAsDefined (Syntax.funDeclName fdecl')
-  pure [Syntax.StatementForeignFunctionDecl fdecl' name]
+  markFunctionAsDefined (Syntax.funDeclName fdecl') $ ForeignFunction fdecl' name
 
 resolveFor :: PreSyntax.VarName -> PreSyntax.Expr -> PreSyntax.Expr -> PreSyntax.Statement -> Resolver [Syntax.Statement]
 resolveFor vname eFrom eTo s = do
@@ -313,12 +335,14 @@ resolveFor vname eFrom eTo s = do
           , Syntax.StatementBlock block
           , Syntax.StatementAssign vCur (Syntax.ExprPlus (Syntax.ExprVar vCur) (Syntax.ExprInt 1))
           ]
-        block' = Syntax.Block { Syntax.blockVariables = [], Syntax.blockStatements = stmts }
+        block' = Syntax.Block { Syntax.blockVariables = [], Syntax.blockFunctions = [], Syntax.blockForeignFunctions = [], Syntax.blockStatements = stmts }
     pure [Syntax.StatementBlock $ Syntax.Block
       { Syntax.blockVariables =
         [ Syntax.VarDecl Syntax.VarTypeInt vCur
         , Syntax.VarDecl Syntax.VarTypeInt vTo
         ]
+      , Syntax.blockFunctions = []
+      , Syntax.blockForeignFunctions = []
       , Syntax.blockStatements =
         [ Syntax.StatementAssign vCur eFrom'
         , Syntax.StatementAssign vTo eTo'

@@ -34,6 +34,8 @@ data VarDecl =
 
 data Block = Block
   { blockVariables :: [VarDecl]
+  , blockFunctions :: [FunctionDef]
+  , blockForeignFunctions :: [(FunctionDecl, String)]
   , blockStatements :: [Statement]
   }
 
@@ -43,15 +45,12 @@ data Statement
   | StatementFunctionCall FunctionCall
   | StatementWhile Expr
                    Block
-  | StatementFunctionDecl FunctionDecl
   | StatementAssign VarID
                     Expr
   | StatementIfElse Expr
                     Block
                     Block
-  | StatementFunctionDef FunctionDef
   | StatementReturn (Maybe Expr)
-  | StatementForeignFunctionDecl FunctionDecl String
 
 data FunctionDecl = FunctionDecl
   { funDeclRetType :: Maybe VarType

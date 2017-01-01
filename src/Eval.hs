@@ -241,12 +241,6 @@ declareVariable (VarDecl vtype vname) = do
   let Just env' = addVariableToEnv env vname vtype
   State.put env'
 
-declareFunction :: FunctionDecl -> Execute ()
-declareFunction (FunctionDecl rettype name params) = do
-  env <- State.get
-  let Just env' = addFunctionToEnv env name (Function rettype params Nothing)
-  State.put env'
-
 defineFunction :: FunctionDef -> Execute ()
 defineFunction f = do
   env <- State.get
@@ -259,8 +253,8 @@ defineFunction f = do
           (Function (funDefRetType f) params (Just $ FunctionBody (lid, paramNames, funDefBody f)))
   State.put env'
 
-declareForeignFunction :: FunctionDecl -> String -> Execute ()
-declareForeignFunction (FunctionDecl rettype name params) strname = do
+declareForeignFunction :: (FunctionDecl, String) -> Execute ()
+declareForeignFunction ((FunctionDecl rettype name params), strname) = do
   env <- State.get
   Just f <- Trans.liftIO $ findSymbol strname
   let Just env' =
@@ -408,6 +402,8 @@ evaluateAsInt e = do
 executeBlock :: Block -> Execute ()
 executeBlock block = withNewLayer $ do
   forM_ (blockVariables block) declareVariable
+  forM_ (blockForeignFunctions block) declareForeignFunction
+  forM_ (blockFunctions block) defineFunction
   forM_ (blockStatements block) execute
 
 execute :: Statement -> Execute ()
@@ -419,8 +415,6 @@ execute s@(StatementWhile e block) = do
   when res $
     do executeBlock block
        execute s
-execute (StatementFunctionDecl funDecl) = declareFunction funDecl
-execute (StatementForeignFunctionDecl funDecl name) = declareForeignFunction funDecl name
 execute (StatementAssign var e) = do
   res <- evaluate e
   writeVariable var res
@@ -429,7 +423,6 @@ execute (StatementIfElse e btrue bfalse) = do
   if res
     then executeBlock btrue
     else executeBlock bfalse
-execute (StatementFunctionDef funDef) = defineFunction funDef
 execute (StatementReturn Nothing) = functionReturn Nothing
 execute (StatementReturn (Just e)) = do
   res <- evaluate e
