@@ -11,24 +11,25 @@ import BytecodeTranslator (translate)
 import Eval (eval)
 import qualified JIT
 import Parser (parseExpr)
+import SyntaxResolver (resolve)
 
 evaluateFile :: FilePath -> IO ()
 evaluateFile fname = do
   contents <- readFile fname
-  let expr = parseExpr contents
+  let expr = resolve $ parseExpr contents
   eval expr
 
 interpretBytecode :: FilePath -> IO ()
 interpretBytecode fname = do
   contents <- readFile fname
-  let expr = parseExpr contents
+  let expr = resolve $ parseExpr contents
   let bc = translate expr
   Bytecode.interpret bc
 
 jit :: FilePath -> IO ()
 jit fname = do
   contents <- readFile fname
-  let expr = parseExpr contents
+  let expr = resolve $ parseExpr contents
   let bc = translate expr
   JIT.interpret bc
 
@@ -38,7 +39,7 @@ dumpBytecode fname = do
   putStrLn $ "\nDoing: " ++ fname
   putStrLn "======= CODE ======="
   putStrLn contents
-  let expr = parseExpr contents
+  let expr = resolve $ parseExpr contents
   putStrLn "===== BYTECODE ====="
   putStrLn $ prettyPrint $ translate expr
 

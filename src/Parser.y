@@ -4,7 +4,7 @@ module Parser
   ) where
 
 import Lexer
-import Syntax
+import PreSyntax
 }
 
 %name program

@@ -1,17 +1,4 @@
-module Syntax
-  ( Program(..)
-  , Symbol
-  , VarName(..)
-  , FunctionName(..)
-  , VarType(..)
-  , VarDecl(..)
-  , Statement(..)
-  , FunctionDecl(..)
-  , FunctionCall(..)
-  , Expr(..)
-  ) where
-
-import PreSyntax (VarType(..))
+module PreSyntax where
 
 data Program = Program
   { programStatements :: [Statement]
@@ -27,6 +14,17 @@ data VarName =
 data FunctionName =
   FunctionName Symbol
   deriving (Eq, Ord, Show)
+
+data VarType
+  = VarTypeInt
+  | VarTypeFloat
+  | VarTypeString
+  deriving (Eq, Ord)
+
+instance Show VarType where
+  show VarTypeInt = "int"
+  show VarTypeFloat = "double"
+  show VarTypeString = "string"
 
 data VarDecl =
   VarDecl VarType
