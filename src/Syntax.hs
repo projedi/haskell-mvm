@@ -1,13 +1,14 @@
 module Syntax
   ( Program(..)
   , Symbol
-  , VarName(..)
+  , VarID(..)
   , FunctionName(..)
   , VarType(..)
   , VarDecl(..)
   , Block(..)
   , Statement(..)
   , FunctionDecl(..)
+  , FunctionDef(..)
   , FunctionCall(..)
   , Expr(..)
   ) where
@@ -21,9 +22,8 @@ data Program = Program
 
 type Symbol = String
 
-data VarName =
-  VarName Symbol
-  deriving (Eq, Ord)
+newtype VarID = VarID Int
+  deriving (Eq, Ord, Show)
 
 data FunctionName =
   FunctionName Symbol
@@ -31,7 +31,7 @@ data FunctionName =
 
 data VarDecl =
   VarDecl VarType
-          VarName
+          VarID
 
 data Block = Block
   { blockVariables :: [VarDecl]
@@ -45,18 +45,16 @@ data Statement
   | StatementWhile Expr
                    Block
   | StatementFunctionDecl FunctionDecl
-  | StatementAssign VarName
+  | StatementAssign VarID
                     Expr
   | StatementIfElse Expr
                     Block
                     Block
-  | StatementFor VarName
+  | StatementFor VarID
                  Expr
                  Expr
                  Block
-  | StatementFunctionDef FunctionDecl
-                         [VarName]
-                         Block
+  | StatementFunctionDef FunctionDef
   | StatementReturn (Maybe Expr)
   | StatementForeignFunctionDecl FunctionDecl
 
@@ -65,13 +63,15 @@ data FunctionDecl =
                FunctionName
                [VarType]
 
+data FunctionDef = FunctionDef FunctionDecl [VarID] Block
+
 data FunctionCall =
   FunctionCall FunctionName
                [Expr]
 
 data Expr
   = ExprFunctionCall FunctionCall
-  | ExprVar VarName
+  | ExprVar VarID
   | ExprInt Int
   | ExprFloat Double
   | ExprString String

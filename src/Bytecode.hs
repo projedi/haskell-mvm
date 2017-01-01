@@ -1,12 +1,20 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Bytecode where
+module Bytecode
+  ( Bytecode(..)
+  , ConstID(..)
+  , FunID(..)
+  , VarID(..)
+  , LabelID(..)
+  , BytecodeFunction(..)
+  , Op(..)
+  ) where
 
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Monoid ((<>))
 
-import qualified Syntax
+import Syntax (VarType, VarID(..))
 import Value (Value)
 
 newtype ConstID =
@@ -42,20 +50,16 @@ newtype LabelID =
   LabelID Int
   deriving (Show)
 
-newtype VarID =
-  VarID Int
-  deriving (Show)
-
 -- Args are in pop order. Return value is on top of the stack.
 data Op
   = OpCall FunID
   | OpIntroVar VarID
-               Syntax.VarType
+               VarType
   | OpReturn
     -- TODO: That's a very long op.
   | OpForeignCall String
-                  (Maybe Syntax.VarType)
-                  [Syntax.VarType]
+                  (Maybe VarType)
+                  [VarType]
   | OpLabel LabelID
   | OpJump LabelID
   | OpJumpIfZero LabelID
@@ -90,7 +94,7 @@ data Op
 
 instance Show Op where
   show (OpCall (FunID f)) = "call " ++ show f
-  show (OpIntroVar (VarID v) t) = "var " ++ show v ++ " : " ++ show t
+  show (OpIntroVar v t) = "var " ++ show v ++ " : " ++ show t
   show OpReturn = "ret"
   show (OpForeignCall name rettype types) =
     "foreign " ++ name ++ " : " ++ show rettype ++ " " ++ show types
@@ -101,8 +105,8 @@ instance Show Op where
   show (OpPushFloat f) = "fpush " ++ show f
   show (OpPushString s) = "spush " ++ show s
   show OpPop = "pop"
-  show (OpStore (VarID v)) = "store " ++ show v
-  show (OpLoad (VarID v)) = "load " ++ show v
+  show (OpStore v) = "store " ++ show v
+  show (OpLoad v) = "load " ++ show v
   show OpNegateInt = "ineg"
   show OpNegateFloat = "fneg"
   show OpPlusInt = "iplus"

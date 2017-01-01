@@ -34,7 +34,7 @@ eval (Program stmts libs) = do
 type LayerID = Int
 
 data FunctionImpl
-  = FunctionBody (LayerID, [VarName], Block)
+  = FunctionBody (LayerID, [VarID], Block)
   | FunctionForeign ForeignFun
 
 data Function =
@@ -47,17 +47,17 @@ functionTypesMatch (Function lrettype lparams _) (Function rrettype rparams _) =
   lrettype == rrettype && lparams == rparams
 
 data Layer = Layer
-  { varEnv :: Map VarName Value
+  { varEnv :: Map VarID Value
   , funEnv :: Map FunctionName Function
   }
 
 emptyLayer :: Layer
 emptyLayer = Layer Map.empty Map.empty
 
-readVariableFromLayer :: Layer -> VarName -> Maybe Value
+readVariableFromLayer :: Layer -> VarID -> Maybe Value
 readVariableFromLayer l name = Map.lookup name (varEnv l)
 
-writeVariableToLayer :: Layer -> VarName -> Value -> Maybe Layer
+writeVariableToLayer :: Layer -> VarID -> Value -> Maybe Layer
 writeVariableToLayer l name value =
   let (moldvalue, newvarenv) =
         Map.insertLookupWithKey
@@ -73,7 +73,7 @@ writeVariableToLayer l name value =
          { varEnv = newvarenv
          }
 
-addVariableToLayer :: Layer -> VarName -> VarType -> Maybe Layer
+addVariableToLayer :: Layer -> VarID -> VarType -> Maybe Layer
 addVariableToLayer l name vtype =
   let (oldvalue, newvarenv) =
         Map.insertLookupWithKey
@@ -128,12 +128,12 @@ modifyingLayer f (l:ls) =
     Nothing -> (l :) <$> modifyingLayer f ls
     Just l' -> Just (l' : ls)
 
-readVariableFromEnv :: Env -> VarName -> Maybe Value
+readVariableFromEnv :: Env -> VarID -> Maybe Value
 readVariableFromEnv Env {envLayers = curlayer:otherlayers} vname =
   asum (map (`readVariableFromLayer` vname) (curlayer : otherlayers))
 readVariableFromEnv _ _ = error "Env broke"
 
-writeVariableToEnv :: Env -> VarName -> Value -> Maybe Env
+writeVariableToEnv :: Env -> VarID -> Value -> Maybe Env
 writeVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname val =
   case modifyingLayer
          (\l -> writeVariableToLayer l vname val)
@@ -147,7 +147,7 @@ writeVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname val =
     Nothing -> Nothing
 writeVariableToEnv _ _ _ = error "Env broke"
 
-addVariableToEnv :: Env -> VarName -> VarType -> Maybe Env
+addVariableToEnv :: Env -> VarID -> VarType -> Maybe Env
 addVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname vtype =
   case addVariableToLayer curlayer vname vtype of
     Nothing -> Nothing
@@ -247,8 +247,8 @@ declareFunction (FunctionDecl rettype name params) = do
   let Just env' = addFunctionToEnv env name (Function rettype params Nothing)
   State.put env'
 
-defineFunction :: FunctionDecl -> [VarName] -> Block -> Execute ()
-defineFunction (FunctionDecl rettype name params) paramNames body = do
+defineFunction :: FunctionDef -> Execute ()
+defineFunction (FunctionDef (FunctionDecl rettype name params) paramNames body) = do
   env <- State.get
   lid <- currentLayer
   let Just env' =
@@ -278,7 +278,7 @@ printCall vals =
 nativeFunctionCall
   :: Maybe VarType
   -> [VarType]
-  -> [VarName]
+  -> [VarID]
   -> [Value]
   -> LayerID
   -> Block
@@ -350,13 +350,13 @@ executeBlockWithReturn block = do
 functionReturn :: Maybe Value -> Execute ()
 functionReturn = Except.throwError
 
-readVariable :: VarName -> Execute Value
+readVariable :: VarID -> Execute Value
 readVariable name = do
   env <- State.get
   let Just val = readVariableFromEnv env name
   pure val
 
-writeVariable :: VarName -> Value -> Execute ()
+writeVariable :: VarID -> Value -> Execute ()
 writeVariable name val = do
   env <- State.get
   let Just env' = writeVariableToEnv env name val
@@ -435,7 +435,7 @@ execute (StatementFor v e1 e2 b) = do
     \i -> do
       writeVariable v $ ValueInt i
       executeBlock b
-execute (StatementFunctionDef funDecl paramNames block) = defineFunction funDecl paramNames block
+execute (StatementFunctionDef funDef) = defineFunction funDef
 execute (StatementReturn Nothing) = functionReturn Nothing
 execute (StatementReturn (Just e)) = do
   res <- evaluate e
