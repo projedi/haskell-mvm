@@ -444,10 +444,11 @@ generatePrintfDesc :: [VarType] -> ExpressionTranslator ()
 generatePrintfDesc types = do
   cid <- newConstant $ ValueString $ Right str
   addOpWithoutType (OpPushString cid)
- where desc VarTypeInt = "%ld"
-       desc VarTypeFloat = "%g"
-       desc VarTypeString = "%s"
-       str = concatMap desc types
+  where
+    desc VarTypeInt = "%ld"
+    desc VarTypeFloat = "%g"
+    desc VarTypeString = "%s"
+    str = concatMap desc types
 
 printCall :: [Expr] -> ExpressionTranslator ()
 printCall [] = pure ()
@@ -456,7 +457,7 @@ printCall args = do
   forM_ (reverse (map snd valsWithTypes)) addCode
   let types = map fst valsWithTypes
   generatePrintfDesc types
-  addOpWithoutType $ OpForeignCall "printf" Nothing (VarTypeString:types)
+  addOpWithoutType $ OpForeignCall "printf" Nothing (VarTypeString : types)
 
 functionCall :: FunctionCall -> ExpressionTranslator (Maybe VarType)
 functionCall (FunctionCall (FunctionName "print") args) =
