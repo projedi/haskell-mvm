@@ -19,9 +19,9 @@ import Syntax
 import Value (Value(..))
 
 translate :: Program -> Bytecode
-translate (Program stmts libs) =
+translate (Program block libs) =
   let (bc, finalEnv) =
-        runTranslator (translateStatement (StatementBlock stmts)) emptyEnv
+        runTranslator (translateBlock block) emptyEnv
   in bc
      { bytecodeLibraries = libs
      , bytecodeConstants = consts finalEnv
@@ -308,8 +308,9 @@ translateReturnWithValue expr = do
       addOp OpReturn
 
 translateBlock :: Block -> Translator ()
-translateBlock (Block stmts) = namespaceBlock $
-  forM_ stmts translateStatement
+translateBlock block = namespaceBlock $ do
+  forM_ (blockVariables block) introduceVariable
+  forM_ (blockStatements block) translateStatement
 
 translateStatement :: Statement -> Translator ()
 translateStatement StatementNoop = pure ()
@@ -376,7 +377,6 @@ translateStatement (StatementFor vname eFrom eTo block) =
      addOp $ OpStore vCur
      addOp $ OpJump labelLoopBegin
      addOp $ OpLabel labelAfterLoop
-translateStatement (StatementVarDecl v) = introduceVariable v >> pure ()
 translateStatement (StatementFunctionDecl f) = introduceFunction f >> pure ()
 translateStatement (StatementFunctionDef f body) = do
   fid <- introduceFunction f

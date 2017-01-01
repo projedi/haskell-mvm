@@ -2,7 +2,8 @@ module SyntaxResolver
   ( resolve
   ) where
 
-import Data.Functor.Identity (Identity, runIdentity)
+import Control.Monad.State (State, evalState)
+import qualified Control.Monad.State as State
 
 import qualified PreSyntax
 import qualified Syntax
@@ -16,13 +17,45 @@ resolve p =
   where
     code = runResolver (resolveBlock $ PreSyntax.programStatements p)
 
-type Resolver a = Identity a
+data ResolverState = ResolverState
+  { declaredVariables :: [Syntax.VarDecl]
+  , localVariables :: [Syntax.VarDecl]
+  }
+
+emptyState :: ResolverState
+emptyState = ResolverState
+  { declaredVariables = []
+  , localVariables = []
+  }
+
+type Resolver a = State ResolverState a
 
 runResolver :: Resolver a -> a
-runResolver = runIdentity
+runResolver m = evalState m emptyState
 
 resolveBlock :: [PreSyntax.Statement] -> Resolver Syntax.Block
-resolveBlock stmts = (Syntax.Block . concat) <$> mapM resolveStatement stmts
+resolveBlock stmts = do
+  stBefore <- State.get
+  State.modify $ \st -> st
+    { declaredVariables = localVariables st ++ declaredVariables st
+    , localVariables = []
+    }
+  stmts' <- concat <$> mapM resolveStatement stmts
+  vars <- (reverse . localVariables) <$> State.get
+  State.modify $ \st -> st
+    { declaredVariables = declaredVariables stBefore
+    , localVariables = localVariables stBefore
+    }
+  pure $ Syntax.Block
+    { Syntax.blockVariables = vars
+    , Syntax.blockStatements = stmts'
+    }
+
+noopBlock :: Syntax.Block
+noopBlock = Syntax.Block
+  { Syntax.blockVariables = []
+  , Syntax.blockStatements = []
+  }
 
 resolveStatement :: PreSyntax.Statement -> Resolver [Syntax.Statement]
 resolveStatement (PreSyntax.StatementBlock stmts) =
@@ -33,12 +66,13 @@ resolveStatement (PreSyntax.StatementWhile e stmt) =
   sequence
     [ Syntax.StatementWhile <$> resolveExpr e <*> resolveBlock [stmt]
     ]
-resolveStatement (PreSyntax.StatementVarDecl vdecl) =
-  sequence [Syntax.StatementVarDecl <$> resolveVarDecl vdecl]
-resolveStatement (PreSyntax.StatementVarDef vdecl@(PreSyntax.VarDecl _ vname) e) =
+resolveStatement (PreSyntax.StatementVarDecl vdecl) = do
+  resolveVarDecl vdecl
+  pure []
+resolveStatement (PreSyntax.StatementVarDef vdecl@(PreSyntax.VarDecl _ vname) e) = do
+  resolveVarDecl vdecl
   sequence
-    [ Syntax.StatementVarDecl <$> resolveVarDecl vdecl
-    , Syntax.StatementAssign <$> resolveVarName vname <*> resolveExpr e
+    [ Syntax.StatementAssign <$> resolveVarName vname <*> resolveExpr e
     ]
 resolveStatement (PreSyntax.StatementFunctionDecl fdecl) =
   sequence [Syntax.StatementFunctionDecl <$> resolveFunctionDecl fdecl]
@@ -62,7 +96,7 @@ resolveStatement (PreSyntax.StatementIf e s) =
   sequence
     [ Syntax.StatementIfElse <$> resolveExpr e <*>
       (resolveBlock [s]) <*>
-      pure (Syntax.Block [Syntax.StatementNoop])
+      pure noopBlock
     ]
 resolveStatement (PreSyntax.StatementFor vname e1 e2 s) =
   sequence
@@ -126,14 +160,19 @@ resolveExpr (PreSyntax.ExprGt lhs rhs) = resolveExpr $ PreSyntax.ExprLt rhs lhs
 resolveExpr (PreSyntax.ExprGeq lhs rhs) =
   resolveExpr $ PreSyntax.ExprNot (PreSyntax.ExprLt lhs rhs)
 
-resolveVarDecl :: PreSyntax.VarDecl -> Resolver Syntax.VarDecl
-resolveVarDecl (PreSyntax.VarDecl vtype vname) =
+resolveParam :: PreSyntax.VarDecl -> Resolver Syntax.VarDecl
+resolveParam (PreSyntax.VarDecl vtype vname) =
   Syntax.VarDecl vtype <$> resolveVarName vname
+
+resolveVarDecl :: PreSyntax.VarDecl -> Resolver ()
+resolveVarDecl vdecl = do
+  vdecl' <- resolveParam vdecl
+  State.modify $ \st -> st { localVariables = vdecl' : localVariables st }
 
 resolveFunctionDecl :: PreSyntax.FunctionDecl -> Resolver Syntax.FunctionDecl
 resolveFunctionDecl (PreSyntax.FunctionDecl rettype name params) =
   Syntax.FunctionDecl rettype <$> resolveFunctionName name <*>
-  mapM resolveVarDecl params
+  mapM resolveParam params
 
 resolveVarName :: PreSyntax.VarName -> Resolver Syntax.VarName
 resolveVarName (PreSyntax.VarName name) = pure $ Syntax.VarName name

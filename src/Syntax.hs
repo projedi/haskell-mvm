@@ -33,7 +33,10 @@ data VarDecl =
   VarDecl VarType
           VarName
 
-data Block = Block [Statement]
+data Block = Block
+  { blockVariables :: [VarDecl]
+  , blockStatements :: [Statement]
+  }
 
 data Statement
   = StatementNoop
@@ -41,7 +44,6 @@ data Statement
   | StatementFunctionCall FunctionCall
   | StatementWhile Expr
                    Block
-  | StatementVarDecl VarDecl
   | StatementFunctionDecl FunctionDecl
   | StatementAssign VarName
                     Expr

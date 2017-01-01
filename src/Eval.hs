@@ -404,7 +404,9 @@ evaluateAsInt e = do
   pure i
 
 executeBlock :: Block -> Execute ()
-executeBlock (Block stmts) = withNewLayer (forM_ stmts execute)
+executeBlock block = withNewLayer $ do
+  forM_ (blockVariables block) declareVariable
+  forM_ (blockStatements block) execute
 
 execute :: Statement -> Execute ()
 execute StatementNoop = pure ()
@@ -415,7 +417,6 @@ execute s@(StatementWhile e block) = do
   when res $
     do executeBlock block
        execute s
-execute (StatementVarDecl varDecl) = declareVariable varDecl
 execute (StatementFunctionDecl funDecl) = declareFunction funDecl
 execute (StatementForeignFunctionDecl funDecl) = declareForeignFunction funDecl
 execute (StatementAssign var e) = do
