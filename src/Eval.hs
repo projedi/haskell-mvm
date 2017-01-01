@@ -48,7 +48,7 @@ functionTypesMatch (Function lrettype lparams _) (Function rrettype rparams _) =
 
 data Layer = Layer
   { varEnv :: Map VarID Value
-  , funEnv :: Map FunctionName Function
+  , funEnv :: Map FunID Function
   }
 
 emptyLayer :: Layer
@@ -89,10 +89,10 @@ addVariableToLayer l name vtype =
        (const Nothing)
        oldvalue
 
-getFunctionFromLayer :: Layer -> FunctionName -> Maybe Function
+getFunctionFromLayer :: Layer -> FunID -> Maybe Function
 getFunctionFromLayer l name = Map.lookup name (funEnv l)
 
-addFunctionToLayer :: Layer -> FunctionName -> Function -> Maybe Layer
+addFunctionToLayer :: Layer -> FunID -> Function -> Maybe Layer
 addFunctionToLayer l name f@(Function _ _ body) =
   let (oldvalue, newfunenv) =
         Map.insertLookupWithKey (\_ a _ -> a) name f (funEnv l)
@@ -158,12 +158,12 @@ addVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname vtype =
          })
 addVariableToEnv _ _ _ = error "Env broke"
 
-getFunctionFromEnv :: Env -> FunctionName -> Maybe Function
+getFunctionFromEnv :: Env -> FunID -> Maybe Function
 getFunctionFromEnv Env {envLayers = curlayer:otherlayers} name =
   asum (map (`getFunctionFromLayer` name) (curlayer : otherlayers))
 getFunctionFromEnv _ _ = error "Env broke"
 
-addFunctionToEnv :: Env -> FunctionName -> Function -> Maybe Env
+addFunctionToEnv :: Env -> FunID -> Function -> Maybe Env
 addFunctionToEnv env@Env {envLayers = curlayer:otherlayers} fname f =
   case addFunctionToLayer curlayer fname f of
     Nothing -> Nothing
@@ -259,8 +259,8 @@ defineFunction f = do
           (Function (funDefRetType f) params (Just $ FunctionBody (lid, paramNames, funDefBody f)))
   State.put env'
 
-declareForeignFunction :: FunctionDecl -> Execute ()
-declareForeignFunction (FunctionDecl rettype name@(FunctionName strname) params) = do
+declareForeignFunction :: FunctionDecl -> String -> Execute ()
+declareForeignFunction (FunctionDecl rettype name params) strname = do
   env <- State.get
   Just f <- Trans.liftIO $ findSymbol strname
   let Just env' =
@@ -312,11 +312,11 @@ foreignFunctionCall rettype params vals fun =
     convertVals _ _ = error "Type mismatch"
 
 functionCall :: FunctionCall -> Execute (Maybe Value)
-functionCall (FunctionCall (FunctionName "print") args) = do
+functionCall (PrintCall args) = do
   vals <- evaluateArgs args
   printCall vals
   pure Nothing
-functionCall (FunctionCall fname args) = do
+functionCall (NativeFunctionCall fname args) = do
   env <- State.get
   vals <- evaluateArgs args
   let Just (Function rettype params (Just impl)) = getFunctionFromEnv env fname
@@ -420,7 +420,7 @@ execute s@(StatementWhile e block) = do
     do executeBlock block
        execute s
 execute (StatementFunctionDecl funDecl) = declareFunction funDecl
-execute (StatementForeignFunctionDecl funDecl) = declareForeignFunction funDecl
+execute (StatementForeignFunctionDecl funDecl name) = declareForeignFunction funDecl name
 execute (StatementAssign var e) = do
   res <- evaluate e
   writeVariable var res

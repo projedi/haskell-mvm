@@ -8,7 +8,6 @@ import qualified Control.Monad.State as State
 import qualified Control.Monad.Trans as Trans
 import Control.Monad.Writer (WriterT)
 import qualified Control.Monad.Writer as Writer
-import Data.Foldable (asum)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Map (Map)
@@ -27,38 +26,13 @@ translate (Program block libs) =
      , bytecodeConstants = consts finalEnv
      }
 
-data Layer = Layer
-  { funEnv :: Map FunctionName FunID
-  }
-
-findFunctionInLayer :: Layer -> FunctionName -> Maybe FunID
-findFunctionInLayer Layer {funEnv = lfuns} fname = Map.lookup fname lfuns
-
-newFunctionInLayer :: Layer -> FunctionName -> FunID -> Maybe Layer
-newFunctionInLayer l@Layer {funEnv = lfuns} fname fid =
-  case Map.insertLookupWithKey (\_ val _ -> val) fname fid lfuns of
-    (Nothing, lfuns') ->
-      Just $
-      l
-      { funEnv = lfuns'
-      }
-    (Just _, _) -> Nothing
-
-emptyLayer :: Layer
-emptyLayer =
-  Layer
-  { funEnv = Map.empty
-  }
-
 data Env = Env
   { currentFunction :: FunID
   , currentRetType :: Maybe VarType
   , lastLabel :: LabelID
-  , lastFun :: FunID
   , lastConst :: ConstID
-  , layers :: [Layer]
   , vars :: IntMap VarType
-  , funs :: IntMap (FunctionDecl, Bool) -- True if already defined
+  , funs :: IntMap FunctionDecl
   , consts :: IntMap Value
   }
 
@@ -68,9 +42,7 @@ emptyEnv =
   { currentFunction = FunID 0
   , currentRetType = Nothing
   , lastLabel = LabelID (-1)
-  , lastFun = FunID 0
   , lastConst = ConstID (-1)
-  , layers = [emptyLayer]
   , vars = IntMap.empty
   , funs = IntMap.empty
   , consts = IntMap.empty
@@ -86,68 +58,15 @@ introduceVariableInEnv env (VarDecl vtype (VarID v)) =
   let (Nothing, vars') = IntMap.insertLookupWithKey (\_ val _ -> val) v vtype (vars env)
   in env { vars = vars' }
 
-checkExistingFunctionInEnv :: Env -> FunID -> FunctionDecl -> (FunID, Env)
-checkExistingFunctionInEnv env (FunID fid) fdecl =
-  let Just (existingDecl, _) = IntMap.lookup fid $ funs env
-  in if declMatch existingDecl fdecl
-       then (FunID fid, env)
-       else error "Type mismatch"
-  where
-    declMatch (FunctionDecl lrettype _ lparams) (FunctionDecl rrettype _ rparams) =
-      (lrettype == rrettype) && lparams == rparams
+introduceFunctionInEnv :: Env -> FunctionDecl -> Env
+introduceFunctionInEnv env fdecl@(FunctionDecl _ (FunID fid) _) =
+  let funs' = IntMap.insert fid fdecl (funs env)
+  in env { funs = funs' }
 
-newFunctionInEnv :: Env -> FunctionDecl -> (FunID, Env)
-newFunctionInEnv env fdecl =
-  let (FunID f) = inc $ lastFun env
-      (Nothing, funs') =
-        IntMap.insertLookupWithKey (\_ val _ -> val) f (fdecl, False) (funs env)
-  in ( FunID f
-     , env
-       { lastFun = FunID f
-       , funs = funs'
-       })
-  where
-    inc (FunID lastFunID) = FunID (lastFunID + 1)
-
-introduceFunctionInEnv :: Env -> FunctionDecl -> (FunID, Env)
-introduceFunctionInEnv env fdecl@(FunctionDecl _ fname _) =
-  case findFunctionInLayer (head $ layers env) fname of
-    Just fid -> checkExistingFunctionInEnv env fid fdecl
-    Nothing ->
-      let (f, env'@Env {layers = l:ls}) = newFunctionInEnv env fdecl
-          Just l' = newFunctionInLayer l fname f
-      in ( f
-         , env'
-           { layers = l' : ls
-           })
-
-markFunctionAsDefinedInEnv :: Env -> FunID -> Env
-markFunctionAsDefinedInEnv env (FunID fid) =
-  env
-  { funs = go $ funs env
-  }
-  where
-    go = IntMap.alter (\(Just (fdecl, False)) -> Just (fdecl, True)) fid
-
-findFunctionInEnv :: Env -> FunctionName -> (FunID, FunctionDecl)
-findFunctionInEnv env fname =
-  let (Just (FunID fid)) = asum (map (`findFunctionInLayer` fname) (layers env))
-      (Just (f, _)) = IntMap.lookup fid (funs env)
-  in (FunID fid, f)
-
--- TODO: Consider reusing FunID, LabelID, VarID.
-startBlockInEnv :: Env -> Env
-startBlockInEnv env =
-  env
-  { layers = emptyLayer : layers env
-  }
-
-stopBlockInEnv :: Env -> Env -> Env
-stopBlockInEnv _ env@Env {layers = _:ls} =
-  env
-  { layers = ls
-  }
-stopBlockInEnv _ _ = error "Env broke"
+findFunctionInEnv :: Env -> FunID -> FunctionDecl
+findFunctionInEnv env (FunID fid) =
+  let (Just f) = IntMap.lookup fid (funs env)
+  in f
 
 type Translator a = WriterT Bytecode (State Env) a
 
@@ -191,24 +110,14 @@ introduceVariable vdecl@(VarDecl vtype v) = do
   addOp $ OpIntroVar v vtype
   pure v
 
-introduceFunction :: FunctionDecl -> Translator FunID
+introduceFunction :: FunctionDecl -> Translator ()
 introduceFunction fdecl = do
   env <- State.get
-  let (f, env') = introduceFunctionInEnv env fdecl
+  let env' = introduceFunctionInEnv env fdecl
   State.put env'
-  pure f
-
-markFunctionAsDefined :: FunID -> Translator ()
-markFunctionAsDefined f = State.modify (`markFunctionAsDefinedInEnv` f)
 
 namespaceBlock :: Translator a -> Translator a
-namespaceBlock m = do
-  envBefore <- State.get
-  State.put $ startBlockInEnv envBefore
-  res <- m
-  envAfter <- State.get
-  State.put $ stopBlockInEnv envBefore envAfter
-  pure res
+namespaceBlock m = m
 
 translateFunctionBody :: Maybe VarType -> FunID -> Translator () -> Translator ()
 translateFunctionBody retType fid body = do
@@ -227,17 +136,16 @@ translateFunctionBody retType fid body = do
     }
 
 translateNativeFunctionBody :: FunctionDef
-                            -> FunID
                             -> Translator ()
-translateNativeFunctionBody f fid =
-  translateFunctionBody (funDefRetType f) fid $
+translateNativeFunctionBody f =
+  translateFunctionBody (funDefRetType f) (funDefName f) $
   namespaceBlock $
   do vs <- mapM introduceVariable $ funDefParams f
      forM_ vs (addOp . OpStore)
      translateStatement $ StatementBlock $ funDefBody f
 
-translateForeignFunctionBody :: FunctionDecl -> FunID -> Translator ()
-translateForeignFunctionBody (FunctionDecl retType (FunctionName fname) params) fid =
+translateForeignFunctionBody :: FunctionDecl -> String -> Translator ()
+translateForeignFunctionBody (FunctionDecl retType fid params) fname =
   translateFunctionBody retType fid $
   do embedExpressionTranslator $
        addOpWithoutType $ OpForeignCall fname retType params
@@ -298,20 +206,18 @@ translateStatement (StatementIfElse e blockTrue blockFalse) = do
   addOp $ OpLabel labelElseBranch
   translateBlock blockFalse
   addOp $ OpLabel labelAfterIf
-translateStatement (StatementFunctionDecl f) = introduceFunction f >> pure ()
+translateStatement (StatementFunctionDecl f) = introduceFunction f
 translateStatement (StatementFunctionDef f) = do
   let fd = FunctionDecl
         { funDeclRetType = funDefRetType f
         , funDeclName = funDefName f
         , funDeclParams = map (\(VarDecl t _) -> t) $ funDefParams f
         }
-  fid <- introduceFunction fd
-  markFunctionAsDefined fid
-  translateNativeFunctionBody f fid
-translateStatement (StatementForeignFunctionDecl f) = do
-  fid <- introduceFunction f
-  markFunctionAsDefined fid
-  translateForeignFunctionBody f fid
+  introduceFunction fd
+  translateNativeFunctionBody f
+translateStatement (StatementForeignFunctionDecl f name) = do
+  introduceFunction f
+  translateForeignFunctionBody f name
 translateStatement (StatementReturn Nothing) = translateReturn
 translateStatement (StatementReturn (Just expr)) = translateReturnWithValue expr
 
@@ -332,7 +238,7 @@ runExpressionTranslator :: ExpressionTranslator a
                         -> State Env (a, BytecodeFunction)
 runExpressionTranslator = Writer.runWriterT
 
-findFunction :: FunctionName -> ExpressionTranslator (FunID, FunctionDecl)
+findFunction :: FunID -> ExpressionTranslator FunctionDecl
 findFunction fname = do
   env <- State.get
   pure $ findFunctionInEnv env fname
@@ -375,10 +281,10 @@ printCall args = do
   addOpWithoutType $ OpForeignCall "printf" Nothing (VarTypeString : types)
 
 functionCall :: FunctionCall -> ExpressionTranslator (Maybe VarType)
-functionCall (FunctionCall (FunctionName "print") args) =
+functionCall (PrintCall args) =
   printCall args >> pure Nothing
-functionCall (FunctionCall fname args) = do
-  (fid, FunctionDecl rettype _ params) <- findFunction fname
+functionCall (NativeFunctionCall fid args) = do
+  FunctionDecl rettype _ params <- findFunction fid
   translateArgs args params
   addOpWithoutType $ OpCall fid
   pure rettype

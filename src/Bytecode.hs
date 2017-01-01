@@ -14,7 +14,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Monoid ((<>))
 
-import Syntax (VarType, VarID(..))
+import Syntax (VarType, VarID(..), FunID(..))
 import Value (Value)
 
 newtype ConstID =
@@ -41,10 +41,6 @@ instance Monoid Bytecode where
 newtype BytecodeFunction =
   BytecodeFunction [Op]
   deriving (Monoid, Show)
-
-newtype FunID =
-  FunID Int
-  deriving (Show)
 
 newtype LabelID =
   LabelID Int

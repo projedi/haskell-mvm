@@ -2,7 +2,7 @@ module Syntax
   ( Program(..)
   , Symbol
   , VarID(..)
-  , FunctionName(..)
+  , FunID(..)
   , VarType(..)
   , VarDecl(..)
   , Block(..)
@@ -25,9 +25,8 @@ type Symbol = String
 newtype VarID = VarID Int
   deriving (Eq, Ord, Show)
 
-data FunctionName =
-  FunctionName Symbol
-  deriving (Eq, Ord)
+newtype FunID = FunID Int
+  deriving (Eq, Ord, Show)
 
 data VarDecl =
   VarDecl VarType
@@ -52,24 +51,24 @@ data Statement
                     Block
   | StatementFunctionDef FunctionDef
   | StatementReturn (Maybe Expr)
-  | StatementForeignFunctionDecl FunctionDecl
+  | StatementForeignFunctionDecl FunctionDecl String
 
 data FunctionDecl = FunctionDecl
   { funDeclRetType :: Maybe VarType
-  , funDeclName :: FunctionName
+  , funDeclName :: FunID
   , funDeclParams :: [VarType]
   }
 
 data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
-  , funDefName :: FunctionName
+  , funDefName :: FunID
   , funDefParams :: [VarDecl]
   , funDefBody :: Block
   }
 
-data FunctionCall =
-  FunctionCall FunctionName
-               [Expr]
+data FunctionCall
+  = NativeFunctionCall FunID [Expr]
+  | PrintCall [Expr]
 
 data Expr
   = ExprFunctionCall FunctionCall
