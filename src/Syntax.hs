@@ -34,25 +34,18 @@ data VarDecl =
   deriving (Eq, Show)
 
 data Statement
-  = StatementBlock [Statement]
+  = StatementNoop
+  | StatementBlock [Statement]
   | StatementFunctionCall FunctionCall
   | StatementWhile Expr
                    Statement
   | StatementVarDecl VarDecl
-  | StatementVarDef VarDecl
-                    Expr
   | StatementFunctionDecl FunctionDecl
   | StatementAssign VarName
                     Expr
-  | StatementAssignPlus VarName
-                        Expr
-  | StatementAssignMinus VarName
-                         Expr
   | StatementIfElse Expr
                     Statement
                     Statement
-  | StatementIf Expr
-                Statement
   | StatementFor VarName
                  Expr
                  Expr
@@ -104,14 +97,6 @@ data Expr
            Expr
   | ExprEq Expr
            Expr
-  | ExprNeq Expr
-            Expr
   | ExprLt Expr
            Expr
-  | ExprLeq Expr
-            Expr
-  | ExprGt Expr
-           Expr
-  | ExprGeq Expr
-            Expr
   deriving (Eq, Show)

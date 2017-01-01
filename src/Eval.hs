@@ -391,11 +391,7 @@ evaluate (ExprOr el er) =
   (\lhs rhs -> fromBool (toBool lhs || toBool rhs)) <$> evaluate el <*>
   evaluate er
 evaluate (ExprEq el er) = ((fromBool .) . (==)) <$> evaluate el <*> evaluate er
-evaluate (ExprNeq el er) = ((fromBool .) . (/=)) <$> evaluate el <*> evaluate er
 evaluate (ExprLt el er) = ((fromBool .) . (<)) <$> evaluate el <*> evaluate er
-evaluate (ExprLeq el er) = ((fromBool .) . (<=)) <$> evaluate el <*> evaluate er
-evaluate (ExprGt el er) = ((fromBool .) . (>)) <$> evaluate el <*> evaluate er
-evaluate (ExprGeq el er) = ((fromBool .) . (>=)) <$> evaluate el <*> evaluate er
 
 evaluateAsBool :: Expr -> Execute Bool
 evaluateAsBool e = do
@@ -408,6 +404,7 @@ evaluateAsInt e = do
   pure i
 
 execute :: Statement -> Execute ()
+execute StatementNoop = pure ()
 execute (StatementBlock stmts) = withNewLayer (forM_ stmts execute)
 execute (StatementFunctionCall fcall) = functionCall fcall >> pure ()
 execute s@(StatementWhile e stmt) = do
@@ -416,27 +413,16 @@ execute s@(StatementWhile e stmt) = do
     do execute stmt
        execute s
 execute (StatementVarDecl varDecl) = declareVariable varDecl
-execute (StatementVarDef varDecl@(VarDecl _ var) e) = do
-  declareVariable varDecl
-  res <- evaluate e
-  writeVariable var res
 execute (StatementFunctionDecl funDecl) = declareFunction funDecl
 execute (StatementForeignFunctionDecl funDecl) = declareForeignFunction funDecl
 execute (StatementAssign var e) = do
   res <- evaluate e
   writeVariable var res
-execute (StatementAssignPlus var e) =
-  execute (StatementAssign var (ExprPlus (ExprVar var) e))
-execute (StatementAssignMinus var e) =
-  execute (StatementAssign var (ExprMinus (ExprVar var) e))
 execute (StatementIfElse e strue sfalse) = do
   res <- evaluateAsBool e
   if res
     then execute strue
     else execute sfalse
-execute (StatementIf e s) = do
-  res <- evaluateAsBool e
-  when res $ execute s
 execute (StatementFor v e1 e2 s) = do
   i1 <- evaluateAsInt e1
   i2 <- evaluateAsInt e2

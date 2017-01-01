@@ -22,45 +22,66 @@ runResolver :: Resolver a -> a
 runResolver = runIdentity
 
 resolveStatements :: [PreSyntax.Statement] -> Resolver [Syntax.Statement]
-resolveStatements = mapM resolveStatement
+resolveStatements stmts = concat <$> mapM resolveStatement stmts
 
-resolveStatement :: PreSyntax.Statement -> Resolver Syntax.Statement
+resolveStatement :: PreSyntax.Statement -> Resolver [Syntax.Statement]
 resolveStatement (PreSyntax.StatementBlock stmts) =
-  Syntax.StatementBlock <$> resolveStatements stmts
+  sequence [Syntax.StatementBlock <$> resolveStatements stmts]
 resolveStatement (PreSyntax.StatementFunctionCall fcall) =
-  Syntax.StatementFunctionCall <$> resolveFunctionCall fcall
+  sequence [Syntax.StatementFunctionCall <$> resolveFunctionCall fcall]
 resolveStatement (PreSyntax.StatementWhile e stmt) =
-  Syntax.StatementWhile <$> resolveExpr e <*> resolveStatement stmt
+  sequence
+    [ Syntax.StatementWhile <$> resolveExpr e <*>
+      (Syntax.StatementBlock <$> resolveStatement stmt)
+    ]
 resolveStatement (PreSyntax.StatementVarDecl vdecl) =
-  Syntax.StatementVarDecl <$> resolveVarDecl vdecl
-resolveStatement (PreSyntax.StatementVarDef vdecl e) =
-  Syntax.StatementVarDef <$> resolveVarDecl vdecl <*> resolveExpr e
+  sequence [Syntax.StatementVarDecl <$> resolveVarDecl vdecl]
+resolveStatement (PreSyntax.StatementVarDef vdecl@(PreSyntax.VarDecl _ vname) e) =
+  sequence
+    [ Syntax.StatementVarDecl <$> resolveVarDecl vdecl
+    , Syntax.StatementAssign <$> resolveVarName vname <*> resolveExpr e
+    ]
 resolveStatement (PreSyntax.StatementFunctionDecl fdecl) =
-  Syntax.StatementFunctionDecl <$> resolveFunctionDecl fdecl
+  sequence [Syntax.StatementFunctionDecl <$> resolveFunctionDecl fdecl]
 resolveStatement (PreSyntax.StatementAssign vname e) =
-  Syntax.StatementAssign <$> resolveVarName vname <*> resolveExpr e
+  sequence [Syntax.StatementAssign <$> resolveVarName vname <*> resolveExpr e]
 resolveStatement (PreSyntax.StatementAssignPlus vname e) =
-  Syntax.StatementAssignPlus <$> resolveVarName vname <*> resolveExpr e
+  sequence [Syntax.StatementAssign <$> resolveVarName vname <*> resolveExpr e']
+  where
+    e' = PreSyntax.ExprPlus (PreSyntax.ExprVar vname) e
 resolveStatement (PreSyntax.StatementAssignMinus vname e) =
-  Syntax.StatementAssignMinus <$> resolveVarName vname <*> resolveExpr e
+  sequence [Syntax.StatementAssign <$> resolveVarName vname <*> resolveExpr e']
+  where
+    e' = PreSyntax.ExprMinus (PreSyntax.ExprVar vname) e
 resolveStatement (PreSyntax.StatementIfElse e s1 s2) =
-  Syntax.StatementIfElse <$> resolveExpr e <*> resolveStatement s1 <*>
-  resolveStatement s2
+  sequence
+    [ Syntax.StatementIfElse <$> resolveExpr e <*>
+      (Syntax.StatementBlock <$> resolveStatement s1) <*>
+      (Syntax.StatementBlock <$> resolveStatement s2)
+    ]
 resolveStatement (PreSyntax.StatementIf e s) =
-  Syntax.StatementIf <$> resolveExpr e <*> resolveStatement s
+  sequence
+    [ Syntax.StatementIfElse <$> resolveExpr e <*>
+      (Syntax.StatementBlock <$> resolveStatement s) <*>
+      pure Syntax.StatementNoop
+    ]
 resolveStatement (PreSyntax.StatementFor vname e1 e2 s) =
-  Syntax.StatementFor <$> resolveVarName vname <*> resolveExpr e1 <*>
-  resolveExpr e2 <*>
-  resolveStatement s
+  sequence
+    [ Syntax.StatementFor <$> resolveVarName vname <*> resolveExpr e1 <*>
+      resolveExpr e2 <*>
+      (Syntax.StatementBlock <$> resolveStatement s)
+    ]
 resolveStatement (PreSyntax.StatementFunctionDef fdecl stmts) =
-  Syntax.StatementFunctionDef <$> resolveFunctionDecl fdecl <*>
-  resolveStatements stmts
+  sequence
+    [ Syntax.StatementFunctionDef <$> resolveFunctionDecl fdecl <*>
+      resolveStatements stmts
+    ]
 resolveStatement (PreSyntax.StatementReturn Nothing) =
-  pure $ Syntax.StatementReturn Nothing
+  sequence [pure $ Syntax.StatementReturn Nothing]
 resolveStatement (PreSyntax.StatementReturn (Just e)) =
-  (Syntax.StatementReturn . Just) <$> resolveExpr e
+  sequence [(Syntax.StatementReturn . Just) <$> resolveExpr e]
 resolveStatement (PreSyntax.StatementForeignFunctionDecl fdecl) =
-  Syntax.StatementForeignFunctionDecl <$> resolveFunctionDecl fdecl
+  sequence [Syntax.StatementForeignFunctionDecl <$> resolveFunctionDecl fdecl]
 
 resolveFunctionCall :: PreSyntax.FunctionCall -> Resolver Syntax.FunctionCall
 resolveFunctionCall (PreSyntax.FunctionCall fname args) =
@@ -98,15 +119,14 @@ resolveExpr (PreSyntax.ExprOr lhs rhs) =
 resolveExpr (PreSyntax.ExprEq lhs rhs) =
   Syntax.ExprEq <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprNeq lhs rhs) =
-  Syntax.ExprNeq <$> resolveExpr lhs <*> resolveExpr rhs
+  resolveExpr $ PreSyntax.ExprNot (PreSyntax.ExprEq lhs rhs)
 resolveExpr (PreSyntax.ExprLt lhs rhs) =
   Syntax.ExprLt <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprLeq lhs rhs) =
-  Syntax.ExprLeq <$> resolveExpr lhs <*> resolveExpr rhs
-resolveExpr (PreSyntax.ExprGt lhs rhs) =
-  Syntax.ExprGt <$> resolveExpr lhs <*> resolveExpr rhs
+  resolveExpr $ PreSyntax.ExprNot (PreSyntax.ExprGt lhs rhs)
+resolveExpr (PreSyntax.ExprGt lhs rhs) = resolveExpr $ PreSyntax.ExprLt rhs lhs
 resolveExpr (PreSyntax.ExprGeq lhs rhs) =
-  Syntax.ExprGeq <$> resolveExpr lhs <*> resolveExpr rhs
+  resolveExpr $ PreSyntax.ExprNot (PreSyntax.ExprLt lhs rhs)
 
 resolveVarDecl :: PreSyntax.VarDecl -> Resolver Syntax.VarDecl
 resolveVarDecl (PreSyntax.VarDecl vtype vname) =

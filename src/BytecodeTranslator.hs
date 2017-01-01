@@ -308,6 +308,7 @@ translateReturnWithValue expr = do
       addOp OpReturn
 
 translateStatement :: Statement -> Translator ()
+translateStatement StatementNoop = pure ()
 translateStatement (StatementBlock stmts) = namespaceBlock $ forM_ stmts translateStatement
 translateStatement (StatementFunctionCall fcall) = do
   retType <- embedExpressionTranslator (functionCall fcall)
@@ -329,10 +330,6 @@ translateStatement (StatementAssign vname expr) = do
   (vType, v) <- findVariable vname
   _ <- embedExpressionTranslator (convert eType vType)
   addOp $ OpStore v
-translateStatement (StatementAssignPlus vname expr) =
-  translateStatement (StatementAssign vname (ExprPlus (ExprVar vname) expr))
-translateStatement (StatementAssignMinus vname expr) =
-  translateStatement (StatementAssign vname (ExprMinus (ExprVar vname) expr))
 translateStatement (StatementIfElse e stmtTrue stmtFalse) = do
   labelElseBranch <- newLabel
   labelAfterIf <- newLabel
@@ -343,13 +340,6 @@ translateStatement (StatementIfElse e stmtTrue stmtFalse) = do
   addOp $ OpJump labelAfterIf
   addOp $ OpLabel labelElseBranch
   translateStatement stmtFalse
-  addOp $ OpLabel labelAfterIf
-translateStatement (StatementIf e stmtTrue) = do
-  labelAfterIf <- newLabel
-  eType <- embedExpression e
-  when (eType /= VarTypeInt) $ error "Type mismatch"
-  addOp $ OpJumpIfZero labelAfterIf
-  translateStatement stmtTrue
   addOp $ OpLabel labelAfterIf
 translateStatement (StatementFor vname eFrom eTo stmt) =
   namespaceBlock $
@@ -383,11 +373,6 @@ translateStatement (StatementFor vname eFrom eTo stmt) =
      addOp $ OpJump labelLoopBegin
      addOp $ OpLabel labelAfterLoop
 translateStatement (StatementVarDecl v) = introduceVariable v >> pure ()
-translateStatement (StatementVarDef vdef@(VarDecl vType _) expr) = do
-  v <- introduceVariable vdef
-  eType <- embedExpression expr
-  _ <- embedExpressionTranslator (convert eType vType)
-  addOp $ OpStore v
 translateStatement (StatementFunctionDecl f) = introduceFunction f >> pure ()
 translateStatement (StatementFunctionDef f body) = do
   fid <- introduceFunction f
@@ -657,10 +642,3 @@ translateExpression (ExprLt lhs rhs) =
     , ((VarTypeFloat, VarTypeInt), (VarTypeFloat, OpLtFloat))
     , ((VarTypeFloat, VarTypeFloat), (VarTypeFloat, OpLtFloat))
     ]
-translateExpression (ExprNeq lhs rhs) =
-  translateExpression (ExprNot (ExprEq lhs rhs))
-translateExpression (ExprGt lhs rhs) = translateExpression (ExprLt rhs lhs)
-translateExpression (ExprLeq lhs rhs) =
-  translateExpression (ExprNot (ExprGt lhs rhs))
-translateExpression (ExprGeq lhs rhs) =
-  translateExpression (ExprNot (ExprLt lhs rhs))

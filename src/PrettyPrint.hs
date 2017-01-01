@@ -6,7 +6,7 @@ module PrettyPrint
 
 import qualified Data.List as List
 
-import Syntax
+import PreSyntax
 
 prettyPrint :: Program -> String
 prettyPrint (Program stmts libs) = printLibs libs ++ printProgram 0 stmts
