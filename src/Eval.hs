@@ -428,13 +428,6 @@ execute (StatementIfElse e btrue bfalse) = do
   if res
     then executeBlock btrue
     else executeBlock bfalse
-execute (StatementFor v e1 e2 b) = do
-  i1 <- evaluateAsInt e1
-  i2 <- evaluateAsInt e2
-  forM_ [i1 .. i2] $
-    \i -> do
-      writeVariable v $ ValueInt i
-      executeBlock b
 execute (StatementFunctionDef funDef) = defineFunction funDef
 execute (StatementReturn Nothing) = functionReturn Nothing
 execute (StatementReturn (Just e)) = do

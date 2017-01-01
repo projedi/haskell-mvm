@@ -93,6 +93,13 @@ runResolver m = evalState m emptyEnv
 findVariable :: PreSyntax.VarName -> Resolver Syntax.VarID
 findVariable vname = (`findVariableInEnv` vname) <$> State.get
 
+newVariable :: Syntax.VarType -> Resolver Syntax.VarID
+newVariable vtype = do
+  envBefore <- State.get
+  let (v, envAfter) = newVariableInEnv envBefore vtype
+  State.put envAfter
+  pure v
+
 introduceVariable :: PreSyntax.VarDecl -> Resolver Syntax.VarID
 introduceVariable vdecl = do
   envBefore <- State.get
@@ -172,11 +179,7 @@ resolveStatement (PreSyntax.StatementIf e s) =
       (resolveBlock [s]) <*>
       pure noopBlock
     ]
-resolveStatement (PreSyntax.StatementFor vname e1 e2 s) =
-  sequence
-    [ Syntax.StatementFor <$> findVariable vname <*> resolveExpr e1 <*>
-      resolveExpr e2 <*> resolveBlock [s]
-    ]
+resolveStatement (PreSyntax.StatementFor vname e1 e2 s) = resolveFor vname e1 e2 s
 resolveStatement (PreSyntax.StatementFunctionDef fdecl stmts) =
   sequence
     [ Syntax.StatementFunctionDef <$> resolveFunctionDef fdecl stmts
@@ -195,6 +198,34 @@ resolveFunctionDef fdecl@(PreSyntax.FunctionDecl _ _ params) stmts = do
     params' <- mapM introduceVariable params
     body <- resolveBlock stmts
     pure $ Syntax.FunctionDef fdecl' params' body
+
+resolveFor :: PreSyntax.VarName -> PreSyntax.Expr -> PreSyntax.Expr -> PreSyntax.Statement -> Resolver [Syntax.Statement]
+resolveFor vname eFrom eTo s = do
+  v <- findVariable vname
+  eFrom' <- resolveExpr eFrom
+  eTo' <- resolveExpr eTo
+  block <- resolveBlock [s]
+  withLayer $ do
+    vCur <- newVariable Syntax.VarTypeInt
+    vTo <- newVariable Syntax.VarTypeInt
+    let expr = Syntax.ExprNot (Syntax.ExprLt (Syntax.ExprVar vTo) (Syntax.ExprVar vCur))
+        stmts =
+          [ Syntax.StatementAssign v (Syntax.ExprVar vCur)
+          , Syntax.StatementBlock block
+          , Syntax.StatementAssign vCur (Syntax.ExprPlus (Syntax.ExprVar vCur) (Syntax.ExprInt 1))
+          ]
+        block' = Syntax.Block { Syntax.blockVariables = [], Syntax.blockStatements = stmts }
+    pure [Syntax.StatementBlock $ Syntax.Block
+      { Syntax.blockVariables =
+        [ Syntax.VarDecl Syntax.VarTypeInt vCur
+        , Syntax.VarDecl Syntax.VarTypeInt vTo
+        ]
+      , Syntax.blockStatements =
+        [ Syntax.StatementAssign vCur eFrom'
+        , Syntax.StatementAssign vTo eTo'
+        , Syntax.StatementWhile expr block'
+        ]
+      }]
 
 resolveFunctionCall :: PreSyntax.FunctionCall -> Resolver Syntax.FunctionCall
 resolveFunctionCall (PreSyntax.FunctionCall fname args) =

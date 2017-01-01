@@ -50,10 +50,6 @@ data Statement
   | StatementIfElse Expr
                     Block
                     Block
-  | StatementFor VarID
-                 Expr
-                 Expr
-                 Block
   | StatementFunctionDef FunctionDef
   | StatementReturn (Maybe Expr)
   | StatementForeignFunctionDecl FunctionDecl
