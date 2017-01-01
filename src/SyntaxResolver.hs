@@ -2,6 +2,7 @@ module SyntaxResolver
   ( resolve
   ) where
 
+import Control.Monad
 import Control.Monad.State (State, evalState)
 import qualified Control.Monad.State as State
 
@@ -106,7 +107,7 @@ resolveStatement (PreSyntax.StatementFor vname e1 e2 s) =
 resolveStatement (PreSyntax.StatementFunctionDef fdecl stmts) =
   sequence
     [ Syntax.StatementFunctionDef <$> resolveFunctionDecl fdecl <*>
-      resolveBlock stmts
+      paramNames fdecl <*> resolveBlock stmts
     ]
 resolveStatement (PreSyntax.StatementReturn Nothing) =
   sequence [pure $ Syntax.StatementReturn Nothing]
@@ -114,6 +115,10 @@ resolveStatement (PreSyntax.StatementReturn (Just e)) =
   sequence [(Syntax.StatementReturn . Just) <$> resolveExpr e]
 resolveStatement (PreSyntax.StatementForeignFunctionDecl fdecl) =
   sequence [Syntax.StatementForeignFunctionDecl <$> resolveFunctionDecl fdecl]
+
+paramNames :: PreSyntax.FunctionDecl -> Resolver [Syntax.VarName]
+paramNames (PreSyntax.FunctionDecl _ _ params) = forM params $ \(PreSyntax.VarDecl _ vname) ->
+  resolveVarName vname
 
 resolveFunctionCall :: PreSyntax.FunctionCall -> Resolver Syntax.FunctionCall
 resolveFunctionCall (PreSyntax.FunctionCall fname args) =
@@ -171,8 +176,7 @@ resolveVarDecl vdecl = do
 
 resolveFunctionDecl :: PreSyntax.FunctionDecl -> Resolver Syntax.FunctionDecl
 resolveFunctionDecl (PreSyntax.FunctionDecl rettype name params) =
-  Syntax.FunctionDecl rettype <$> resolveFunctionName name <*>
-  mapM resolveParam params
+  Syntax.FunctionDecl rettype <$> resolveFunctionName name <*> pure (map (\(PreSyntax.VarDecl vtype _) -> vtype) params)
 
 resolveVarName :: PreSyntax.VarName -> Resolver Syntax.VarName
 resolveVarName (PreSyntax.VarName name) = pure $ Syntax.VarName name

@@ -55,6 +55,7 @@ data Statement
                  Expr
                  Block
   | StatementFunctionDef FunctionDecl
+                         [VarName]
                          Block
   | StatementReturn (Maybe Expr)
   | StatementForeignFunctionDecl FunctionDecl
@@ -62,7 +63,7 @@ data Statement
 data FunctionDecl =
   FunctionDecl (Maybe VarType)
                FunctionName
-               [VarDecl]
+               [VarType]
 
 data FunctionCall =
   FunctionCall FunctionName

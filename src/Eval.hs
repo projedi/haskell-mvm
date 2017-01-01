@@ -34,21 +34,17 @@ eval (Program stmts libs) = do
 type LayerID = Int
 
 data FunctionImpl
-  = FunctionBody (LayerID, Block)
+  = FunctionBody (LayerID, [VarName], Block)
   | FunctionForeign ForeignFun
 
 data Function =
   Function (Maybe VarType)
-           [VarDecl]
+           [VarType]
            (Maybe FunctionImpl)
-
-argsMatch :: [VarDecl] -> [VarDecl] -> Bool
-argsMatch largs rargs =
-  map (\(VarDecl t _) -> t) largs == map (\(VarDecl t _) -> t) rargs
 
 functionTypesMatch :: Function -> Function -> Bool
 functionTypesMatch (Function lrettype lparams _) (Function rrettype rparams _) =
-  lrettype == rrettype && argsMatch lparams rparams
+  lrettype == rrettype && lparams == rparams
 
 data Layer = Layer
   { varEnv :: Map VarName Value
@@ -251,15 +247,15 @@ declareFunction (FunctionDecl rettype name params) = do
   let Just env' = addFunctionToEnv env name (Function rettype params Nothing)
   State.put env'
 
-defineFunction :: FunctionDecl -> Block -> Execute ()
-defineFunction (FunctionDecl rettype name params) body = do
+defineFunction :: FunctionDecl -> [VarName] -> Block -> Execute ()
+defineFunction (FunctionDecl rettype name params) paramNames body = do
   env <- State.get
   lid <- currentLayer
   let Just env' =
         addFunctionToEnv
           env
           name
-          (Function rettype params (Just $ FunctionBody (lid, body)))
+          (Function rettype params (Just $ FunctionBody (lid, paramNames, body)))
   State.put env'
 
 declareForeignFunction :: FunctionDecl -> Execute ()
@@ -281,24 +277,29 @@ printCall vals =
 
 nativeFunctionCall
   :: Maybe VarType
-  -> [VarDecl]
+  -> [VarType]
+  -> [VarName]
   -> [Value]
   -> LayerID
   -> Block
   -> Execute (Maybe Value)
-nativeFunctionCall rettype params vals lid body = do
+nativeFunctionCall rettype params paramNames vals lid body = do
   res <-
     withLayer lid $
     withNewLayer $
-    do generateAssignments params vals
+    do generateAssignments (paramDecls params paramNames) vals
        executeBlockWithReturn body
   case (res, rettype) of
     (Nothing, Nothing) -> pure res
     (Just val, Just valtype) -> pure $ Just $ convert val valtype
     _ -> error "Type mismatch"
+  where
+    paramDecls [] [] = []
+    paramDecls (t:ts) (n:ns) = VarDecl t n : paramDecls ts ns
+    paramDecls _ _ = error "Type mismatch"
 
 foreignFunctionCall :: Maybe VarType
-                    -> [VarDecl]
+                    -> [VarType]
                     -> [Value]
                     -> ForeignFun
                     -> Execute (Maybe Value)
@@ -306,7 +307,7 @@ foreignFunctionCall rettype params vals fun =
   Trans.liftIO $ call fun rettype (convertVals params vals)
   where
     convertVals [] [] = []
-    convertVals (VarDecl vtype _:ps) (v:vs) = convert v vtype : convertVals ps vs
+    convertVals (vtype:ps) (v:vs) = convert v vtype : convertVals ps vs
     convertVals _ _ = error "Type mismatch"
 
 functionCall :: FunctionCall -> Execute (Maybe Value)
@@ -319,7 +320,7 @@ functionCall (FunctionCall fname args) = do
   vals <- evaluateArgs args
   let Just (Function rettype params (Just impl)) = getFunctionFromEnv env fname
   case impl of
-    FunctionBody (lid, body) -> nativeFunctionCall rettype params vals lid body
+    FunctionBody (lid, paramNames, body) -> nativeFunctionCall rettype params paramNames vals lid body
     FunctionForeign f -> foreignFunctionCall rettype params vals f
 
 generateAssignment :: VarDecl -> Value -> Execute ()
@@ -434,7 +435,7 @@ execute (StatementFor v e1 e2 b) = do
     \i -> do
       writeVariable v $ ValueInt i
       executeBlock b
-execute (StatementFunctionDef funDecl stmts) = defineFunction funDecl stmts
+execute (StatementFunctionDef funDecl paramNames block) = defineFunction funDecl paramNames block
 execute (StatementReturn Nothing) = functionReturn Nothing
 execute (StatementReturn (Just e)) = do
   res <- evaluate e

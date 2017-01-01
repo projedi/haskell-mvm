@@ -129,10 +129,7 @@ checkExistingFunctionInEnv env (FunID fid) fdecl =
        else error "Type mismatch"
   where
     declMatch (FunctionDecl lrettype _ lparams) (FunctionDecl rrettype _ rparams) =
-      (lrettype == rrettype) && paramsMatch lparams rparams
-    paramsMatch [] [] = True
-    paramsMatch (VarDecl l _:ls) (VarDecl r _:rs) = l == r && paramsMatch ls rs
-    paramsMatch _ _ = False
+      (lrettype == rrettype) && lparams == rparams
 
 newFunctionInEnv :: Env -> FunctionDecl -> (FunID, Env)
 newFunctionInEnv env fdecl =
@@ -274,21 +271,25 @@ translateFunctionBody (FunctionDecl retType _ _) fid body = do
 
 translateNativeFunctionBody :: FunctionDecl
                             -> FunID
+                            -> [VarName]
                             -> Block
                             -> Translator ()
-translateNativeFunctionBody fdecl@(FunctionDecl _ _ params) fid body =
+translateNativeFunctionBody fdecl@(FunctionDecl _ _ params) fid paramNames body =
   translateFunctionBody fdecl fid $
   namespaceBlock $
-  do vs <- mapM introduceVariable params
+  do vs <- mapM introduceVariable $ paramDecls params paramNames
      forM_ vs (addOp . OpStore)
      translateStatement $ StatementBlock body
+  where
+    paramDecls [] [] = []
+    paramDecls (t:ts) (n:ns) = VarDecl t n : paramDecls ts ns
+    paramDecls _ _ = error "Type mismatch"
 
 translateForeignFunctionBody :: FunctionDecl -> FunID -> Translator ()
 translateForeignFunctionBody fdecl@(FunctionDecl retType (FunctionName fname) params) fid =
   translateFunctionBody fdecl fid $
-  do let types = map (\(VarDecl vtype _) -> vtype) params
-     embedExpressionTranslator $
-       addOpWithoutType $ OpForeignCall fname retType types
+  do embedExpressionTranslator $
+       addOpWithoutType $ OpForeignCall fname retType params
 
 translateReturn :: Translator ()
 translateReturn = do
@@ -378,10 +379,10 @@ translateStatement (StatementFor vname eFrom eTo block) =
      addOp $ OpJump labelLoopBegin
      addOp $ OpLabel labelAfterLoop
 translateStatement (StatementFunctionDecl f) = introduceFunction f >> pure ()
-translateStatement (StatementFunctionDef f body) = do
+translateStatement (StatementFunctionDef f paramNames body) = do
   fid <- introduceFunction f
   markFunctionAsDefined fid
-  translateNativeFunctionBody f fid body
+  translateNativeFunctionBody f fid paramNames body
 translateStatement (StatementForeignFunctionDecl f) = do
   fid <- introduceFunction f
   markFunctionAsDefined fid
@@ -453,7 +454,7 @@ functionCall (FunctionCall (FunctionName "print") args) =
   printCall args >> pure Nothing
 functionCall (FunctionCall fname args) = do
   (fid, FunctionDecl rettype _ params) <- findFunction fname
-  translateArgs args $ map (\(VarDecl vtype _) -> vtype) params
+  translateArgs args params
   addOpWithoutType $ OpCall fid
   pure rettype
 
