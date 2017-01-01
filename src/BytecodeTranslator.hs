@@ -210,8 +210,8 @@ namespaceBlock m = do
   State.put $ stopBlockInEnv envBefore envAfter
   pure res
 
-translateFunctionBody :: FunctionDecl -> FunID -> Translator () -> Translator ()
-translateFunctionBody (FunctionDecl retType _ _) fid body = do
+translateFunctionBody :: Maybe VarType -> FunID -> Translator () -> Translator ()
+translateFunctionBody retType fid body = do
   envBefore <- State.get
   State.put $
     envBefore
@@ -229,20 +229,16 @@ translateFunctionBody (FunctionDecl retType _ _) fid body = do
 translateNativeFunctionBody :: FunctionDef
                             -> FunID
                             -> Translator ()
-translateNativeFunctionBody (FunctionDef fdecl@(FunctionDecl _ _ params) paramNames body) fid =
-  translateFunctionBody fdecl fid $
+translateNativeFunctionBody f fid =
+  translateFunctionBody (funDefRetType f) fid $
   namespaceBlock $
-  do vs <- mapM introduceVariable $ paramDecls params paramNames
+  do vs <- mapM introduceVariable $ funDefParams f
      forM_ vs (addOp . OpStore)
-     translateStatement $ StatementBlock body
-  where
-    paramDecls [] [] = []
-    paramDecls (t:ts) (n:ns) = VarDecl t n : paramDecls ts ns
-    paramDecls _ _ = error "Type mismatch"
+     translateStatement $ StatementBlock $ funDefBody f
 
 translateForeignFunctionBody :: FunctionDecl -> FunID -> Translator ()
-translateForeignFunctionBody fdecl@(FunctionDecl retType (FunctionName fname) params) fid =
-  translateFunctionBody fdecl fid $
+translateForeignFunctionBody (FunctionDecl retType (FunctionName fname) params) fid =
+  translateFunctionBody retType fid $
   do embedExpressionTranslator $
        addOpWithoutType $ OpForeignCall fname retType params
 
@@ -303,7 +299,12 @@ translateStatement (StatementIfElse e blockTrue blockFalse) = do
   translateBlock blockFalse
   addOp $ OpLabel labelAfterIf
 translateStatement (StatementFunctionDecl f) = introduceFunction f >> pure ()
-translateStatement (StatementFunctionDef f@(FunctionDef fd _ _)) = do
+translateStatement (StatementFunctionDef f) = do
+  let fd = FunctionDecl
+        { funDeclRetType = funDefRetType f
+        , funDeclName = funDefName f
+        , funDeclParams = map (\(VarDecl t _) -> t) $ funDefParams f
+        }
   fid <- introduceFunction fd
   markFunctionAsDefined fid
   translateNativeFunctionBody f fid

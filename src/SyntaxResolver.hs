@@ -197,7 +197,16 @@ resolveFunctionDef fdecl@(PreSyntax.FunctionDecl _ _ params) stmts = do
   withLayer $ do
     params' <- mapM introduceVariable params
     body <- resolveBlock stmts
-    pure $ Syntax.FunctionDef fdecl' params' body
+    pure $ Syntax.FunctionDef
+      { Syntax.funDefRetType = Syntax.funDeclRetType fdecl'
+      , Syntax.funDefName = Syntax.funDeclName fdecl'
+      , Syntax.funDefParams = paramDecls (Syntax.funDeclParams fdecl') params'
+      , Syntax.funDefBody = body
+      }
+  where
+    paramDecls [] [] = []
+    paramDecls (t:ts) (n:ns) = Syntax.VarDecl t n : paramDecls ts ns
+    paramDecls _ _ = error "Type mismatch"
 
 resolveFor :: PreSyntax.VarName -> PreSyntax.Expr -> PreSyntax.Expr -> PreSyntax.Statement -> Resolver [Syntax.Statement]
 resolveFor vname eFrom eTo s = do

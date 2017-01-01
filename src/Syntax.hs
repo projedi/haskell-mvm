@@ -54,12 +54,18 @@ data Statement
   | StatementReturn (Maybe Expr)
   | StatementForeignFunctionDecl FunctionDecl
 
-data FunctionDecl =
-  FunctionDecl (Maybe VarType)
-               FunctionName
-               [VarType]
+data FunctionDecl = FunctionDecl
+  { funDeclRetType :: Maybe VarType
+  , funDeclName :: FunctionName
+  , funDeclParams :: [VarType]
+  }
 
-data FunctionDef = FunctionDef FunctionDecl [VarID] Block
+data FunctionDef = FunctionDef
+  { funDefRetType :: Maybe VarType
+  , funDefName :: FunctionName
+  , funDefParams :: [VarDecl]
+  , funDefBody :: Block
+  }
 
 data FunctionCall =
   FunctionCall FunctionName

@@ -248,14 +248,15 @@ declareFunction (FunctionDecl rettype name params) = do
   State.put env'
 
 defineFunction :: FunctionDef -> Execute ()
-defineFunction (FunctionDef (FunctionDecl rettype name params) paramNames body) = do
+defineFunction f = do
   env <- State.get
   lid <- currentLayer
+  let (params, paramNames) = unzip $ map (\(VarDecl t n) -> (t, n)) $ funDefParams f
   let Just env' =
         addFunctionToEnv
           env
-          name
-          (Function rettype params (Just $ FunctionBody (lid, paramNames, body)))
+          (funDefName f)
+          (Function (funDefRetType f) params (Just $ FunctionBody (lid, paramNames, funDefBody f)))
   State.put env'
 
 declareForeignFunction :: FunctionDecl -> Execute ()
