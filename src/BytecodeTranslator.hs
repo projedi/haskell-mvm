@@ -274,7 +274,7 @@ translateFunctionBody (FunctionDecl retType _ _) fid body = do
 
 translateNativeFunctionBody :: FunctionDecl
                             -> FunID
-                            -> [Statement]
+                            -> Block
                             -> Translator ()
 translateNativeFunctionBody fdecl@(FunctionDecl _ _ params) fid body =
   translateFunctionBody fdecl fid $
@@ -307,22 +307,26 @@ translateReturnWithValue expr = do
       _ <- embedExpressionTranslator $ convert actualType expectedType
       addOp OpReturn
 
+translateBlock :: Block -> Translator ()
+translateBlock (Block stmts) = namespaceBlock $
+  forM_ stmts translateStatement
+
 translateStatement :: Statement -> Translator ()
 translateStatement StatementNoop = pure ()
-translateStatement (StatementBlock stmts) = namespaceBlock $ forM_ stmts translateStatement
+translateStatement (StatementBlock block) = translateBlock block
 translateStatement (StatementFunctionCall fcall) = do
   retType <- embedExpressionTranslator (functionCall fcall)
   case retType of
     Nothing -> pure ()
     Just _ -> addOp OpPop
-translateStatement (StatementWhile e stmt) = do
+translateStatement (StatementWhile e block) = do
   labelLoopBegin <- newLabel
   labelAfterLoop <- newLabel
   addOp $ OpLabel labelLoopBegin
   eType <- embedExpression e
   when (eType /= VarTypeInt) $ error "Type mismatch"
   addOp $ OpJumpIfZero labelAfterLoop
-  translateStatement stmt
+  translateBlock block
   addOp $ OpJump labelLoopBegin
   addOp $ OpLabel labelAfterLoop
 translateStatement (StatementAssign vname expr) = do
@@ -330,18 +334,18 @@ translateStatement (StatementAssign vname expr) = do
   (vType, v) <- findVariable vname
   _ <- embedExpressionTranslator (convert eType vType)
   addOp $ OpStore v
-translateStatement (StatementIfElse e stmtTrue stmtFalse) = do
+translateStatement (StatementIfElse e blockTrue blockFalse) = do
   labelElseBranch <- newLabel
   labelAfterIf <- newLabel
   eType <- embedExpression e
   when (eType /= VarTypeInt) $ error "Type mismatch"
   addOp $ OpJumpIfZero labelElseBranch
-  translateStatement stmtTrue
+  translateBlock blockTrue
   addOp $ OpJump labelAfterIf
   addOp $ OpLabel labelElseBranch
-  translateStatement stmtFalse
+  translateBlock blockFalse
   addOp $ OpLabel labelAfterIf
-translateStatement (StatementFor vname eFrom eTo stmt) =
+translateStatement (StatementFor vname eFrom eTo block) =
   namespaceBlock $
   do (vType, v) <- findVariable vname
      when (vType /= VarTypeInt) $ error "Type mismatch"
@@ -364,7 +368,7 @@ translateStatement (StatementFor vname eFrom eTo stmt) =
      addOp $ OpJumpIfZero labelAfterLoop
      addOp $ OpLoad vCur
      addOp $ OpStore v
-     translateStatement stmt
+     translateBlock block
      addOp $ OpLoad vCur
      cid <- embedExpressionTranslator $ newConstant (ValueInt 1)
      addOp $ OpPushInt cid

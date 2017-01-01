@@ -34,7 +34,7 @@ eval (Program stmts libs) = do
 type LayerID = Int
 
 data FunctionImpl
-  = FunctionBody (LayerID, [Statement])
+  = FunctionBody (LayerID, Block)
   | FunctionForeign ForeignFun
 
 data Function =
@@ -251,7 +251,7 @@ declareFunction (FunctionDecl rettype name params) = do
   let Just env' = addFunctionToEnv env name (Function rettype params Nothing)
   State.put env'
 
-defineFunction :: FunctionDecl -> [Statement] -> Execute ()
+defineFunction :: FunctionDecl -> Block -> Execute ()
 defineFunction (FunctionDecl rettype name params) body = do
   env <- State.get
   lid <- currentLayer
@@ -284,14 +284,14 @@ nativeFunctionCall
   -> [VarDecl]
   -> [Value]
   -> LayerID
-  -> [Statement]
+  -> Block
   -> Execute (Maybe Value)
 nativeFunctionCall rettype params vals lid body = do
   res <-
     withLayer lid $
     withNewLayer $
     do generateAssignments params vals
-       executeStatementWithReturn (StatementBlock body)
+       executeBlockWithReturn body
   case (res, rettype) of
     (Nothing, Nothing) -> pure res
     (Just val, Just valtype) -> pure $ Just $ convert val valtype
@@ -337,10 +337,10 @@ generateAssignments _ _ = error "Type mismatch"
 evaluateArgs :: [Expr] -> Execute [Value]
 evaluateArgs = mapM evaluate
 
-executeStatementWithReturn :: Statement -> Execute (Maybe Value)
-executeStatementWithReturn s = do
+executeBlockWithReturn :: Block -> Execute (Maybe Value)
+executeBlockWithReturn block = do
   lid <- currentLayer
-  (execute s >> pure Nothing) `Except.catchError` restoreFromReturn lid
+  (executeBlock block >> pure Nothing) `Except.catchError` restoreFromReturn lid
   where
     restoreFromReturn lid val = do
       _ <- splitLayers lid
@@ -403,14 +403,17 @@ evaluateAsInt e = do
   ValueInt i <- evaluate e
   pure i
 
+executeBlock :: Block -> Execute ()
+executeBlock (Block stmts) = withNewLayer (forM_ stmts execute)
+
 execute :: Statement -> Execute ()
 execute StatementNoop = pure ()
-execute (StatementBlock stmts) = withNewLayer (forM_ stmts execute)
+execute (StatementBlock block) = executeBlock block
 execute (StatementFunctionCall fcall) = functionCall fcall >> pure ()
-execute s@(StatementWhile e stmt) = do
+execute s@(StatementWhile e block) = do
   res <- evaluateAsBool e
   when res $
-    do execute stmt
+    do executeBlock block
        execute s
 execute (StatementVarDecl varDecl) = declareVariable varDecl
 execute (StatementFunctionDecl funDecl) = declareFunction funDecl
@@ -418,18 +421,18 @@ execute (StatementForeignFunctionDecl funDecl) = declareForeignFunction funDecl
 execute (StatementAssign var e) = do
   res <- evaluate e
   writeVariable var res
-execute (StatementIfElse e strue sfalse) = do
+execute (StatementIfElse e btrue bfalse) = do
   res <- evaluateAsBool e
   if res
-    then execute strue
-    else execute sfalse
-execute (StatementFor v e1 e2 s) = do
+    then executeBlock btrue
+    else executeBlock bfalse
+execute (StatementFor v e1 e2 b) = do
   i1 <- evaluateAsInt e1
   i2 <- evaluateAsInt e2
   forM_ [i1 .. i2] $
     \i -> do
       writeVariable v $ ValueInt i
-      execute s
+      executeBlock b
 execute (StatementFunctionDef funDecl stmts) = defineFunction funDecl stmts
 execute (StatementReturn Nothing) = functionReturn Nothing
 execute (StatementReturn (Just e)) = do

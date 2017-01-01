@@ -5,6 +5,7 @@ module Syntax
   , FunctionName(..)
   , VarType(..)
   , VarDecl(..)
+  , Block(..)
   , Statement(..)
   , FunctionDecl(..)
   , FunctionCall(..)
@@ -14,58 +15,56 @@ module Syntax
 import PreSyntax (VarType(..))
 
 data Program = Program
-  { programStatements :: [Statement]
+  { programStatements :: Block
   , programLibraries :: [String]
-  } deriving (Show)
+  }
 
 type Symbol = String
 
 data VarName =
   VarName Symbol
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
 
 data FunctionName =
   FunctionName Symbol
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
 
 data VarDecl =
   VarDecl VarType
           VarName
-  deriving (Eq, Show)
+
+data Block = Block [Statement]
 
 data Statement
   = StatementNoop
-  | StatementBlock [Statement]
+  | StatementBlock Block
   | StatementFunctionCall FunctionCall
   | StatementWhile Expr
-                   Statement
+                   Block
   | StatementVarDecl VarDecl
   | StatementFunctionDecl FunctionDecl
   | StatementAssign VarName
                     Expr
   | StatementIfElse Expr
-                    Statement
-                    Statement
+                    Block
+                    Block
   | StatementFor VarName
                  Expr
                  Expr
-                 Statement
+                 Block
   | StatementFunctionDef FunctionDecl
-                         [Statement]
+                         Block
   | StatementReturn (Maybe Expr)
   | StatementForeignFunctionDecl FunctionDecl
-  deriving (Eq, Show)
 
 data FunctionDecl =
   FunctionDecl (Maybe VarType)
                FunctionName
                [VarDecl]
-  deriving (Eq, Show)
 
 data FunctionCall =
   FunctionCall FunctionName
                [Expr]
-  deriving (Eq, Show)
 
 data Expr
   = ExprFunctionCall FunctionCall
@@ -99,4 +98,3 @@ data Expr
            Expr
   | ExprLt Expr
            Expr
-  deriving (Eq, Show)

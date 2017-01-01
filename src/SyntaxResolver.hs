@@ -14,25 +14,24 @@ resolve p =
   , Syntax.programStatements = code
   }
   where
-    code = runResolver (resolveStatements $ PreSyntax.programStatements p)
+    code = runResolver (resolveBlock $ PreSyntax.programStatements p)
 
 type Resolver a = Identity a
 
 runResolver :: Resolver a -> a
 runResolver = runIdentity
 
-resolveStatements :: [PreSyntax.Statement] -> Resolver [Syntax.Statement]
-resolveStatements stmts = concat <$> mapM resolveStatement stmts
+resolveBlock :: [PreSyntax.Statement] -> Resolver Syntax.Block
+resolveBlock stmts = (Syntax.Block . concat) <$> mapM resolveStatement stmts
 
 resolveStatement :: PreSyntax.Statement -> Resolver [Syntax.Statement]
 resolveStatement (PreSyntax.StatementBlock stmts) =
-  sequence [Syntax.StatementBlock <$> resolveStatements stmts]
+  sequence [Syntax.StatementBlock <$> resolveBlock stmts]
 resolveStatement (PreSyntax.StatementFunctionCall fcall) =
   sequence [Syntax.StatementFunctionCall <$> resolveFunctionCall fcall]
 resolveStatement (PreSyntax.StatementWhile e stmt) =
   sequence
-    [ Syntax.StatementWhile <$> resolveExpr e <*>
-      (Syntax.StatementBlock <$> resolveStatement stmt)
+    [ Syntax.StatementWhile <$> resolveExpr e <*> resolveBlock [stmt]
     ]
 resolveStatement (PreSyntax.StatementVarDecl vdecl) =
   sequence [Syntax.StatementVarDecl <$> resolveVarDecl vdecl]
@@ -56,25 +55,24 @@ resolveStatement (PreSyntax.StatementAssignMinus vname e) =
 resolveStatement (PreSyntax.StatementIfElse e s1 s2) =
   sequence
     [ Syntax.StatementIfElse <$> resolveExpr e <*>
-      (Syntax.StatementBlock <$> resolveStatement s1) <*>
-      (Syntax.StatementBlock <$> resolveStatement s2)
+      (resolveBlock [s1]) <*>
+      (resolveBlock [s2])
     ]
 resolveStatement (PreSyntax.StatementIf e s) =
   sequence
     [ Syntax.StatementIfElse <$> resolveExpr e <*>
-      (Syntax.StatementBlock <$> resolveStatement s) <*>
-      pure Syntax.StatementNoop
+      (resolveBlock [s]) <*>
+      pure (Syntax.Block [Syntax.StatementNoop])
     ]
 resolveStatement (PreSyntax.StatementFor vname e1 e2 s) =
   sequence
     [ Syntax.StatementFor <$> resolveVarName vname <*> resolveExpr e1 <*>
-      resolveExpr e2 <*>
-      (Syntax.StatementBlock <$> resolveStatement s)
+      resolveExpr e2 <*> resolveBlock [s]
     ]
 resolveStatement (PreSyntax.StatementFunctionDef fdecl stmts) =
   sequence
     [ Syntax.StatementFunctionDef <$> resolveFunctionDecl fdecl <*>
-      resolveStatements stmts
+      resolveBlock stmts
     ]
 resolveStatement (PreSyntax.StatementReturn Nothing) =
   sequence [pure $ Syntax.StatementReturn Nothing]
