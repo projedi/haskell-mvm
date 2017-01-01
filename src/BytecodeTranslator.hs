@@ -28,22 +28,8 @@ translate (Program block libs) =
      }
 
 data Layer = Layer
-  { varEnv :: Map VarName VarID
-  , funEnv :: Map FunctionName FunID
+  { funEnv :: Map FunctionName FunID
   }
-
-findVariableInLayer :: Layer -> VarName -> Maybe VarID
-findVariableInLayer Layer {varEnv = lvars} vname = Map.lookup vname lvars
-
-newVariableInLayer :: Layer -> VarName -> VarID -> Maybe Layer
-newVariableInLayer l@Layer {varEnv = lvars} vname vid =
-  case Map.insertLookupWithKey (\_ val _ -> val) vname vid lvars of
-    (Nothing, lvars') ->
-      Just $
-      l
-      { varEnv = lvars'
-      }
-    (Just _, _) -> Nothing
 
 findFunctionInLayer :: Layer -> FunctionName -> Maybe FunID
 findFunctionInLayer Layer {funEnv = lfuns} fname = Map.lookup fname lfuns
@@ -61,15 +47,13 @@ newFunctionInLayer l@Layer {funEnv = lfuns} fname fid =
 emptyLayer :: Layer
 emptyLayer =
   Layer
-  { varEnv = Map.empty
-  , funEnv = Map.empty
+  { funEnv = Map.empty
   }
 
 data Env = Env
   { currentFunction :: FunID
   , currentRetType :: Maybe VarType
   , lastLabel :: LabelID
-  , lastVar :: VarID
   , lastFun :: FunID
   , lastConst :: ConstID
   , layers :: [Layer]
@@ -84,7 +68,6 @@ emptyEnv =
   { currentFunction = FunID 0
   , currentRetType = Nothing
   , lastLabel = LabelID (-1)
-  , lastVar = VarID (-1)
   , lastFun = FunID 0
   , lastConst = ConstID (-1)
   , layers = [emptyLayer]
@@ -93,33 +76,15 @@ emptyEnv =
   , consts = IntMap.empty
   }
 
-findVariableInEnv :: Env -> VarName -> (VarType, VarID)
-findVariableInEnv env vname =
-  let (Just (VarID v)) = asum (map (`findVariableInLayer` vname) (layers env))
-      (Just vtype) = IntMap.lookup v (vars env)
-  in (vtype, VarID v)
+findVariableInEnv :: Env -> VarID -> VarType
+findVariableInEnv env (VarID v) =
+  let Just vtype = IntMap.lookup v (vars env)
+  in vtype
 
-newVariableInEnv :: Env -> VarType -> (VarID, Env)
-newVariableInEnv env vtype =
-  let (VarID v) = inc $ lastVar env
-      (Nothing, vars') =
-        IntMap.insertLookupWithKey (\_ val _ -> val) v vtype (vars env)
-  in ( VarID v
-     , env
-       { lastVar = VarID v
-       , vars = vars'
-       })
-  where
-    inc (VarID lastVarID) = VarID (lastVarID + 1)
-
-introduceVariableInEnv :: Env -> VarDecl -> (VarID, Env)
-introduceVariableInEnv env (VarDecl vtype vname) =
-  let (v, env'@Env {layers = (l:ls)}) = newVariableInEnv env vtype
-      Just l' = newVariableInLayer l vname v
-  in ( v
-     , env'
-       { layers = l' : ls
-       })
+introduceVariableInEnv :: Env -> VarDecl -> Env
+introduceVariableInEnv env (VarDecl vtype (VarID v)) =
+  let (Nothing, vars') = IntMap.insertLookupWithKey (\_ val _ -> val) v vtype (vars env)
+  in env { vars = vars' }
 
 checkExistingFunctionInEnv :: Env -> FunID -> FunctionDecl -> (FunID, Env)
 checkExistingFunctionInEnv env (FunID fid) fdecl =
@@ -213,23 +178,15 @@ addCodeToCurrent code = do
 addOp :: Op -> Translator ()
 addOp op = addCodeToCurrent (BytecodeFunction [op])
 
-findVariable :: VarName -> Translator (VarType, VarID)
+findVariable :: VarID -> Translator VarType
 findVariable v = do
   env <- State.get
   pure $ findVariableInEnv env v
 
-newVariable :: VarType -> Translator VarID
-newVariable vtype = do
-  env <- State.get
-  let (v, env') = newVariableInEnv env vtype
-  State.put env'
-  addOp $ OpIntroVar v vtype
-  pure v
-
 introduceVariable :: VarDecl -> Translator VarID
-introduceVariable vdecl@(VarDecl vtype _) = do
+introduceVariable vdecl@(VarDecl vtype v) = do
   env <- State.get
-  let (v, env') = introduceVariableInEnv env vdecl
+  let env' = introduceVariableInEnv env vdecl
   State.put env'
   addOp $ OpIntroVar v vtype
   pure v
@@ -269,12 +226,10 @@ translateFunctionBody (FunctionDecl retType _ _) fid body = do
     , currentRetType = currentRetType envBefore
     }
 
-translateNativeFunctionBody :: FunctionDecl
+translateNativeFunctionBody :: FunctionDef
                             -> FunID
-                            -> [VarName]
-                            -> Block
                             -> Translator ()
-translateNativeFunctionBody fdecl@(FunctionDecl _ _ params) fid paramNames body =
+translateNativeFunctionBody (FunctionDef fdecl@(FunctionDecl _ _ params) paramNames body) fid =
   translateFunctionBody fdecl fid $
   namespaceBlock $
   do vs <- mapM introduceVariable $ paramDecls params paramNames
@@ -331,9 +286,9 @@ translateStatement (StatementWhile e block) = do
   translateBlock block
   addOp $ OpJump labelLoopBegin
   addOp $ OpLabel labelAfterLoop
-translateStatement (StatementAssign vname expr) = do
+translateStatement (StatementAssign v expr) = do
   eType <- embedExpression expr
-  (vType, v) <- findVariable vname
+  vType <- findVariable v
   _ <- embedExpressionTranslator (convert eType vType)
   addOp $ OpStore v
 translateStatement (StatementIfElse e blockTrue blockFalse) = do
@@ -347,42 +302,11 @@ translateStatement (StatementIfElse e blockTrue blockFalse) = do
   addOp $ OpLabel labelElseBranch
   translateBlock blockFalse
   addOp $ OpLabel labelAfterIf
-translateStatement (StatementFor vname eFrom eTo block) =
-  namespaceBlock $
-  do (vType, v) <- findVariable vname
-     when (vType /= VarTypeInt) $ error "Type mismatch"
-     vCur <- newVariable VarTypeInt
-     eFromType <- embedExpression eFrom
-     when (eFromType /= VarTypeInt) $ error "Type mismatch"
-     addOp $ OpStore vCur
-     vTo <- newVariable VarTypeInt
-     eToType <- embedExpression eTo
-     when (eToType /= VarTypeInt) $ error "Type mismatch"
-     addOp $ OpStore vTo
-     labelLoopBegin <- newLabel
-     labelAfterLoop <- newLabel
-     addOp $ OpLabel labelLoopBegin
-     addOp $ OpLoad vCur
-     addOp $ OpLoad vTo
-     addOp OpLtInt
-     addOp OpNotInt
-     -- if vTo < v then loop is finished.
-     addOp $ OpJumpIfZero labelAfterLoop
-     addOp $ OpLoad vCur
-     addOp $ OpStore v
-     translateBlock block
-     addOp $ OpLoad vCur
-     cid <- embedExpressionTranslator $ newConstant (ValueInt 1)
-     addOp $ OpPushInt cid
-     addOp OpPlusInt
-     addOp $ OpStore vCur
-     addOp $ OpJump labelLoopBegin
-     addOp $ OpLabel labelAfterLoop
 translateStatement (StatementFunctionDecl f) = introduceFunction f >> pure ()
-translateStatement (StatementFunctionDef f paramNames body) = do
-  fid <- introduceFunction f
+translateStatement (StatementFunctionDef f@(FunctionDef fd _ _)) = do
+  fid <- introduceFunction fd
   markFunctionAsDefined fid
-  translateNativeFunctionBody f fid paramNames body
+  translateNativeFunctionBody f fid
 translateStatement (StatementForeignFunctionDecl f) = do
   fid <- introduceFunction f
   markFunctionAsDefined fid
@@ -458,10 +382,10 @@ functionCall (FunctionCall fname args) = do
   addOpWithoutType $ OpCall fid
   pure rettype
 
-loadVar :: VarName -> ExpressionTranslator VarType
-loadVar vname = do
+loadVar :: VarID -> ExpressionTranslator VarType
+loadVar vid = do
   env <- State.get
-  let (vtype, vid) = findVariableInEnv env vname
+  let vtype = findVariableInEnv env vid
   addOpWithoutType $ OpLoad vid
   pure vtype
 
