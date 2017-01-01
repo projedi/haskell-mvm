@@ -2,6 +2,7 @@ module SyntaxResolver
   ( resolve
   ) where
 
+import Control.Monad
 import Control.Monad.State (State, evalState)
 import qualified Control.Monad.State as State
 import Data.Either
@@ -205,6 +206,7 @@ withLayer m = do
 
 resolveBlock :: [PreSyntax.Statement] -> Resolver Syntax.Block
 resolveBlock stmts = withLayer $ do
+  forM_ stmts scanStatement
   stmts' <- concat <$> mapM resolveStatement stmts
   l <- (head . layers) <$> State.get
   lvars <- variablesInLayer l
@@ -215,6 +217,14 @@ resolveBlock stmts = withLayer $ do
     , Syntax.blockFunctions = lfuns
     , Syntax.blockForeignFunctions = lffuns
     }
+
+scanStatement :: PreSyntax.Statement -> Resolver ()
+scanStatement (PreSyntax.StatementVarDecl vdecl) = introduceVariable vdecl >> pure ()
+scanStatement (PreSyntax.StatementVarDef vdecl _) = introduceVariable vdecl >> pure ()
+scanStatement (PreSyntax.StatementFunctionDecl fdecl) = introduceFunction fdecl >> pure ()
+scanStatement (PreSyntax.StatementFunctionDef fdecl _) = introduceFunction fdecl >> pure ()
+scanStatement (PreSyntax.StatementForeignFunctionDecl fdecl) = resolveForeignFunctionDecl fdecl
+scanStatement _ = pure ()
 
 variablesInLayer :: Layer -> Resolver [Syntax.VarDecl]
 variablesInLayer l = do
@@ -254,16 +264,12 @@ resolveStatement (PreSyntax.StatementWhile e stmt) =
   sequence
     [ Syntax.StatementWhile <$> resolveExpr e <*> resolveBlock [stmt]
     ]
-resolveStatement (PreSyntax.StatementVarDecl vdecl) = do
-  _ <- introduceVariable vdecl
-  pure []
-resolveStatement (PreSyntax.StatementVarDef vdecl e) = do
+resolveStatement (PreSyntax.StatementVarDecl _) = pure []
+resolveStatement (PreSyntax.StatementVarDef (PreSyntax.VarDecl _ vname) e) = do
   sequence
-    [ Syntax.StatementAssign <$> introduceVariable vdecl <*> resolveExpr e
+    [ Syntax.StatementAssign <$> findVariable vname <*> resolveExpr e
     ]
-resolveStatement (PreSyntax.StatementFunctionDecl fdecl) = do
-  _ <- introduceFunction fdecl
-  pure []
+resolveStatement (PreSyntax.StatementFunctionDecl _) = pure []
 resolveStatement (PreSyntax.StatementAssign vname e) = do
   sequence [Syntax.StatementAssign <$> findVariable vname <*> resolveExpr e]
 resolveStatement (PreSyntax.StatementAssignPlus vname e) =
@@ -294,9 +300,7 @@ resolveStatement (PreSyntax.StatementReturn Nothing) =
   sequence [pure $ Syntax.StatementReturn Nothing]
 resolveStatement (PreSyntax.StatementReturn (Just e)) =
   sequence [(Syntax.StatementReturn . Just) <$> resolveExpr e]
-resolveStatement (PreSyntax.StatementForeignFunctionDecl fdecl) = do
-  resolveForeignFunctionDecl fdecl
-  pure []
+resolveStatement (PreSyntax.StatementForeignFunctionDecl _) = pure []
 
 resolveFunctionDef :: PreSyntax.FunctionDecl -> [PreSyntax.Statement] -> Resolver ()
 resolveFunctionDef fdecl@(PreSyntax.FunctionDecl _ _ params) stmts = do
