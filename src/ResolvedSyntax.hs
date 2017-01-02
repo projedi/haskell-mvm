@@ -23,6 +23,8 @@ data Program = Program
   { programFunctions :: IntMap FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
+  , programLastFunID :: FunID
+  , programLastVarID :: VarID
   }
 
 newtype VarID =
@@ -47,16 +49,21 @@ data Block = Block
   }
 
 data Statement
-  = StatementNoop
-  | StatementBlock Block
+  = StatementBlock Block
   | StatementFunctionCall FunctionCall
   | StatementWhile Expr
                    Block
   | StatementAssign VarID
                     Expr
+  | StatementAssignPlus VarID
+                        Expr
+  | StatementAssignMinus VarID
+                         Expr
   | StatementIfElse Expr
                     Block
                     Block
+  | StatementIf Expr
+                Block
   | StatementReturn (Maybe Expr)
 
 data AccessRecorder = AccessRecorder
@@ -131,5 +138,13 @@ data Expr
            Expr
   | ExprEq Expr
            Expr
+  | ExprNeq Expr
+            Expr
   | ExprLt Expr
            Expr
+  | ExprLeq Expr
+            Expr
+  | ExprGt Expr
+           Expr
+  | ExprGeq Expr
+            Expr

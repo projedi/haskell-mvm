@@ -330,7 +330,6 @@ executeBlock block =
      forM_ (blockStatements block) execute
 
 execute :: Statement -> Execute ()
-execute StatementNoop = pure ()
 execute (StatementBlock block) = executeBlock block
 execute (StatementFunctionCall fcall) = functionCall fcall >> pure ()
 execute s@(StatementWhile e block) = do

@@ -13,6 +13,8 @@ typeCheck p =
   { Syntax.programFunctions = runTypeChecker $ ResolvedSyntax.programFunctions p
   , Syntax.programLibraries = ResolvedSyntax.programLibraries p
   , Syntax.programForeignFunctions = ResolvedSyntax.programForeignFunctions p
+  , Syntax.programLastFunID = ResolvedSyntax.programLastFunID p
+  , Syntax.programLastVarID = ResolvedSyntax.programLastVarID p
   }
 
 runTypeChecker :: IntMap ResolvedSyntax.FunctionDef -> IntMap Syntax.FunctionDef
@@ -36,8 +38,14 @@ typecheckBlock block =
     map typecheckStatement $ ResolvedSyntax.blockStatements block
   }
 
+noopBlock :: Syntax.Block
+noopBlock =
+  Syntax.Block
+  { Syntax.blockVariables = []
+  , Syntax.blockStatements = []
+  }
+
 typecheckStatement :: ResolvedSyntax.Statement -> Syntax.Statement
-typecheckStatement ResolvedSyntax.StatementNoop = Syntax.StatementNoop
 typecheckStatement (ResolvedSyntax.StatementBlock block) =
   Syntax.StatementBlock $ typecheckBlock block
 typecheckStatement (ResolvedSyntax.StatementFunctionCall fcall) =
@@ -46,11 +54,21 @@ typecheckStatement (ResolvedSyntax.StatementWhile e block) =
   Syntax.StatementWhile (typecheckExpr e) (typecheckBlock block)
 typecheckStatement (ResolvedSyntax.StatementAssign v e) =
   Syntax.StatementAssign v (typecheckExpr e)
+typecheckStatement (ResolvedSyntax.StatementAssignPlus v e) =
+  Syntax.StatementAssign v (typecheckExpr e')
+  where
+    e' = ResolvedSyntax.ExprPlus (ResolvedSyntax.ExprVar v) e
+typecheckStatement (ResolvedSyntax.StatementAssignMinus v e) =
+  Syntax.StatementAssign v (typecheckExpr e')
+  where
+    e' = ResolvedSyntax.ExprMinus (ResolvedSyntax.ExprVar v) e
 typecheckStatement (ResolvedSyntax.StatementIfElse e bt bf) =
   Syntax.StatementIfElse
     (typecheckExpr e)
     (typecheckBlock bt)
     (typecheckBlock bf)
+typecheckStatement (ResolvedSyntax.StatementIf e bt) =
+  Syntax.StatementIfElse (typecheckExpr e) (typecheckBlock bt) noopBlock
 typecheckStatement (ResolvedSyntax.StatementReturn Nothing) =
   Syntax.StatementReturn Nothing
 typecheckStatement (ResolvedSyntax.StatementReturn (Just e)) =
@@ -95,5 +113,13 @@ typecheckExpr (ResolvedSyntax.ExprOr lhs rhs) =
   Syntax.ExprOr (typecheckExpr lhs) (typecheckExpr rhs)
 typecheckExpr (ResolvedSyntax.ExprEq lhs rhs) =
   Syntax.ExprEq (typecheckExpr lhs) (typecheckExpr rhs)
+typecheckExpr (ResolvedSyntax.ExprNeq lhs rhs) =
+  Syntax.ExprNot (Syntax.ExprEq (typecheckExpr lhs) (typecheckExpr rhs))
 typecheckExpr (ResolvedSyntax.ExprLt lhs rhs) =
   Syntax.ExprLt (typecheckExpr lhs) (typecheckExpr rhs)
+typecheckExpr (ResolvedSyntax.ExprLeq lhs rhs) =
+  Syntax.ExprNot (Syntax.ExprLt (typecheckExpr rhs) (typecheckExpr lhs))
+typecheckExpr (ResolvedSyntax.ExprGt lhs rhs) =
+  Syntax.ExprLt (typecheckExpr rhs) (typecheckExpr lhs)
+typecheckExpr (ResolvedSyntax.ExprGeq lhs rhs) =
+  Syntax.ExprNot (Syntax.ExprLt (typecheckExpr lhs) (typecheckExpr rhs))

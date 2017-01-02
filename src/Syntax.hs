@@ -23,6 +23,8 @@ data Program = Program
   { programFunctions :: IntMap FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
+  , programLastFunID :: FunID
+  , programLastVarID :: VarID
   }
 
 data Block = Block
@@ -31,8 +33,7 @@ data Block = Block
   }
 
 data Statement
-  = StatementNoop
-  | StatementBlock Block
+  = StatementBlock Block
   | StatementFunctionCall FunctionCall
   | StatementWhile Expr
                    Block

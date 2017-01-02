@@ -121,7 +121,6 @@ indent 0 str = str
 indent n str = "  " ++ indent (n - 1) str
 
 prettyPrintStatement :: Int -> Statement -> String
-prettyPrintStatement n StatementNoop = indent n ";"
 prettyPrintStatement n (StatementFunctionCall fcall) =
   indent n (prettyPrintSimple fcall ++ ";")
 prettyPrintStatement n (StatementAssign var expr) =

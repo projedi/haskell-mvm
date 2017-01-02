@@ -26,12 +26,9 @@ translate p =
   , bytecodeFunctions = bcFuns
   }
   where
-    lastForeignFunID fs
-      | IntMap.null fs = FunID 0
-      | otherwise = FunID $ fst $ IntMap.findMax fs
     initEnv =
       emptyEnv
-      { lastForeignFun = lastForeignFunID $ programForeignFunctions p
+      { lastForeignFun = programLastFunID p
       , foreignFuns = programForeignFunctions p
       , funs = programFunctions p
       }
@@ -148,7 +145,6 @@ translateBlock block = do
   forM_ (blockStatements block) translateStatement
 
 translateStatement :: Statement -> Translator ()
-translateStatement StatementNoop = pure ()
 translateStatement (StatementBlock block) = translateBlock block
 translateStatement (StatementFunctionCall fcall) = do
   retType <- functionCall fcall
