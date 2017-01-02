@@ -18,7 +18,7 @@ import Data.IntMap (IntMap)
 import PreSyntax (VarType(..))
 
 data Program = Program
-  { programStatements :: Block
+  { programFunctions :: IntMap FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
   }
@@ -41,7 +41,6 @@ data VarDecl =
 
 data Block = Block
   { blockVariables :: [VarDecl]
-  , blockFunctions :: [FunctionDef]
   , blockStatements :: [Statement]
   }
 

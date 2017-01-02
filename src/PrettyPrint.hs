@@ -14,7 +14,7 @@ prettyPrint :: Program -> String
 prettyPrint p = unlines
   [ printLibs $ programLibraries p
   , printForeignFunctions $ programForeignFunctions p
-  , prettyPrintBlock 0 $ programStatements p
+  , printFunctions $ programFunctions p
   ]
 
 printLibs :: [String] -> String
@@ -31,6 +31,14 @@ printForeignFunctions funs =
 printForeignFun :: ForeignFunctionDecl -> String
 printForeignFun fdecl =
   show (foreignFunDeclRetType fdecl) ++ " " ++ foreignFunDeclRealName fdecl ++ " " ++ show (foreignFunDeclParams fdecl)
+
+printFunctions :: IntMap FunctionDef -> String
+printFunctions funs =
+  "Functions: " ++
+  IntMap.foldrWithKey
+    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ prettyPrintFunctionDef 0 val)
+    ""
+    funs
 
 paren :: String -> String
 paren str = "(" ++ str ++ ")"
@@ -127,7 +135,6 @@ prettyPrintStatement n (StatementBlock stmts) = prettyPrintBlock n stmts
 prettyPrintBlock :: Int -> Block -> String
 prettyPrintBlock n block = indent n "{\n" ++
   unlines (map (indent (n + 1) . prettyPrintSimple) $ blockVariables block) ++
-  unlines (map (prettyPrintFunctionDef (n + 1)) $ blockFunctions block) ++
   printProgram (n + 1) (blockStatements block) ++ "\n" ++ indent n "}"
 
 prettyPrintFunctionDef :: Int -> FunctionDef -> String

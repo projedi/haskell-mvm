@@ -10,7 +10,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe
+import Data.Monoid ((<>))
 
 import qualified PreSyntax
 import qualified Syntax
@@ -19,11 +19,11 @@ resolve :: PreSyntax.Program -> Syntax.Program
 resolve p =
   Syntax.Program
   { Syntax.programLibraries = PreSyntax.programLibraries p
-  , Syntax.programStatements = code
+  , Syntax.programFunctions = nativeFuns
   , Syntax.programForeignFunctions = foreignFuns
   }
   where
-    (code, foreignFuns) = runResolver (resolveBlock $ PreSyntax.programStatements p)
+    (nativeFuns, foreignFuns) = runResolver (resolveBlock $ PreSyntax.programStatements p)
 
 data Layer = Layer
   { varEnv :: Map PreSyntax.VarName Syntax.VarID
@@ -163,13 +163,22 @@ findFunctionInEnv env fname =
 
 type Resolver a = State Env a
 
-runResolver :: Resolver Syntax.Block -> (Syntax.Block, IntMap Syntax.ForeignFunctionDecl)
-runResolver m = (code, foreignFuns)
+runResolver :: Resolver Syntax.Block -> (IntMap Syntax.FunctionDef, IntMap Syntax.ForeignFunctionDecl)
+runResolver m = (IntMap.singleton 0 mainCodeAsFun <> nativeFuns, foreignFuns)
   where
-    (code, finalEnv) = runState m emptyEnv
+    (mainCode, finalEnv) = runState m emptyEnv
+    mainCodeAsFun = Syntax.FunctionDef
+      { Syntax.funDefRetType = Nothing
+      , Syntax.funDefName = Syntax.FunID 0
+      , Syntax.funDefParams = []
+      , Syntax.funDefBody = mainCode
+      }
     foreignFuns = IntMap.mapMaybe asForeign $ funs finalEnv
     asForeign (_, Just (ForeignFunction f)) = Just f
     asForeign _ = Nothing
+    nativeFuns = IntMap.mapMaybe asNative $ funs finalEnv
+    asNative (_, Just (NativeFunction f)) = Just f
+    asNative _ = Nothing
 
 findVariable :: PreSyntax.VarName -> Resolver Syntax.VarID
 findVariable vname = (`findVariableInEnv` vname) <$> State.get
@@ -216,11 +225,9 @@ resolveBlock stmts = withLayer $ do
   stmts' <- concat <$> mapM resolveStatement stmts
   l <- (head . layers) <$> State.get
   lvars <- variablesInLayer l
-  lfuns <- functionsInLayer l
   pure $ Syntax.Block
     { Syntax.blockVariables = lvars
     , Syntax.blockStatements = stmts'
-    , Syntax.blockFunctions = lfuns
     }
 
 scanStatement :: PreSyntax.Statement -> Resolver ()
@@ -240,23 +247,10 @@ variablesInLayer l = do
       let Just vtype = IntMap.lookup vid vs
       in Syntax.VarDecl vtype (Syntax.VarID vid)
 
-functionsInLayer :: Layer -> Resolver [Syntax.FunctionDef]
-functionsInLayer l = do
-  fs <- funs <$> State.get
-  pure $ catMaybes $ map (\fid -> go fs fid) $ Map.elems (funEnv l)
-  where
-    go fs (Syntax.FunID fid) =
-      let Just (_, f) = IntMap.lookup fid fs
-      in case f of
-           Nothing -> Nothing
-           Just (NativeFunction fdef) -> Just fdef
-           Just (ForeignFunction _) -> Nothing
-
 noopBlock :: Syntax.Block
 noopBlock = Syntax.Block
   { Syntax.blockVariables = []
   , Syntax.blockStatements = []
-  , Syntax.blockFunctions = []
   }
 
 resolveStatement :: PreSyntax.Statement -> Resolver [Syntax.Statement]
@@ -347,13 +341,12 @@ resolveFor vname eFrom eTo s = do
           , Syntax.StatementBlock block
           , Syntax.StatementAssign vCur (Syntax.ExprPlus (Syntax.ExprVar vCur) (Syntax.ExprInt 1))
           ]
-        block' = Syntax.Block { Syntax.blockVariables = [], Syntax.blockFunctions = [], Syntax.blockStatements = stmts }
+        block' = Syntax.Block { Syntax.blockVariables = [], Syntax.blockStatements = stmts }
     pure [Syntax.StatementBlock $ Syntax.Block
       { Syntax.blockVariables =
         [ Syntax.VarDecl Syntax.VarTypeInt vCur
         , Syntax.VarDecl Syntax.VarTypeInt vTo
         ]
-      , Syntax.blockFunctions = []
       , Syntax.blockStatements =
         [ Syntax.StatementAssign vCur eFrom'
         , Syntax.StatementAssign vTo eTo'

@@ -19,10 +19,11 @@ import Value (Value(..))
 
 translate :: Program -> Bytecode
 translate p =
-  bc
+  Bytecode
      { bytecodeLibraries = programLibraries p
      , bytecodeConstants = consts finalEnv
      , bytecodeForeignFunctions = foreignFuns finalEnv
+     , bytecodeFunctions = bcFuns
      }
   where
     lastForeignFunID fs
@@ -31,12 +32,12 @@ translate p =
     initEnv = emptyEnv
       { lastForeignFun = lastForeignFunID $ programForeignFunctions p
       , foreignFuns = programForeignFunctions p
+      , funs = programFunctions p
       }
-    (bc, finalEnv) = runTranslator (translateBlock (programStatements p)) initEnv
+    (bcFuns, finalEnv) = runTranslator (programFunctions p) initEnv
 
 data Env = Env
-  { currentFunction :: FunID
-  , currentRetType :: Maybe VarType
+  { currentRetType :: Maybe VarType
   , lastLabel :: LabelID
   , lastConst :: ConstID
   , vars :: IntMap VarType
@@ -49,8 +50,7 @@ data Env = Env
 emptyEnv :: Env
 emptyEnv =
   Env
-  { currentFunction = FunID 0
-  , currentRetType = Nothing
+  { currentRetType = Nothing
   , lastLabel = LabelID (-1)
   , lastConst = ConstID (-1)
   , vars = IntMap.empty
@@ -60,40 +60,17 @@ emptyEnv =
   , lastForeignFun = FunID 0
   }
 
-findVariableInEnv :: Env -> VarID -> VarType
-findVariableInEnv env (VarID v) =
-  let Just vtype = IntMap.lookup v (vars env)
-  in vtype
-
 introduceVariableInEnv :: Env -> VarDecl -> Env
 introduceVariableInEnv env (VarDecl vtype (VarID v)) =
   let (Nothing, vars') = IntMap.insertLookupWithKey (\_ val _ -> val) v vtype (vars env)
   in env { vars = vars' }
 
-introduceFunctionInEnv :: Env -> FunctionDef -> Env
-introduceFunctionInEnv env fdef =
-  let (FunID fid) = funDefName fdef
-      funs' = IntMap.insert fid fdef (funs env)
-  in env { funs = funs' }
+type Translator a = WriterT BytecodeFunction (State Env) a
 
-findFunctionInEnv :: Env -> FunID -> FunctionDef
-findFunctionInEnv env (FunID fid) =
-  let (Just f) = IntMap.lookup fid (funs env)
-  in f
-
-type Translator a = WriterT Bytecode (State Env) a
-
-runTranslator :: Translator a -> Env -> (Bytecode, Env)
-runTranslator m = State.runState (Writer.execWriterT m)
-
-addCodeTo :: BytecodeFunction -> FunID -> Translator ()
-addCodeTo code (FunID fid) =
-  Writer.tell $ Bytecode
-    { bytecodeFunctions = IntMap.singleton fid code
-    , bytecodeLibraries = []
-    , bytecodeConstants = IntMap.empty
-    , bytecodeForeignFunctions = IntMap.empty
-    }
+runTranslator :: IntMap FunctionDef -> Env -> (IntMap BytecodeFunction, Env)
+runTranslator fs = State.runState $ (fst <$> Writer.runWriterT (mapM getBCFun fs))
+  where
+    getBCFun f = snd <$> localTranslate (translateFunctionBody f)
 
 newLabel :: Translator LabelID
 newLabel = do
@@ -107,18 +84,13 @@ newLabel = do
   where
     inc (LabelID lbl) = LabelID (lbl + 1)
 
-addCodeToCurrent :: BytecodeFunction -> Translator ()
-addCodeToCurrent code = do
-  fid <- currentFunction <$> State.get
-  addCodeTo code fid
-
 addOp :: Op -> Translator ()
-addOp op = addCodeToCurrent (BytecodeFunction [op])
+addOp op = Writer.tell (BytecodeFunction [op])
 
 findVariable :: VarID -> Translator VarType
-findVariable v = do
-  env <- State.get
-  pure $ findVariableInEnv env v
+findVariable (VarID v) = do
+  Just vtype <- (IntMap.lookup v . vars) <$> State.get
+  pure vtype
 
 introduceVariable :: VarDecl -> Translator VarID
 introduceVariable vdecl@(VarDecl vtype v) = do
@@ -128,39 +100,26 @@ introduceVariable vdecl@(VarDecl vtype v) = do
   addOp $ OpIntroVar v vtype
   pure v
 
-introduceFunction :: FunctionDef -> Translator ()
-introduceFunction fdef = do
-  env <- State.get
-  let env' = introduceFunctionInEnv env fdef
-  State.put env'
+findFunction :: FunID -> Translator FunctionDef
+findFunction (FunID f) = do
+  Just fdef <- (IntMap.lookup f . funs) <$> State.get
+  pure fdef
 
-namespaceBlock :: Translator a -> Translator a
-namespaceBlock m = m
-
-translateFunctionBody :: Maybe VarType -> FunID -> Translator () -> Translator ()
-translateFunctionBody retType fid body = do
+translateFunctionBody :: FunctionDef -> Translator ()
+translateFunctionBody f = do
   envBefore <- State.get
   State.put $
     envBefore
-    { currentFunction = fid
-    , currentRetType = retType
+    { currentRetType = (funDefRetType f)
     }
-  body
+  vs <- mapM introduceVariable $ funDefParams f
+  forM_ vs (addOp . OpStore)
+  translateStatement $ StatementBlock $ funDefBody f
   envAfter <- State.get
   State.put $
     envAfter
-    { currentFunction = currentFunction envBefore
-    , currentRetType = currentRetType envBefore
+    { currentRetType = currentRetType envBefore
     }
-
-translateNativeFunctionBody :: FunctionDef
-                            -> Translator ()
-translateNativeFunctionBody f =
-  translateFunctionBody (funDefRetType f) (funDefName f) $
-  namespaceBlock $
-  do vs <- mapM introduceVariable $ funDefParams f
-     forM_ vs (addOp . OpStore)
-     translateStatement $ StatementBlock $ funDefBody f
 
 translateReturn :: Translator ()
 translateReturn = do
@@ -175,22 +134,20 @@ translateReturnWithValue expr = do
   case retType of
     Nothing -> error "Type mismatch"
     Just expectedType -> do
-      actualType <- embedExpression expr
-      _ <- embedExpressionTranslator $ convert actualType expectedType
+      actualType <- translateExpression expr
+      _ <- convert actualType expectedType
       addOp OpReturn
 
 translateBlock :: Block -> Translator ()
-translateBlock block = namespaceBlock $ do
+translateBlock block = do
   forM_ (blockVariables block) introduceVariable
-  forM_ (blockFunctions block) introduceFunction
-  forM_ (blockFunctions block) translateNativeFunctionBody
   forM_ (blockStatements block) translateStatement
 
 translateStatement :: Statement -> Translator ()
 translateStatement StatementNoop = pure ()
 translateStatement (StatementBlock block) = translateBlock block
 translateStatement (StatementFunctionCall fcall) = do
-  retType <- embedExpressionTranslator (functionCall fcall)
+  retType <- functionCall fcall
   case retType of
     Nothing -> pure ()
     Just _ -> addOp OpPop
@@ -198,21 +155,21 @@ translateStatement (StatementWhile e block) = do
   labelLoopBegin <- newLabel
   labelAfterLoop <- newLabel
   addOp $ OpLabel labelLoopBegin
-  eType <- embedExpression e
+  eType <- translateExpression e
   when (eType /= VarTypeInt) $ error "Type mismatch"
   addOp $ OpJumpIfZero labelAfterLoop
   translateBlock block
   addOp $ OpJump labelLoopBegin
   addOp $ OpLabel labelAfterLoop
 translateStatement (StatementAssign v expr) = do
-  eType <- embedExpression expr
+  eType <- translateExpression expr
   vType <- findVariable v
-  _ <- embedExpressionTranslator (convert eType vType)
+  _ <- convert eType vType
   addOp $ OpStore v
 translateStatement (StatementIfElse e blockTrue blockFalse) = do
   labelElseBranch <- newLabel
   labelAfterIf <- newLabel
-  eType <- embedExpression e
+  eType <- translateExpression e
   when (eType /= VarTypeInt) $ error "Type mismatch"
   addOp $ OpJumpIfZero labelElseBranch
   translateBlock blockTrue
@@ -222,28 +179,6 @@ translateStatement (StatementIfElse e blockTrue blockFalse) = do
   addOp $ OpLabel labelAfterIf
 translateStatement (StatementReturn Nothing) = translateReturn
 translateStatement (StatementReturn (Just expr)) = translateReturnWithValue expr
-
-embedExpressionTranslator :: ExpressionTranslator a -> Translator a
-embedExpressionTranslator m = do
-  env <- State.get
-  let ((val, code), env') = State.runState (runExpressionTranslator m) env
-  State.put env'
-  addCodeToCurrent code
-  pure val
-
-embedExpression :: Expr -> Translator VarType
-embedExpression e = embedExpressionTranslator (translateExpression e)
-
-type ExpressionTranslator a = WriterT BytecodeFunction (State Env) a
-
-runExpressionTranslator :: ExpressionTranslator a
-                        -> State Env (a, BytecodeFunction)
-runExpressionTranslator = Writer.runWriterT
-
-findFunction :: FunID -> ExpressionTranslator FunctionDef
-findFunction fname = do
-  env <- State.get
-  pure $ findFunctionInEnv env fname
 
 convertArg :: VarType -> BytecodeFunction -> VarType -> BytecodeFunction
 convertArg argType (BytecodeFunction code) paramType =
@@ -257,13 +192,13 @@ convertArgs ((argType, code):args) (paramType:params) =
   convertArg argType code paramType : convertArgs args params
 convertArgs _ _ = error "Type mismatch"
 
-translateArgs :: [Expr] -> [VarType] -> ExpressionTranslator ()
+translateArgs :: [Expr] -> [VarType] -> Translator ()
 translateArgs args types = do
   valsWithTypes <- mapM (localTranslate . translateExpression) args
   let vals = convertArgs valsWithTypes types
-  forM_ (reverse vals) addCode
+  forM_ (reverse vals) Writer.tell
 
-generateNewForeignFunction :: String -> Maybe VarType -> [VarType] -> ExpressionTranslator FunID
+generateNewForeignFunction :: String -> Maybe VarType -> [VarType] -> Translator FunID
 generateNewForeignFunction name rettype params = do
   FunID f <- (inc . lastForeignFun) <$> State.get
   State.modify $ \env -> env
@@ -287,41 +222,40 @@ getPrintfDesc = concatMap desc
     desc VarTypeFloat = "%g"
     desc VarTypeString = "%s"
 
-printCall :: [Expr] -> ExpressionTranslator ()
+printCall :: [Expr] -> Translator ()
 printCall [] = pure ()
 printCall args = do
   valsWithTypes <- mapM (localTranslate . translateExpression) args
-  forM_ (reverse (map snd valsWithTypes)) addCode
+  forM_ (reverse (map snd valsWithTypes)) Writer.tell
   let types = map fst valsWithTypes
   cid <- newConstant $ ValueString $ Right $ getPrintfDesc types
-  addOpWithoutType (OpPushString cid)
+  addOp (OpPushString cid)
   f <- generateNewForeignFunction "printf" Nothing (VarTypeString : types)
-  addOpWithoutType $ OpForeignCall f
+  addOp $ OpForeignCall f
 
-functionCall :: FunctionCall -> ExpressionTranslator (Maybe VarType)
+functionCall :: FunctionCall -> Translator (Maybe VarType)
 functionCall (PrintCall args) =
   printCall args >> pure Nothing
 functionCall (ForeignFunctionCall (FunID fid) args) = do
   Just f <- (IntMap.lookup fid . foreignFuns) <$> State.get
   translateArgs args $ foreignFunDeclParams f
-  addOpWithoutType $ OpForeignCall (foreignFunDeclName f)
+  addOp $ OpForeignCall (foreignFunDeclName f)
   pure $ foreignFunDeclRetType f
 functionCall (NativeFunctionCall fid args) = do
   FunctionDef {funDefRetType = rettype, funDefParams = params} <- findFunction fid
   translateArgs args $ map (\(VarDecl t _) -> t) params
-  addOpWithoutType $ OpCall fid
+  addOp $ OpCall fid
   pure rettype
 
-loadVar :: VarID -> ExpressionTranslator VarType
+loadVar :: VarID -> Translator VarType
 loadVar vid = do
-  env <- State.get
-  let vtype = findVariableInEnv env vid
-  addOpWithoutType $ OpLoad vid
+  vtype <- findVariable vid
+  addOp $ OpLoad vid
   pure vtype
 
-localTranslate :: ExpressionTranslator a
-               -> ExpressionTranslator (a, BytecodeFunction)
-localTranslate m = Trans.lift $ runExpressionTranslator m
+localTranslate :: Translator a
+               -> Translator (a, BytecodeFunction)
+localTranslate m = Trans.lift $ Writer.runWriterT m
 
 convertOp :: VarType -> VarType -> Maybe Op
 convertOp VarTypeInt VarTypeInt = Nothing
@@ -330,14 +264,11 @@ convertOp VarTypeString VarTypeString = Nothing
 convertOp VarTypeInt VarTypeFloat = Just OpIntToFloat
 convertOp _ _ = error "Type mismatch"
 
-convert :: VarType -> VarType -> ExpressionTranslator VarType
+convert :: VarType -> VarType -> Translator VarType
 convert tFrom tTo =
   case convertOp tFrom tTo of
     Nothing -> pure tTo
     Just op -> addOpWithType op
-
-addCode :: BytecodeFunction -> ExpressionTranslator ()
-addCode = Writer.tell
 
 opRetType :: Op -> VarType
 opRetType OpNegateInt = VarTypeInt
@@ -376,13 +307,10 @@ opRetType (OpStore _) = error "Type mismatch"
 opRetType (OpLoad _) = error "Type mismatch"
 opRetType (OpIntroVar _ _) = error "Type mismatch"
 
-addOpWithoutType :: Op -> ExpressionTranslator ()
-addOpWithoutType op = addCode (BytecodeFunction [op])
+addOpWithType :: Op -> Translator VarType
+addOpWithType op = addOp op >> pure (opRetType op)
 
-addOpWithType :: Op -> ExpressionTranslator VarType
-addOpWithType op = addOpWithoutType op >> pure (opRetType op)
-
-newConstant :: Value -> ExpressionTranslator ConstID
+newConstant :: Value -> Translator ConstID
 newConstant val = do
   newConst@(ConstID cid) <- (inc . lastConst) <$> State.get
   State.modify $
@@ -398,7 +326,7 @@ newConstant val = do
 translateBinOp :: Expr
                -> Expr
                -> Map (VarType, VarType) (VarType, Op)
-               -> ExpressionTranslator VarType
+               -> Translator VarType
 translateBinOp lhs rhs table = do
   rhsType <- translateExpression rhs
   (lhsType, code) <- localTranslate $ translateExpression lhs
@@ -406,11 +334,11 @@ translateBinOp lhs rhs table = do
     Nothing -> error "Type mismatch"
     Just (resType, op) -> do
       _ <- convert rhsType resType
-      addCode code
+      Writer.tell code
       _ <- convert lhsType resType
       addOpWithType op
 
-translateExpression :: Expr -> ExpressionTranslator VarType
+translateExpression :: Expr -> Translator VarType
 translateExpression (ExprFunctionCall fcall) = do
   Just rettype <- functionCall fcall
   pure rettype

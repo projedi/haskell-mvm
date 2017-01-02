@@ -27,33 +27,19 @@ eval p = do
     \l -> do
       Right h <- dlopen l
       pure h
-  runExecute $ startExecute (programForeignFunctions p) (programStatements p)
+  runExecute $ startExecute (programForeignFunctions p) (programFunctions p)
   forM_ libhandles dlclose
   pure ()
 
 type LayerID = Int
 
-data FunctionImpl
-  = FunctionBody (LayerID, [VarID], Block)
-
-data Function =
-  Function (Maybe VarType)
-           [VarType]
-           (Maybe FunctionImpl)
-
-functionTypesMatch :: Function -> Function -> Bool
-functionTypesMatch (Function lrettype lparams _) (Function rrettype rparams _) =
-  lrettype == rrettype && lparams == rparams
-
 data Layer = Layer
   { varEnv :: IntMap Value
-  , funEnv :: IntMap Function
   }
 
 emptyLayer :: Layer
 emptyLayer = Layer
   { varEnv = IntMap.empty
-  , funEnv = IntMap.empty
   }
 
 readVariableFromLayer :: Layer -> VarID -> Maybe Value
@@ -91,40 +77,17 @@ addVariableToLayer l (VarID vid) vtype =
        (const Nothing)
        oldvalue
 
-getFunctionFromLayer :: Layer -> FunID -> Maybe Function
-getFunctionFromLayer l (FunID fid) = IntMap.lookup fid (funEnv l)
-
-addFunctionToLayer :: Layer -> FunID -> Function -> Maybe Layer
-addFunctionToLayer l (FunID fid) f@(Function _ _ body) =
-  let (oldvalue, newfunenv) =
-        IntMap.insertLookupWithKey (\_ a _ -> a) fid f (funEnv l)
-  in case (oldvalue, body) of
-       (Nothing, _) ->
-         Just $
-         l
-         { funEnv = newfunenv
-         }
-       (Just (Function _ _ (Just _)), Just _) -> Nothing
-       (Just oldf@(Function _ _ (Just _)), Nothing)
-         | functionTypesMatch oldf f -> Just l
-         | otherwise -> Nothing
-       (Just oldf@(Function _ _ Nothing), _)
-         | functionTypesMatch oldf f ->
-           Just $
-           l
-           { funEnv = newfunenv
-           }
-         | otherwise -> Nothing
-
 data Env = Env
   { envLayers :: [Layer]
   , envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
+  , envFunctions :: IntMap FunctionDef
   }
 
 emptyEnv :: Env
 emptyEnv = Env
   { envLayers = []
   , envForeignFunctions = IntMap.empty
+  , envFunctions = IntMap.empty
   }
 
 modifyingLayer :: (Layer -> Maybe Layer) -> [Layer] -> Maybe [Layer]
@@ -164,22 +127,6 @@ addVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname vtype =
          })
 addVariableToEnv _ _ _ = error "Env broke"
 
-getFunctionFromEnv :: Env -> FunID -> Maybe Function
-getFunctionFromEnv Env {envLayers = curlayer:otherlayers} name =
-  asum (map (`getFunctionFromLayer` name) (curlayer : otherlayers))
-getFunctionFromEnv _ _ = error "Env broke"
-
-addFunctionToEnv :: Env -> FunID -> Function -> Maybe Env
-addFunctionToEnv env@Env {envLayers = curlayer:otherlayers} fname f =
-  case addFunctionToLayer curlayer fname f of
-    Nothing -> Nothing
-    Just l' ->
-      Just $
-      env
-      { envLayers = l' : otherlayers
-      }
-addFunctionToEnv _ _ _ = error "Env broke"
-
 type Execute a = ExceptT (Maybe Value) (StateT Env IO) a
 
 withNewLayer :: Execute a -> Execute a
@@ -218,34 +165,21 @@ splitLayers lid = do
     }
   pure $ List.reverse preserve
 
-combineLayers :: [Layer] -> Execute ()
-combineLayers ls =
-  State.modify
-    (\env@Env {envLayers = layers} ->
-        env
-        { envLayers = ls ++ layers
-        })
-
-withLayer :: LayerID -> Execute a -> Execute a
-withLayer lid m = do
-  oldLid <- currentLayer
-  preserve <- splitLayers lid
-  res <- m
-  combineLayers preserve
-  newLid <- currentLayer
-  when (oldLid /= newLid) $ error "Scoping broke."
-  pure res
-
 runExecute :: Execute () -> IO ()
 runExecute m = do
   _ <- runStateT (runExceptT m) emptyEnv
   pure ()
 
-startExecute :: IntMap ForeignFunctionDecl -> Block -> Execute ()
-startExecute foreignFuns stmts = do
+startExecute :: IntMap ForeignFunctionDecl -> IntMap FunctionDef -> Execute ()
+startExecute foreignFuns nativeFuns = do
   funs <- mapM getForeignFun foreignFuns
-  State.modify $ \env -> env { envForeignFunctions = funs }
-  execute (StatementBlock stmts)
+  State.modify $ \env -> env
+    { envForeignFunctions = funs
+    , envFunctions = nativeFuns
+    }
+  let Just mainFun = IntMap.lookup 0 nativeFuns
+  _ <- nativeFunctionCall mainFun []
+  pure ()
   where
     getForeignFun fdecl = do
       Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
@@ -257,46 +191,21 @@ declareVariable (VarDecl vtype vname) = do
   let Just env' = addVariableToEnv env vname vtype
   State.put env'
 
-defineFunction :: FunctionDef -> Execute ()
-defineFunction f = do
-  env <- State.get
-  lid <- currentLayer
-  let (params, paramNames) = unzip $ map (\(VarDecl t n) -> (t, n)) $ funDefParams f
-  let Just env' =
-        addFunctionToEnv
-          env
-          (funDefName f)
-          (Function (funDefRetType f) params (Just $ FunctionBody (lid, paramNames, funDefBody f)))
-  State.put env'
-
 printCall :: [Value] -> Execute ()
 printCall vals =
   Trans.liftIO $
   do str <- concat <$> mapM showIO vals
      putStr str
 
-nativeFunctionCall
-  :: Maybe VarType
-  -> [VarType]
-  -> [VarID]
-  -> [Value]
-  -> LayerID
-  -> Block
-  -> Execute (Maybe Value)
-nativeFunctionCall rettype params paramNames vals lid body = do
-  res <-
-    withLayer lid $
-    withNewLayer $
-    do generateAssignments (paramDecls params paramNames) vals
-       executeBlockWithReturn body
-  case (res, rettype) of
+nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)
+nativeFunctionCall fdef vals = do
+  res <- withNewLayer $ do
+    generateAssignments (funDefParams fdef) vals
+    executeBlockWithReturn (funDefBody fdef)
+  case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
     (Just val, Just valtype) -> pure $ Just $ convert val valtype
     _ -> error "Type mismatch"
-  where
-    paramDecls [] [] = []
-    paramDecls (t:ts) (n:ns) = VarDecl t n : paramDecls ts ns
-    paramDecls _ _ = error "Type mismatch"
 
 foreignFunctionCall :: Maybe VarType
                     -> [VarType]
@@ -319,12 +228,10 @@ functionCall (ForeignFunctionCall (FunID fid) args) = do
   vals <- evaluateArgs args
   Just (fdecl, f) <- (IntMap.lookup fid . envForeignFunctions) <$> State.get
   foreignFunctionCall (foreignFunDeclRetType fdecl) (foreignFunDeclParams fdecl) vals f
-functionCall (NativeFunctionCall fname args) = do
-  env <- State.get
+functionCall (NativeFunctionCall (FunID fid) args) = do
   vals <- evaluateArgs args
-  let Just (Function rettype params (Just impl)) = getFunctionFromEnv env fname
-  case impl of
-    FunctionBody (lid, paramNames, body) -> nativeFunctionCall rettype params paramNames vals lid body
+  Just f <- (IntMap.lookup fid . envFunctions) <$> State.get
+  nativeFunctionCall f vals
 
 generateAssignment :: VarDecl -> Value -> Execute ()
 generateAssignment decl@(VarDecl _ name) val = do
@@ -410,7 +317,6 @@ evaluateAsInt e = do
 executeBlock :: Block -> Execute ()
 executeBlock block = withNewLayer $ do
   forM_ (blockVariables block) declareVariable
-  forM_ (blockFunctions block) defineFunction
   forM_ (blockStatements block) execute
 
 execute :: Statement -> Execute ()
