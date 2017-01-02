@@ -15,14 +15,14 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 
 import qualified PreSyntax
-import qualified Syntax
+import qualified ResolvedSyntax
 
-resolve :: PreSyntax.Program -> Syntax.Program
+resolve :: PreSyntax.Program -> ResolvedSyntax.Program
 resolve p =
-  Syntax.Program
-  { Syntax.programLibraries = PreSyntax.programLibraries p
-  , Syntax.programFunctions = nativeFuns
-  , Syntax.programForeignFunctions = foreignFuns
+  ResolvedSyntax.Program
+  { ResolvedSyntax.programLibraries = PreSyntax.programLibraries p
+  , ResolvedSyntax.programFunctions = nativeFuns
+  , ResolvedSyntax.programForeignFunctions = foreignFuns
   }
   where
     (nativeFuns, foreignFuns) =
@@ -32,8 +32,8 @@ resolve p =
       PreSyntax.FunctionDecl Nothing (PreSyntax.FunctionName "main") []
 
 data Layer = Layer
-  { varEnv :: Map PreSyntax.VarName Syntax.VarID
-  , funEnv :: Map PreSyntax.FunctionName Syntax.FunID
+  { varEnv :: Map PreSyntax.VarName ResolvedSyntax.VarID
+  , funEnv :: Map PreSyntax.FunctionName ResolvedSyntax.FunID
   }
 
 emptyLayer :: Layer
@@ -43,7 +43,10 @@ emptyLayer =
   , funEnv = Map.empty
   }
 
-newVariableInLayer :: Layer -> PreSyntax.VarName -> Syntax.VarID -> Maybe Layer
+newVariableInLayer :: Layer
+                   -> PreSyntax.VarName
+                   -> ResolvedSyntax.VarID
+                   -> Maybe Layer
 newVariableInLayer l@Layer {varEnv = lvars} vname vid =
   case Map.insertLookupWithKey (\_ val _ -> val) vname vid lvars of
     (Nothing, lvars') ->
@@ -53,10 +56,13 @@ newVariableInLayer l@Layer {varEnv = lvars} vname vid =
       }
     (Just _, _) -> Nothing
 
-findFunctionInLayer :: Layer -> PreSyntax.FunctionName -> Maybe Syntax.FunID
+findFunctionInLayer :: Layer -> PreSyntax.FunctionName -> Maybe ResolvedSyntax.FunID
 findFunctionInLayer Layer {funEnv = lfuns} fname = Map.lookup fname lfuns
 
-newFunctionInLayer :: Layer -> PreSyntax.FunctionName -> Syntax.FunID -> Maybe Layer
+newFunctionInLayer :: Layer
+                   -> PreSyntax.FunctionName
+                   -> ResolvedSyntax.FunID
+                   -> Maybe Layer
 newFunctionInLayer l@Layer {funEnv = lfuns} fname fid =
   case Map.insertLookupWithKey (\_ val _ -> val) fname fid lfuns of
     (Nothing, lfuns') ->
@@ -67,14 +73,14 @@ newFunctionInLayer l@Layer {funEnv = lfuns} fname fid =
     (Just _, _) -> Nothing
 
 data Function
-  = NativeFunction Syntax.FunctionDef
-  | ForeignFunction Syntax.ForeignFunctionDecl
+  = NativeFunction ResolvedSyntax.FunctionDef
+  | ForeignFunction ResolvedSyntax.ForeignFunctionDecl
 
 data Env = Env
-  { vars :: IntMap Syntax.VarType
+  { vars :: IntMap ResolvedSyntax.VarType
   , funs :: IntMap (PreSyntax.FunctionDecl, Maybe Function)
-  , lastVar :: Syntax.VarID
-  , lastFun :: Syntax.FunID
+  , lastVar :: ResolvedSyntax.VarID
+  , lastFun :: ResolvedSyntax.FunID
   , layers :: [Layer]
   }
 
@@ -83,25 +89,27 @@ emptyEnv =
   Env
   { vars = IntMap.empty
   , funs = IntMap.empty
-  , lastVar = Syntax.VarID (-1)
-  , lastFun = Syntax.FunID (-1)
+  , lastVar = ResolvedSyntax.VarID (-1)
+  , lastFun = ResolvedSyntax.FunID (-1)
   , layers = [emptyLayer]
   }
 
-newVariableInEnv :: Env -> Syntax.VarType -> (Syntax.VarID, Env)
+newVariableInEnv :: Env -> ResolvedSyntax.VarType -> (ResolvedSyntax.VarID, Env)
 newVariableInEnv env vtype =
-  let (Syntax.VarID v) = inc $ lastVar env
+  let (ResolvedSyntax.VarID v) = inc $ lastVar env
       (Nothing, vars') =
         IntMap.insertLookupWithKey (\_ val _ -> val) v vtype (vars env)
-  in ( Syntax.VarID v
+  in ( ResolvedSyntax.VarID v
      , env
-       { lastVar = Syntax.VarID v
+       { lastVar = ResolvedSyntax.VarID v
        , vars = vars'
        })
   where
-    inc (Syntax.VarID lastVarID) = Syntax.VarID (lastVarID + 1)
+    inc (ResolvedSyntax.VarID lastVarID) = ResolvedSyntax.VarID (lastVarID + 1)
 
-introduceVariableInEnv :: Env -> PreSyntax.VarDecl -> (Syntax.VarID, Env)
+introduceVariableInEnv :: Env
+                       -> PreSyntax.VarDecl
+                       -> (ResolvedSyntax.VarID, Env)
 introduceVariableInEnv env (PreSyntax.VarDecl vtype vname) =
   let (v, env'@Env {layers = (l:ls)}) = newVariableInEnv env vtype
       Just l' = newVariableInLayer l vname v
@@ -110,38 +118,41 @@ introduceVariableInEnv env (PreSyntax.VarDecl vtype vname) =
        { layers = l' : ls
        })
 
-checkExistingFunctionInEnv :: Env
-                           -> Syntax.FunID
-                           -> PreSyntax.FunctionDecl
-                           -> (Syntax.FunID, Env)
-checkExistingFunctionInEnv env (Syntax.FunID fid) fdecl =
+checkExistingFunctionInEnv
+  :: Env
+  -> ResolvedSyntax.FunID
+  -> PreSyntax.FunctionDecl
+  -> (ResolvedSyntax.FunID, Env)
+checkExistingFunctionInEnv env (ResolvedSyntax.FunID fid) fdecl =
   let Just (existingDecl, _) = IntMap.lookup fid $ funs env
   in if declMatch existingDecl fdecl
-       then (Syntax.FunID fid, env)
+       then (ResolvedSyntax.FunID fid, env)
        else error "Type mismatch"
   where
     declMatch (PreSyntax.FunctionDecl lrettype _ lparams) (PreSyntax.FunctionDecl rrettype _ rparams) =
       (lrettype == rrettype) && (getTypes lparams == getTypes rparams)
     getTypes = map (\(PreSyntax.VarDecl t _) -> t)
 
-newFunctionInEnv :: Env -> PreSyntax.FunctionDecl -> (Syntax.FunID, Env)
+newFunctionInEnv :: Env -> PreSyntax.FunctionDecl -> (ResolvedSyntax.FunID, Env)
 newFunctionInEnv env fdecl =
-  let (Syntax.FunID f) = inc $ lastFun env
+  let (ResolvedSyntax.FunID f) = inc $ lastFun env
       (Nothing, funs') =
         IntMap.insertLookupWithKey
           (\_ val _ -> val)
           f
           (fdecl, Nothing)
           (funs env)
-  in ( Syntax.FunID f
+  in ( ResolvedSyntax.FunID f
      , env
-       { lastFun = Syntax.FunID f
+       { lastFun = ResolvedSyntax.FunID f
        , funs = funs'
        })
   where
-    inc (Syntax.FunID lastFunID) = Syntax.FunID (lastFunID + 1)
+    inc (ResolvedSyntax.FunID lastFunID) = ResolvedSyntax.FunID (lastFunID + 1)
 
-introduceFunctionInEnv :: Env -> PreSyntax.FunctionDecl -> (Syntax.FunID, Env)
+introduceFunctionInEnv :: Env
+                       -> PreSyntax.FunctionDecl
+                       -> (ResolvedSyntax.FunID, Env)
 introduceFunctionInEnv env fdecl@(PreSyntax.FunctionDecl _ fname _) =
   case findFunctionInLayer (head $ layers env) fname of
     Just fid -> checkExistingFunctionInEnv env fid fdecl
@@ -153,8 +164,8 @@ introduceFunctionInEnv env fdecl@(PreSyntax.FunctionDecl _ fname _) =
            { layers = l' : ls
            })
 
-markFunctionAsDefinedInEnv :: Env -> Syntax.FunID -> Function -> Env
-markFunctionAsDefinedInEnv env (Syntax.FunID fid) f =
+markFunctionAsDefinedInEnv :: Env -> ResolvedSyntax.FunID -> Function -> Env
+markFunctionAsDefinedInEnv env (ResolvedSyntax.FunID fid) f =
   env
   { funs = go $ funs env
   }
@@ -163,17 +174,18 @@ markFunctionAsDefinedInEnv env (Syntax.FunID fid) f =
 
 findFunctionInEnv :: Env
                   -> PreSyntax.FunctionName
-                  -> (Syntax.FunID, Maybe Function)
+                  -> (ResolvedSyntax.FunID, Maybe Function)
 findFunctionInEnv env fname =
-  let (Just f@(Syntax.FunID fid)) =
+  let (Just f@(ResolvedSyntax.FunID fid)) =
         asum (map (`findFunctionInLayer` fname) (layers env))
       (Just (_, mf)) = IntMap.lookup fid (funs env)
   in (f, mf)
 
-type Resolver a = WriterT Syntax.AccessRecorder (State Env) a
+type Resolver a = WriterT ResolvedSyntax.AccessRecorder (State Env) a
 
-runResolver :: Resolver ()
-            -> (IntMap Syntax.FunctionDef, IntMap Syntax.ForeignFunctionDecl)
+runResolver
+  :: Resolver ()
+  -> (IntMap ResolvedSyntax.FunctionDef, IntMap ResolvedSyntax.ForeignFunctionDecl)
 runResolver m = (nativeFuns, foreignFuns)
   where
     finalEnv = execState (runWriterT m) emptyEnv
@@ -184,10 +196,10 @@ runResolver m = (nativeFuns, foreignFuns)
     asNative (_, Just (NativeFunction f)) = Just f
     asNative _ = Nothing
 
-withRemoteVarAccess :: Resolver a -> Resolver (a, Syntax.AccessRecorder)
+withRemoteVarAccess :: Resolver a -> Resolver (a, ResolvedSyntax.AccessRecorder)
 withRemoteVarAccess m = do
   (res, accesses) <- Writer.listen m
-  let accessedVariables = Syntax.varAccess accesses
+  let accessedVariables = ResolvedSyntax.varAccess accesses
   accessibleVariables <-
     (toSet . concatMap (Map.elems . varEnv) . layers) <$> State.get
   let localAccessedVariables = accessedVariables `IntSet.difference` accessibleVariables
@@ -195,71 +207,71 @@ withRemoteVarAccess m = do
   pure
     ( res
     , accesses
-      { Syntax.varAccess = remoteAccessedVariables
+      { ResolvedSyntax.varAccess = remoteAccessedVariables
       })
   where
-    toSet = IntSet.fromList . map (\(Syntax.VarID v) -> v)
+    toSet = IntSet.fromList . map (\(ResolvedSyntax.VarID v) -> v)
 
-recordVarAccess :: Syntax.VarID -> Resolver ()
-recordVarAccess (Syntax.VarID v) =
+recordVarAccess :: ResolvedSyntax.VarID -> Resolver ()
+recordVarAccess (ResolvedSyntax.VarID v) =
   Writer.tell
-    Syntax.AccessRecorder
-    { Syntax.varAccess = IntSet.singleton v
-    , Syntax.funAccess = IntSet.empty
-    , Syntax.foreignFunAccess = IntSet.empty
+    ResolvedSyntax.AccessRecorder
+    { ResolvedSyntax.varAccess = IntSet.singleton v
+    , ResolvedSyntax.funAccess = IntSet.empty
+    , ResolvedSyntax.foreignFunAccess = IntSet.empty
     }
 
-recordForeignFunAccess :: Syntax.FunID -> Resolver ()
-recordForeignFunAccess (Syntax.FunID v) =
+recordForeignFunAccess :: ResolvedSyntax.FunID -> Resolver ()
+recordForeignFunAccess (ResolvedSyntax.FunID v) =
   Writer.tell
-    Syntax.AccessRecorder
-    { Syntax.foreignFunAccess = IntSet.singleton v
-    , Syntax.funAccess = IntSet.empty
-    , Syntax.varAccess = IntSet.empty
+    ResolvedSyntax.AccessRecorder
+    { ResolvedSyntax.foreignFunAccess = IntSet.singleton v
+    , ResolvedSyntax.funAccess = IntSet.empty
+    , ResolvedSyntax.varAccess = IntSet.empty
     }
 
-recordFunAccess :: Syntax.FunID -> Resolver ()
-recordFunAccess (Syntax.FunID v) =
+recordFunAccess :: ResolvedSyntax.FunID -> Resolver ()
+recordFunAccess (ResolvedSyntax.FunID v) =
   Writer.tell
-    Syntax.AccessRecorder
-    { Syntax.funAccess = IntSet.singleton v
-    , Syntax.foreignFunAccess = IntSet.empty
-    , Syntax.varAccess = IntSet.empty
+    ResolvedSyntax.AccessRecorder
+    { ResolvedSyntax.funAccess = IntSet.singleton v
+    , ResolvedSyntax.foreignFunAccess = IntSet.empty
+    , ResolvedSyntax.varAccess = IntSet.empty
     }
 
-usingVariable :: PreSyntax.VarName -> Resolver Syntax.VarID
+usingVariable :: PreSyntax.VarName -> Resolver ResolvedSyntax.VarID
 usingVariable vname = do
   Just v <- (asum . map (Map.lookup vname . varEnv) . layers) <$> State.get
   recordVarAccess v
   pure v
 
-newVariable :: Syntax.VarType -> Resolver Syntax.VarID
+newVariable :: ResolvedSyntax.VarType -> Resolver ResolvedSyntax.VarID
 newVariable vtype = do
   envBefore <- State.get
   let (v, envAfter) = newVariableInEnv envBefore vtype
   State.put envAfter
   pure v
 
-introduceVariable :: PreSyntax.VarDecl -> Resolver Syntax.VarID
+introduceVariable :: PreSyntax.VarDecl -> Resolver ResolvedSyntax.VarID
 introduceVariable vdecl = do
   envBefore <- State.get
   let (v, envAfter) = introduceVariableInEnv envBefore vdecl
   State.put envAfter
   pure v
 
-introduceFunction :: PreSyntax.FunctionDecl -> Resolver Syntax.FunID
+introduceFunction :: PreSyntax.FunctionDecl -> Resolver ResolvedSyntax.FunID
 introduceFunction fdecl = do
   env <- State.get
   let (f, env') = introduceFunctionInEnv env fdecl
   State.put env'
   pure f
 
-markFunctionAsDefined :: Syntax.FunID -> Function -> Resolver ()
+markFunctionAsDefined :: ResolvedSyntax.FunID -> Function -> Resolver ()
 markFunctionAsDefined fid f =
   State.modify (\env -> markFunctionAsDefinedInEnv env fid f)
 
 findFunction :: PreSyntax.FunctionName
-             -> Resolver (Syntax.FunID, Maybe Function)
+             -> Resolver (ResolvedSyntax.FunID, Maybe Function)
 findFunction fname = do
   env <- State.get
   pure $ findFunctionInEnv env fname
@@ -279,7 +291,7 @@ withLayer m = do
        }
   pure res
 
-resolveBlock :: [PreSyntax.Statement] -> Resolver Syntax.Block
+resolveBlock :: [PreSyntax.Statement] -> Resolver ResolvedSyntax.Block
 resolveBlock stmts =
   withLayer $
   do forM_ stmts scanStatement
@@ -287,9 +299,9 @@ resolveBlock stmts =
      l <- (head . layers) <$> State.get
      lvars <- variablesInLayer l
      pure
-       Syntax.Block
-       { Syntax.blockVariables = lvars
-       , Syntax.blockStatements = stmts'
+       ResolvedSyntax.Block
+       { ResolvedSyntax.blockVariables = lvars
+       , ResolvedSyntax.blockStatements = stmts'
        }
 
 scanStatement :: PreSyntax.Statement -> Resolver ()
@@ -305,51 +317,57 @@ scanStatement (PreSyntax.StatementForeignFunctionDecl fdecl) =
   resolveForeignFunctionDecl fdecl
 scanStatement _ = pure ()
 
-variablesInLayer :: Layer -> Resolver [Syntax.VarDecl]
+variablesInLayer :: Layer -> Resolver [ResolvedSyntax.VarDecl]
 variablesInLayer l = do
   vs <- vars <$> State.get
   pure $ map (go vs) $ Map.elems (varEnv l)
   where
-    go vs (Syntax.VarID vid) =
+    go vs (ResolvedSyntax.VarID vid) =
       let Just vtype = IntMap.lookup vid vs
-      in Syntax.VarDecl vtype (Syntax.VarID vid)
+      in ResolvedSyntax.VarDecl vtype (ResolvedSyntax.VarID vid)
 
-noopBlock :: Syntax.Block
+noopBlock :: ResolvedSyntax.Block
 noopBlock =
-  Syntax.Block
-  { Syntax.blockVariables = []
-  , Syntax.blockStatements = []
+  ResolvedSyntax.Block
+  { ResolvedSyntax.blockVariables = []
+  , ResolvedSyntax.blockStatements = []
   }
 
-resolveStatement :: PreSyntax.Statement -> Resolver [Syntax.Statement]
+resolveStatement :: PreSyntax.Statement -> Resolver [ResolvedSyntax.Statement]
 resolveStatement (PreSyntax.StatementBlock stmts) =
-  sequence [Syntax.StatementBlock <$> resolveBlock stmts]
+  sequence [ResolvedSyntax.StatementBlock <$> resolveBlock stmts]
 resolveStatement (PreSyntax.StatementFunctionCall fcall) =
-  sequence [Syntax.StatementFunctionCall <$> resolveFunctionCall fcall]
+  sequence [ResolvedSyntax.StatementFunctionCall <$> resolveFunctionCall fcall]
 resolveStatement (PreSyntax.StatementWhile e stmt) =
-  sequence [Syntax.StatementWhile <$> resolveExpr e <*> resolveBlock [stmt]]
+  sequence
+    [ResolvedSyntax.StatementWhile <$> resolveExpr e <*> resolveBlock [stmt]]
 resolveStatement (PreSyntax.StatementVarDecl _) = pure []
 resolveStatement (PreSyntax.StatementVarDef (PreSyntax.VarDecl _ vname) e) =
-  sequence [Syntax.StatementAssign <$> usingVariable vname <*> resolveExpr e]
+  sequence
+    [ResolvedSyntax.StatementAssign <$> usingVariable vname <*> resolveExpr e]
 resolveStatement (PreSyntax.StatementFunctionDecl _) = pure []
 resolveStatement (PreSyntax.StatementAssign vname e) =
-  sequence [Syntax.StatementAssign <$> usingVariable vname <*> resolveExpr e]
+  sequence
+    [ResolvedSyntax.StatementAssign <$> usingVariable vname <*> resolveExpr e]
 resolveStatement (PreSyntax.StatementAssignPlus vname e) =
-  sequence [Syntax.StatementAssign <$> usingVariable vname <*> resolveExpr e']
+  sequence
+    [ResolvedSyntax.StatementAssign <$> usingVariable vname <*> resolveExpr e']
   where
     e' = PreSyntax.ExprPlus (PreSyntax.ExprVar vname) e
 resolveStatement (PreSyntax.StatementAssignMinus vname e) =
-  sequence [Syntax.StatementAssign <$> usingVariable vname <*> resolveExpr e']
+  sequence
+    [ResolvedSyntax.StatementAssign <$> usingVariable vname <*> resolveExpr e']
   where
     e' = PreSyntax.ExprMinus (PreSyntax.ExprVar vname) e
 resolveStatement (PreSyntax.StatementIfElse e s1 s2) =
   sequence
-    [ Syntax.StatementIfElse <$> resolveExpr e <*> resolveBlock [s1] <*>
+    [ ResolvedSyntax.StatementIfElse <$> resolveExpr e <*> resolveBlock [s1] <*>
       resolveBlock [s2]
     ]
 resolveStatement (PreSyntax.StatementIf e s) =
   sequence
-    [ Syntax.StatementIfElse <$> resolveExpr e <*> resolveBlock [s] <*> pure noopBlock
+    [ ResolvedSyntax.StatementIfElse <$> resolveExpr e <*> resolveBlock [s] <*>
+      pure noopBlock
     ]
 resolveStatement (PreSyntax.StatementFor vname e1 e2 s) =
   resolveFor vname e1 e2 s
@@ -357,9 +375,9 @@ resolveStatement (PreSyntax.StatementFunctionDef fdecl stmts) = do
   resolveFunctionDef fdecl stmts
   pure []
 resolveStatement (PreSyntax.StatementReturn Nothing) =
-  sequence [pure $ Syntax.StatementReturn Nothing]
+  sequence [pure $ ResolvedSyntax.StatementReturn Nothing]
 resolveStatement (PreSyntax.StatementReturn (Just e)) =
-  sequence [(Syntax.StatementReturn . Just) <$> resolveExpr e]
+  sequence [(ResolvedSyntax.StatementReturn . Just) <$> resolveExpr e]
 resolveStatement (PreSyntax.StatementForeignFunctionDecl _) = pure []
 
 resolveFunctionDef :: PreSyntax.FunctionDecl
@@ -372,27 +390,27 @@ resolveFunctionDef fdecl@(PreSyntax.FunctionDecl rettype _ params) stmts = do
     withLayer $ (,) <$> mapM introduceParam params <*> resolveBlock stmts
   markFunctionAsDefined f $
     NativeFunction
-      Syntax.FunctionDef
-      { Syntax.funDefRetType = rettype
-      , Syntax.funDefName = f
-      , Syntax.funDefParams = params'
-      , Syntax.funDefAccesses = accesses
-      , Syntax.funDefBody = body
+      ResolvedSyntax.FunctionDef
+      { ResolvedSyntax.funDefRetType = rettype
+      , ResolvedSyntax.funDefName = f
+      , ResolvedSyntax.funDefParams = params'
+      , ResolvedSyntax.funDefAccesses = accesses
+      , ResolvedSyntax.funDefBody = body
       }
   where
     introduceParam p@(PreSyntax.VarDecl t _) =
-      Syntax.VarDecl t <$> introduceVariable p
+      ResolvedSyntax.VarDecl t <$> introduceVariable p
 
 resolveForeignFunctionDecl :: PreSyntax.FunctionDecl -> Resolver ()
 resolveForeignFunctionDecl fdecl@(PreSyntax.FunctionDecl rettype (PreSyntax.FunctionName name) params) = do
   f <- introduceFunction fdecl
   markFunctionAsDefined f $
     ForeignFunction
-      Syntax.ForeignFunctionDecl
-      { Syntax.foreignFunDeclRetType = rettype
-      , Syntax.foreignFunDeclName = f
-      , Syntax.foreignFunDeclRealName = name
-      , Syntax.foreignFunDeclParams =
+      ResolvedSyntax.ForeignFunctionDecl
+      { ResolvedSyntax.foreignFunDeclRetType = rettype
+      , ResolvedSyntax.foreignFunDeclName = f
+      , ResolvedSyntax.foreignFunDeclRealName = name
+      , ResolvedSyntax.foreignFunDeclParams =
         map (\(PreSyntax.VarDecl vtype _) -> vtype) params
       }
 
@@ -401,98 +419,103 @@ resolveFor
   -> PreSyntax.Expr
   -> PreSyntax.Expr
   -> PreSyntax.Statement
-  -> Resolver [Syntax.Statement]
+  -> Resolver [ResolvedSyntax.Statement]
 resolveFor vname eFrom eTo s = do
   v <- usingVariable vname
   eFrom' <- resolveExpr eFrom
   eTo' <- resolveExpr eTo
   block <- resolveBlock [s]
   withLayer $
-    do vCur <- newVariable Syntax.VarTypeInt
-       vTo <- newVariable Syntax.VarTypeInt
+    do vCur <- newVariable ResolvedSyntax.VarTypeInt
+       vTo <- newVariable ResolvedSyntax.VarTypeInt
        let expr =
-             Syntax.ExprNot
-               (Syntax.ExprLt (Syntax.ExprVar vTo) (Syntax.ExprVar vCur))
+             ResolvedSyntax.ExprNot
+               (ResolvedSyntax.ExprLt
+                  (ResolvedSyntax.ExprVar vTo)
+                  (ResolvedSyntax.ExprVar vCur))
            stmts =
-             [ Syntax.StatementAssign v (Syntax.ExprVar vCur)
-             , Syntax.StatementBlock block
-             , Syntax.StatementAssign
+             [ ResolvedSyntax.StatementAssign v (ResolvedSyntax.ExprVar vCur)
+             , ResolvedSyntax.StatementBlock block
+             , ResolvedSyntax.StatementAssign
                  vCur
-                 (Syntax.ExprPlus (Syntax.ExprVar vCur) (Syntax.ExprInt 1))
+                 (ResolvedSyntax.ExprPlus
+                    (ResolvedSyntax.ExprVar vCur)
+                    (ResolvedSyntax.ExprInt 1))
              ]
            block' =
-             Syntax.Block
-             { Syntax.blockVariables = []
-             , Syntax.blockStatements = stmts
+             ResolvedSyntax.Block
+             { ResolvedSyntax.blockVariables = []
+             , ResolvedSyntax.blockStatements = stmts
              }
        pure
-         [ Syntax.StatementBlock
-             Syntax.Block
-             { Syntax.blockVariables =
-               [ Syntax.VarDecl Syntax.VarTypeInt vCur
-               , Syntax.VarDecl Syntax.VarTypeInt vTo
+         [ ResolvedSyntax.StatementBlock
+             ResolvedSyntax.Block
+             { ResolvedSyntax.blockVariables =
+               [ ResolvedSyntax.VarDecl ResolvedSyntax.VarTypeInt vCur
+               , ResolvedSyntax.VarDecl ResolvedSyntax.VarTypeInt vTo
                ]
-             , Syntax.blockStatements =
-               [ Syntax.StatementAssign vCur eFrom'
-               , Syntax.StatementAssign vTo eTo'
-               , Syntax.StatementWhile expr block'
+             , ResolvedSyntax.blockStatements =
+               [ ResolvedSyntax.StatementAssign vCur eFrom'
+               , ResolvedSyntax.StatementAssign vTo eTo'
+               , ResolvedSyntax.StatementWhile expr block'
                ]
              }
          ]
 
-resolveFunctionCall :: PreSyntax.FunctionCall -> Resolver Syntax.FunctionCall
+resolveFunctionCall :: PreSyntax.FunctionCall -> Resolver ResolvedSyntax.FunctionCall
 resolveFunctionCall (PreSyntax.FunctionCall (PreSyntax.FunctionName "print") args) =
-  Syntax.PrintCall <$> mapM resolveExpr args
+  ResolvedSyntax.PrintCall <$> mapM resolveExpr args
 resolveFunctionCall (PreSyntax.FunctionCall fname args) = do
   (fid, mf) <- findFunction fname
   case mf of
     Just (ForeignFunction f) -> do
       recordForeignFunAccess fid
-      Syntax.ForeignFunctionCall (Syntax.foreignFunDeclName f) <$>
+      ResolvedSyntax.ForeignFunctionCall (ResolvedSyntax.foreignFunDeclName f) <$>
         mapM resolveExpr args
     Just (NativeFunction _) -> do
       recordFunAccess fid
-      Syntax.NativeFunctionCall fid <$> mapM resolveExpr args
+      ResolvedSyntax.NativeFunctionCall fid <$> mapM resolveExpr args
     Nothing -- Because of prescanning in the block, this is definetely not a foreign call.
      -> do
       recordFunAccess fid
-      Syntax.NativeFunctionCall fid <$> mapM resolveExpr args
+      ResolvedSyntax.NativeFunctionCall fid <$> mapM resolveExpr args
 
-resolveExpr :: PreSyntax.Expr -> Resolver Syntax.Expr
+resolveExpr :: PreSyntax.Expr -> Resolver ResolvedSyntax.Expr
 resolveExpr (PreSyntax.ExprFunctionCall fcall) =
-  Syntax.ExprFunctionCall <$> resolveFunctionCall fcall
-resolveExpr (PreSyntax.ExprVar vname) = Syntax.ExprVar <$> usingVariable vname
-resolveExpr (PreSyntax.ExprInt i) = pure $ Syntax.ExprInt i
-resolveExpr (PreSyntax.ExprFloat f) = pure $ Syntax.ExprFloat f
-resolveExpr (PreSyntax.ExprString s) = pure $ Syntax.ExprString s
-resolveExpr (PreSyntax.ExprNeg e) = Syntax.ExprNeg <$> resolveExpr e
+  ResolvedSyntax.ExprFunctionCall <$> resolveFunctionCall fcall
+resolveExpr (PreSyntax.ExprVar vname) =
+  ResolvedSyntax.ExprVar <$> usingVariable vname
+resolveExpr (PreSyntax.ExprInt i) = pure $ ResolvedSyntax.ExprInt i
+resolveExpr (PreSyntax.ExprFloat f) = pure $ ResolvedSyntax.ExprFloat f
+resolveExpr (PreSyntax.ExprString s) = pure $ ResolvedSyntax.ExprString s
+resolveExpr (PreSyntax.ExprNeg e) = ResolvedSyntax.ExprNeg <$> resolveExpr e
 resolveExpr (PreSyntax.ExprPlus lhs rhs) =
-  Syntax.ExprPlus <$> resolveExpr lhs <*> resolveExpr rhs
+  ResolvedSyntax.ExprPlus <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprMinus lhs rhs) =
-  Syntax.ExprMinus <$> resolveExpr lhs <*> resolveExpr rhs
+  ResolvedSyntax.ExprMinus <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprTimes lhs rhs) =
-  Syntax.ExprTimes <$> resolveExpr lhs <*> resolveExpr rhs
+  ResolvedSyntax.ExprTimes <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprDiv lhs rhs) =
-  Syntax.ExprDiv <$> resolveExpr lhs <*> resolveExpr rhs
+  ResolvedSyntax.ExprDiv <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprMod lhs rhs) =
-  Syntax.ExprMod <$> resolveExpr lhs <*> resolveExpr rhs
+  ResolvedSyntax.ExprMod <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprBitAnd lhs rhs) =
-  Syntax.ExprBitAnd <$> resolveExpr lhs <*> resolveExpr rhs
+  ResolvedSyntax.ExprBitAnd <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprBitOr lhs rhs) =
-  Syntax.ExprBitOr <$> resolveExpr lhs <*> resolveExpr rhs
+  ResolvedSyntax.ExprBitOr <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprBitXor lhs rhs) =
-  Syntax.ExprBitXor <$> resolveExpr lhs <*> resolveExpr rhs
-resolveExpr (PreSyntax.ExprNot e) = Syntax.ExprNot <$> resolveExpr e
+  ResolvedSyntax.ExprBitXor <$> resolveExpr lhs <*> resolveExpr rhs
+resolveExpr (PreSyntax.ExprNot e) = ResolvedSyntax.ExprNot <$> resolveExpr e
 resolveExpr (PreSyntax.ExprAnd lhs rhs) =
-  Syntax.ExprAnd <$> resolveExpr lhs <*> resolveExpr rhs
+  ResolvedSyntax.ExprAnd <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprOr lhs rhs) =
-  Syntax.ExprOr <$> resolveExpr lhs <*> resolveExpr rhs
+  ResolvedSyntax.ExprOr <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprEq lhs rhs) =
-  Syntax.ExprEq <$> resolveExpr lhs <*> resolveExpr rhs
+  ResolvedSyntax.ExprEq <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprNeq lhs rhs) =
   resolveExpr $ PreSyntax.ExprNot (PreSyntax.ExprEq lhs rhs)
 resolveExpr (PreSyntax.ExprLt lhs rhs) =
-  Syntax.ExprLt <$> resolveExpr lhs <*> resolveExpr rhs
+  ResolvedSyntax.ExprLt <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprLeq lhs rhs) =
   resolveExpr $ PreSyntax.ExprNot (PreSyntax.ExprGt lhs rhs)
 resolveExpr (PreSyntax.ExprGt lhs rhs) = resolveExpr $ PreSyntax.ExprLt rhs lhs

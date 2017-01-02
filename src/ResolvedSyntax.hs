@@ -1,4 +1,4 @@
-module Syntax
+module ResolvedSyntax
   ( Program(..)
   , VarID(..)
   , FunID(..)
@@ -14,16 +14,32 @@ module Syntax
   ) where
 
 import Data.IntMap (IntMap)
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
 
-import ResolvedSyntax
-       (VarType(..), VarID(..), FunID(..), VarDecl(..),
-        AccessRecorder(..), ForeignFunctionDecl(..))
+import PreSyntax (VarType(..))
 
 data Program = Program
   { programFunctions :: IntMap FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
   }
+
+newtype VarID =
+  VarID Int
+
+instance Show VarID where
+  show (VarID i) = "var_" ++ show i
+
+newtype FunID =
+  FunID Int
+
+instance Show FunID where
+  show (FunID i) = "fun_" ++ show i
+
+data VarDecl =
+  VarDecl VarType
+          VarID
 
 data Block = Block
   { blockVariables :: [VarDecl]
@@ -43,12 +59,39 @@ data Statement
                     Block
   | StatementReturn (Maybe Expr)
 
+data AccessRecorder = AccessRecorder
+  { varAccess :: IntSet
+  , funAccess :: IntSet
+  , foreignFunAccess :: IntSet
+  }
+
+instance Monoid AccessRecorder where
+  mempty =
+    AccessRecorder
+    { varAccess = IntSet.empty
+    , funAccess = IntSet.empty
+    , foreignFunAccess = IntSet.empty
+    }
+  lhs `mappend` rhs =
+    AccessRecorder
+    { varAccess = varAccess lhs `mappend` varAccess rhs
+    , funAccess = funAccess lhs `mappend` funAccess rhs
+    , foreignFunAccess = foreignFunAccess lhs `mappend` foreignFunAccess rhs
+    }
+
 data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
   , funDefAccesses :: AccessRecorder
   , funDefBody :: Block
+  }
+
+data ForeignFunctionDecl = ForeignFunctionDecl
+  { foreignFunDeclRetType :: Maybe VarType
+  , foreignFunDeclName :: FunID
+  , foreignFunDeclRealName :: String
+  , foreignFunDeclParams :: [VarType]
   }
 
 data FunctionCall

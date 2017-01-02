@@ -27,8 +27,10 @@ library
                      , Parser
                      , PreSyntax
                      , PrettyPrint
+                     , ResolvedSyntax
                      , Syntax
                      , SyntaxResolver
+                     , TypeChecker
                      , Util
                      , Value
   c-sources:           src/ForeignEval.c
