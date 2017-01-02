@@ -15,7 +15,6 @@ import Data.Foldable (asum)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.List as List
-import Data.Maybe
 
 import ForeignEval
 import Syntax
@@ -119,7 +118,7 @@ addFunctionToLayer l (FunID fid) f@(Function _ _ body) =
 
 data Env = Env
   { envLayers :: [Layer]
-  , envForeignFunctions :: IntMap ForeignFun
+  , envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   }
 
 emptyEnv :: Env
@@ -242,11 +241,15 @@ runExecute m = do
   _ <- runStateT (runExceptT m) emptyEnv
   pure ()
 
-startExecute :: IntMap String -> Block -> Execute ()
+startExecute :: IntMap ForeignFunctionDecl -> Block -> Execute ()
 startExecute foreignFuns stmts = do
-  mfuns <- mapM (Trans.liftIO . findSymbol) foreignFuns
-  State.modify $ \env -> env { envForeignFunctions = fromJust <$> mfuns }
+  funs <- mapM getForeignFun foreignFuns
+  State.modify $ \env -> env { envForeignFunctions = funs }
   execute (StatementBlock stmts)
+  where
+    getForeignFun fdecl = do
+      Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
+      pure (fdecl, f)
 
 declareVariable :: VarDecl -> Execute ()
 declareVariable (VarDecl vtype vname) = do
@@ -312,10 +315,9 @@ functionCall (PrintCall args) = do
   vals <- evaluateArgs args
   printCall vals
   pure Nothing
-functionCall (ForeignFunctionCall fdecl args) = do
+functionCall (ForeignFunctionCall (FunID fid) args) = do
   vals <- evaluateArgs args
-  let (FunID fid) = foreignFunDeclName fdecl
-  Just f <- (IntMap.lookup fid . envForeignFunctions) <$> State.get
+  Just (fdecl, f) <- (IntMap.lookup fid . envForeignFunctions) <$> State.get
   foreignFunctionCall (foreignFunDeclRetType fdecl) (foreignFunDeclParams fdecl) vals f
 functionCall (NativeFunctionCall fname args) = do
   env <- State.get

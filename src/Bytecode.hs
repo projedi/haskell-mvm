@@ -4,6 +4,7 @@ module Bytecode
   ( Bytecode(..)
   , ConstID(..)
   , FunID(..)
+  , ForeignFunctionDecl(..)
   , VarID(..)
   , LabelID(..)
   , BytecodeFunction(..)
@@ -14,7 +15,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Monoid ((<>))
 
-import Syntax (VarType, VarID(..), FunID(..))
+import Syntax (VarType, VarID(..), FunID(..), ForeignFunctionDecl(..))
 import Value (Value)
 
 newtype ConstID =
@@ -25,7 +26,7 @@ data Bytecode = Bytecode
   { bytecodeFunctions :: IntMap BytecodeFunction
   , bytecodeLibraries :: [String]
   , bytecodeConstants :: IntMap Value
-  , bytecodeForeignFunctions :: IntMap String
+  , bytecodeForeignFunctions :: IntMap ForeignFunctionDecl
   }
 
 instance Monoid Bytecode where
@@ -60,10 +61,7 @@ data Op
   | OpIntroVar VarID
                VarType
   | OpReturn
-    -- TODO: That's a very long op.
   | OpForeignCall FunID
-                  (Maybe VarType)
-                  [VarType]
   | OpLabel LabelID
   | OpJump LabelID
   | OpJumpIfZero LabelID
@@ -100,8 +98,7 @@ instance Show Op where
   show (OpCall (FunID f)) = "call " ++ show f
   show (OpIntroVar v t) = "var " ++ show v ++ " : " ++ show t
   show OpReturn = "ret"
-  show (OpForeignCall (FunID f) rettype types) =
-    "foreign " ++ show f ++ " : " ++ show rettype ++ " " ++ show types
+  show (OpForeignCall (FunID f)) = "foreign " ++ show f
   show (OpLabel (LabelID l)) = "lbl " ++ show l
   show (OpJump (LabelID l)) = "jmp " ++ show l
   show (OpJumpIfZero (LabelID l)) = "jz " ++ show l

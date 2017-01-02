@@ -13,6 +13,7 @@ prettyPrint bc =
   unlines
     [ prettyPrintLibs $ bytecodeLibraries bc
     , prettyPrintConstants $ bytecodeConstants bc
+    , prettyPrintForeignFuns $ bytecodeForeignFunctions bc
     , prettyPrintFuns $ bytecodeFunctions bc
     ]
 
@@ -26,6 +27,18 @@ prettyPrintConstants consts =
     (\key val rest -> rest ++ " " ++ show key ++ ":" ++ show val)
     ""
     consts
+
+prettyPrintForeignFuns :: IntMap ForeignFunctionDecl -> String
+prettyPrintForeignFuns funs =
+  "Foreign functions: " ++
+  IntMap.foldrWithKey
+    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ prettyPrintForeignFun val)
+    ""
+    funs
+
+prettyPrintForeignFun :: ForeignFunctionDecl -> String
+prettyPrintForeignFun fdecl =
+  show (foreignFunDeclRetType fdecl) ++ " " ++ foreignFunDeclRealName fdecl ++ " " ++ show (foreignFunDeclParams fdecl)
 
 prettyPrintFuns :: IntMap BytecodeFunction -> String
 prettyPrintFuns funs =

@@ -236,22 +236,22 @@ introduceVariable v vtype =
 performReturn :: Interpreter ()
 performReturn = Except.throwError ()
 
-findForeignFunction :: FunID -> Interpreter ForeignFun
+findForeignFunction :: FunID -> Interpreter (ForeignFunctionDecl, ForeignFun)
 findForeignFunction (FunID fid) = do
-  Just fname <- (IntMap.lookup fid . bytecodeForeignFunctions . bytecode) <$> Reader.ask
-  Just f <- Trans.liftIO $ findSymbol fname
-  pure f
+  Just fdecl <- (IntMap.lookup fid . bytecodeForeignFunctions . bytecode) <$> Reader.ask
+  Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
+  pure (fdecl, f)
 
-foreignFunctionCall :: FunID -> Maybe VarType -> [VarType] -> Interpreter ()
-foreignFunctionCall fid rettype argtypes = do
-  fun <- findForeignFunction fid
+foreignFunctionCall :: FunID -> Interpreter ()
+foreignFunctionCall fid = do
+  (fdecl, fun) <- findForeignFunction fid
   vals <-
-    forM argtypes $
+    forM (foreignFunDeclParams fdecl) $
     \expectedType -> do
       v <- pop
       when (typeof v /= expectedType) $ error "Type mismatch"
       pure v
-  retVal <- Trans.liftIO $ call fun rettype vals
+  retVal <- Trans.liftIO $ call fun (foreignFunDeclRetType fdecl) vals
   case retVal of
     Nothing -> pure ()
     Just v -> push v
@@ -296,7 +296,7 @@ interpretOp :: Op -> Interpreter ()
 interpretOp (OpCall f) = interpretFunction f
 interpretOp (OpIntroVar v vtype) = introduceVariable v vtype
 interpretOp OpReturn = performReturn
-interpretOp (OpForeignCall f rettype argtypes) = foreignFunctionCall f rettype argtypes
+interpretOp (OpForeignCall f) = foreignFunctionCall f
 interpretOp (OpLabel _) = pure () -- Resolved already
 interpretOp (OpJump l) = jump l
 interpretOp (OpJumpIfZero l) = do

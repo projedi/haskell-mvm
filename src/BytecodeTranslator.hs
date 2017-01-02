@@ -12,7 +12,6 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Monoid ((<>))
 
 import Bytecode
 import Syntax
@@ -23,13 +22,16 @@ translate p =
   bc
      { bytecodeLibraries = programLibraries p
      , bytecodeConstants = consts finalEnv
-     , bytecodeForeignFunctions = programForeignFunctions p <> (foreignFunDeclRealName <$> newForeignFuns finalEnv)
+     , bytecodeForeignFunctions = foreignFuns finalEnv
      }
   where
     lastForeignFunID fs
       | IntMap.null fs = FunID 0
       | otherwise = FunID $ fst $ IntMap.findMax fs
-    initEnv = emptyEnv $ lastForeignFunID $ programForeignFunctions p
+    initEnv = emptyEnv
+      { lastForeignFun = lastForeignFunID $ programForeignFunctions p
+      , foreignFuns = programForeignFunctions p
+      }
     (bc, finalEnv) = runTranslator (translateBlock (programStatements p)) initEnv
 
 data Env = Env
@@ -40,12 +42,12 @@ data Env = Env
   , vars :: IntMap VarType
   , funs :: IntMap FunctionDef
   , consts :: IntMap Value
-  , newForeignFuns :: IntMap ForeignFunctionDecl
+  , foreignFuns :: IntMap ForeignFunctionDecl
   , lastForeignFun :: FunID
   }
 
-emptyEnv :: FunID -> Env
-emptyEnv lastForeignFunID =
+emptyEnv :: Env
+emptyEnv =
   Env
   { currentFunction = FunID 0
   , currentRetType = Nothing
@@ -54,8 +56,8 @@ emptyEnv lastForeignFunID =
   , vars = IntMap.empty
   , funs = IntMap.empty
   , consts = IntMap.empty
-  , newForeignFuns = IntMap.empty
-  , lastForeignFun = lastForeignFunID
+  , foreignFuns = IntMap.empty
+  , lastForeignFun = FunID 0
   }
 
 findVariableInEnv :: Env -> VarID -> VarType
@@ -266,7 +268,7 @@ generateNewForeignFunction name rettype params = do
   FunID f <- (inc . lastForeignFun) <$> State.get
   State.modify $ \env -> env
     { lastForeignFun = FunID f
-    , newForeignFuns = IntMap.insert f (ffdecl $ FunID f) $ newForeignFuns env
+    , foreignFuns = IntMap.insert f (ffdecl $ FunID f) $ foreignFuns env
     }
   pure $ FunID f
   where
@@ -294,14 +296,15 @@ printCall args = do
   cid <- newConstant $ ValueString $ Right $ getPrintfDesc types
   addOpWithoutType (OpPushString cid)
   f <- generateNewForeignFunction "printf" Nothing (VarTypeString : types)
-  addOpWithoutType $ OpForeignCall f Nothing (VarTypeString : types)
+  addOpWithoutType $ OpForeignCall f
 
 functionCall :: FunctionCall -> ExpressionTranslator (Maybe VarType)
 functionCall (PrintCall args) =
   printCall args >> pure Nothing
-functionCall (ForeignFunctionCall f args) = do
+functionCall (ForeignFunctionCall (FunID fid) args) = do
+  Just f <- (IntMap.lookup fid . foreignFuns) <$> State.get
   translateArgs args $ foreignFunDeclParams f
-  addOpWithoutType $ OpForeignCall (foreignFunDeclName f) (foreignFunDeclRetType f) (foreignFunDeclParams f)
+  addOpWithoutType $ OpForeignCall (foreignFunDeclName f)
   pure $ foreignFunDeclRetType f
 functionCall (NativeFunctionCall fid args) = do
   FunctionDef {funDefRetType = rettype, funDefParams = params} <- findFunction fid
@@ -365,7 +368,7 @@ opRetType (OpPushString _) = VarTypeString
 opRetType OpPop = error "Type mismatch"
 opRetType OpReturn = error "Type mismatch"
 opRetType (OpCall _) = error "Type mismatch"
-opRetType (OpForeignCall _ _ _) = error "Type mismatch"
+opRetType (OpForeignCall _) = error "Type mismatch"
 opRetType (OpLabel _) = error "Type mismatch"
 opRetType (OpJump _) = error "Type mismatch"
 opRetType (OpJumpIfZero _) = error "Type mismatch"

@@ -20,7 +20,7 @@ import PreSyntax (VarType(..))
 data Program = Program
   { programStatements :: Block
   , programLibraries :: [String]
-  , programForeignFunctions :: IntMap String
+  , programForeignFunctions :: IntMap ForeignFunctionDecl
   }
 
 type Symbol = String
@@ -70,7 +70,7 @@ data ForeignFunctionDecl = ForeignFunctionDecl
 
 data FunctionCall
   = NativeFunctionCall FunID [Expr]
-  | ForeignFunctionCall ForeignFunctionDecl [Expr]
+  | ForeignFunctionCall FunID [Expr]
   | PrintCall [Expr]
 
 data Expr

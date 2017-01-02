@@ -163,12 +163,12 @@ findFunctionInEnv env fname =
 
 type Resolver a = State Env a
 
-runResolver :: Resolver Syntax.Block -> (Syntax.Block, IntMap String)
+runResolver :: Resolver Syntax.Block -> (Syntax.Block, IntMap Syntax.ForeignFunctionDecl)
 runResolver m = (code, foreignFuns)
   where
     (code, finalEnv) = runState m emptyEnv
     foreignFuns = IntMap.mapMaybe asForeign $ funs finalEnv
-    asForeign (_, Just (ForeignFunction f)) = Just $ Syntax.foreignFunDeclRealName f
+    asForeign (_, Just (ForeignFunction f)) = Just f
     asForeign _ = Nothing
 
 findVariable :: PreSyntax.VarName -> Resolver Syntax.VarID
@@ -368,7 +368,7 @@ resolveFunctionCall (PreSyntax.FunctionCall fname args) = do
   (fid, mf) <- findFunction fname
   case mf of
     Just (ForeignFunction f) ->
-      Syntax.ForeignFunctionCall f <$> mapM resolveExpr args
+      Syntax.ForeignFunctionCall (Syntax.foreignFunDeclName f) <$> mapM resolveExpr args
     Just (NativeFunction _) ->
       Syntax.NativeFunctionCall fid <$> mapM resolveExpr args
     Nothing -> -- Because of prescanning in the block, this is definetely not a foreign call.
