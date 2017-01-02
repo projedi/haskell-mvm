@@ -26,10 +26,14 @@ data Program = Program
 type Symbol = String
 
 newtype VarID = VarID Int
-  deriving (Eq, Ord, Show)
+
+instance Show VarID where
+  show (VarID i) = "var_" ++ show i
 
 newtype FunID = FunID Int
-  deriving (Eq, Ord, Show)
+
+instance Show FunID where
+  show (FunID i) = "fun_" ++ show i
 
 data VarDecl =
   VarDecl VarType

@@ -4,15 +4,33 @@ module PrettyPrint
   ( prettyPrint
   ) where
 
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
-import PreSyntax
+import Syntax
 
 prettyPrint :: Program -> String
-prettyPrint (Program stmts libs) = printLibs libs ++ printProgram 0 stmts
+prettyPrint p = unlines
+  [ printLibs $ programLibraries p
+  , printForeignFunctions $ programForeignFunctions p
+  , prettyPrintBlock 0 $ programStatements p
+  ]
 
 printLibs :: [String] -> String
-printLibs = unlines . map ("#link " ++)
+printLibs libs = "Libraries: " ++ unwords libs
+
+printForeignFunctions :: IntMap ForeignFunctionDecl -> String
+printForeignFunctions funs =
+  "Foreign functions: " ++
+  IntMap.foldrWithKey
+    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ printForeignFun val)
+    ""
+    funs
+
+printForeignFun :: ForeignFunctionDecl -> String
+printForeignFun fdecl =
+  show (foreignFunDeclRetType fdecl) ++ " " ++ foreignFunDeclRealName fdecl ++ " " ++ show (foreignFunDeclParams fdecl)
 
 paren :: String -> String
 paren str = "(" ++ str ++ ")"
@@ -52,37 +70,28 @@ prettyPrintExpr n (ExprOr el er) =
   parenIfNeeded n 0 $ prettyPrintExpr 0 el ++ " || " ++ prettyPrintExpr 0 er
 prettyPrintExpr n (ExprEq el er) =
   parenIfNeeded n 5 $ prettyPrintExpr 5 el ++ " == " ++ prettyPrintExpr 5 er
-prettyPrintExpr n (ExprNeq el er) =
-  parenIfNeeded n 5 $ prettyPrintExpr 5 el ++ " != " ++ prettyPrintExpr 5 er
 prettyPrintExpr n (ExprLt el er) =
   parenIfNeeded n 6 $ prettyPrintExpr 6 el ++ " < " ++ prettyPrintExpr 6 er
-prettyPrintExpr n (ExprLeq el er) =
-  parenIfNeeded n 6 $ prettyPrintExpr 6 el ++ " <= " ++ prettyPrintExpr 6 er
-prettyPrintExpr n (ExprGt el er) =
-  parenIfNeeded n 6 $ prettyPrintExpr 6 el ++ " > " ++ prettyPrintExpr 6 er
-prettyPrintExpr n (ExprGeq el er) =
-  parenIfNeeded n 6 $ prettyPrintExpr 6 el ++ " >= " ++ prettyPrintExpr 6 er
 
 class PrettyPrintSimple a  where
   prettyPrintSimple :: a -> String
 
-instance PrettyPrintSimple VarName where
-  prettyPrintSimple (VarName var) = var
+instance PrettyPrintSimple VarID where
+  prettyPrintSimple = show
 
-instance PrettyPrintSimple FunctionName where
-  prettyPrintSimple (FunctionName var) = var
+instance PrettyPrintSimple FunID where
+  prettyPrintSimple = show
 
 instance PrettyPrintSimple FunctionCall where
-  prettyPrintSimple (FunctionCall funname args) =
+  prettyPrintSimple (NativeFunctionCall funname args) =
     prettyPrintSimple funname ++
     paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
-
-instance PrettyPrintSimple FunctionDecl where
-  prettyPrintSimple (FunctionDecl retType funname params) =
-    prettyPrintSimple retType ++
-    " " ++
+  prettyPrintSimple (ForeignFunctionCall funname args) =
     prettyPrintSimple funname ++
-    paren (List.intercalate ", " (map prettyPrintSimple params))
+    paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
+  prettyPrintSimple (PrintCall args) =
+    "print" ++
+    paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
 
 instance PrettyPrintSimple VarDecl where
   prettyPrintSimple (VarDecl vtype name) =
@@ -99,52 +108,35 @@ indent :: Int -> String -> String
 indent 0 str = str
 indent n str = "  " ++ indent (n - 1) str
 
-hangingStatement :: Int -> Statement -> String
-hangingStatement n (StatementBlock stmts) =
-  " {\n" ++ printProgram (n + 1) stmts ++ "\n" ++ indent n "}"
-hangingStatement n s = "\n" ++ prettyPrintStatement (n + 1) s
-
 prettyPrintStatement :: Int -> Statement -> String
+prettyPrintStatement n (StatementNoop) = indent n ";"
 prettyPrintStatement n (StatementFunctionCall fcall) =
   indent n (prettyPrintSimple fcall ++ ";")
-prettyPrintStatement n (StatementVarDecl varDecl) =
-  indent n (prettyPrintSimple varDecl ++ ";")
-prettyPrintStatement n (StatementVarDef varDecl expr) =
-  indent n (prettyPrintSimple varDecl ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
-prettyPrintStatement n (StatementFunctionDecl funDecl) =
-  indent n (prettyPrintSimple funDecl ++ ";")
-prettyPrintStatement n (StatementForeignFunctionDecl funDecl) =
-  indent n ("foreign " ++ prettyPrintSimple funDecl ++ ";")
 prettyPrintStatement n (StatementAssign var expr) =
   indent n (prettyPrintSimple var ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
-prettyPrintStatement n (StatementAssignPlus var expr) =
-  indent n (prettyPrintSimple var ++ " += " ++ prettyPrintExpr 0 expr ++ ";")
-prettyPrintStatement n (StatementAssignMinus var expr) =
-  indent n (prettyPrintSimple var ++ " -= " ++ prettyPrintExpr 0 expr ++ ";")
 prettyPrintStatement n (StatementReturn Nothing) = indent n "return;"
 prettyPrintStatement n (StatementReturn (Just e)) =
   indent n ("return " ++ prettyPrintExpr 0 e ++ ";")
 prettyPrintStatement n (StatementWhile e s) =
-  indent n ("while (" ++ prettyPrintExpr 0 e ++ ")") ++ hangingStatement n s
-prettyPrintStatement n (StatementIf e s) =
-  indent n ("if (" ++ prettyPrintExpr 0 e ++ ")") ++ hangingStatement n s
-prettyPrintStatement n (StatementFor v e1 e2 s) =
-  indent
-    n
-    ("for (" ++
-     prettyPrintSimple v ++
-     " in " ++ prettyPrintExpr 10 e1 ++ ".." ++ prettyPrintExpr 10 e2 ++ ")") ++
-  hangingStatement n s
-prettyPrintStatement n (StatementFunctionDef decl stmts) =
-  indent n (prettyPrintSimple decl) ++ hangingStatement n (StatementBlock stmts)
-prettyPrintStatement n (StatementIfElse e s1@(StatementBlock _) s2) =
-  indent n ("if (" ++ prettyPrintExpr 0 e ++ ")") ++
-  hangingStatement n s1 ++ " } else" ++ hangingStatement n s2
+  indent n ("while (" ++ prettyPrintExpr 0 e ++ ")") ++ prettyPrintBlock n s
 prettyPrintStatement n (StatementIfElse e s1 s2) =
-  indent n ("if (" ++ prettyPrintExpr 0 e ++ ")") ++
-  hangingStatement n s1 ++ "\n" ++ indent n "else" ++ hangingStatement n s2
-prettyPrintStatement n (StatementBlock stmts) =
-  indent n "{\n" ++ printProgram (n + 1) stmts ++ "\n" ++ indent n "}"
+  indent n ("if (" ++ prettyPrintExpr 0 e ++ ")\n") ++
+  prettyPrintBlock n s1 ++ "\n" ++ indent n "else\n" ++ prettyPrintBlock n s2
+prettyPrintStatement n (StatementBlock stmts) = prettyPrintBlock n stmts
+
+prettyPrintBlock :: Int -> Block -> String
+prettyPrintBlock n block = indent n "{\n" ++
+  unlines (map (indent (n + 1) . prettyPrintSimple) $ blockVariables block) ++
+  unlines (map (prettyPrintFunctionDef (n + 1)) $ blockFunctions block) ++
+  printProgram (n + 1) (blockStatements block) ++ "\n" ++ indent n "}"
+
+prettyPrintFunctionDef :: Int -> FunctionDef -> String
+prettyPrintFunctionDef n fdef =
+  indent n (prettyPrintSimple (funDefRetType fdef) ++
+  " " ++
+  prettyPrintSimple (funDefName fdef) ++
+  paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef)))) ++ "\n" ++
+  prettyPrintBlock n (funDefBody fdef)
 
 printProgram :: Int -> [Statement] -> String
 printProgram n stmts =

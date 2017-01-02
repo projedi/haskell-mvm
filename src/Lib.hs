@@ -40,11 +40,11 @@ dumpBytecode fname = do
   putStrLn $ "\nDoing: " ++ fname
   putStrLn "======= FILE ======="
   putStrLn contents
-  let expr = parseExpr contents
+  let expr = resolve $ parseExpr contents
   putStrLn "======= CODE ======="
   putStrLn $ prettyPrint expr
   putStrLn "===== BYTECODE ====="
-  putStrLn $ Bytecode.prettyPrint $ Bytecode.translate $ resolve expr
+  putStrLn $ Bytecode.prettyPrint $ Bytecode.translate expr
 
 getOperation :: [String] -> (FilePath -> IO (), [String])
 getOperation [] = (const $ pure (), [])
