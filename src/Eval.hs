@@ -38,7 +38,8 @@ data Layer = Layer
   }
 
 emptyLayer :: Layer
-emptyLayer = Layer
+emptyLayer =
+  Layer
   { varEnv = IntMap.empty
   }
 
@@ -84,7 +85,8 @@ data Env = Env
   }
 
 emptyEnv :: Env
-emptyEnv = Env
+emptyEnv =
+  Env
   { envLayers = []
   , envForeignFunctions = IntMap.empty
   , envFunctions = IntMap.empty
@@ -173,10 +175,12 @@ runExecute m = do
 startExecute :: IntMap ForeignFunctionDecl -> IntMap FunctionDef -> Execute ()
 startExecute foreignFuns nativeFuns = do
   funs <- mapM getForeignFun foreignFuns
-  State.modify $ \env -> env
-    { envForeignFunctions = funs
-    , envFunctions = nativeFuns
-    }
+  State.modify $
+    \env ->
+       env
+       { envForeignFunctions = funs
+       , envFunctions = nativeFuns
+       }
   let Just mainFun = IntMap.lookup 0 nativeFuns
   _ <- nativeFunctionCall mainFun []
   pure ()
@@ -199,9 +203,10 @@ printCall vals =
 
 nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)
 nativeFunctionCall fdef vals = do
-  res <- withNewLayer $ do
-    generateAssignments (funDefParams fdef) vals
-    executeBlockWithReturn (funDefBody fdef)
+  res <-
+    withNewLayer $
+    do generateAssignments (funDefParams fdef) vals
+       executeBlockWithReturn (funDefBody fdef)
   case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
     (Just val, Just valtype) -> pure $ Just $ convert val valtype
@@ -227,7 +232,11 @@ functionCall (PrintCall args) = do
 functionCall (ForeignFunctionCall (FunID fid) args) = do
   vals <- evaluateArgs args
   Just (fdecl, f) <- (IntMap.lookup fid . envForeignFunctions) <$> State.get
-  foreignFunctionCall (foreignFunDeclRetType fdecl) (foreignFunDeclParams fdecl) vals f
+  foreignFunctionCall
+    (foreignFunDeclRetType fdecl)
+    (foreignFunDeclParams fdecl)
+    vals
+    f
 functionCall (NativeFunctionCall (FunID fid) args) = do
   vals <- evaluateArgs args
   Just f <- (IntMap.lookup fid . envFunctions) <$> State.get
@@ -315,9 +324,10 @@ evaluateAsInt e = do
   pure i
 
 executeBlock :: Block -> Execute ()
-executeBlock block = withNewLayer $ do
-  forM_ (blockVariables block) declareVariable
-  forM_ (blockStatements block) execute
+executeBlock block =
+  withNewLayer $
+  do forM_ (blockVariables block) declareVariable
+     forM_ (blockStatements block) execute
 
 execute :: Statement -> Execute ()
 execute StatementNoop = pure ()

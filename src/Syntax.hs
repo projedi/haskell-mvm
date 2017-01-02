@@ -28,12 +28,14 @@ data Program = Program
 
 type Symbol = String
 
-newtype VarID = VarID Int
+newtype VarID =
+  VarID Int
 
 instance Show VarID where
   show (VarID i) = "var_" ++ show i
 
-newtype FunID = FunID Int
+newtype FunID =
+  FunID Int
 
 instance Show FunID where
   show (FunID i) = "fun_" ++ show i
@@ -67,15 +69,17 @@ data AccessRecorder = AccessRecorder
   }
 
 instance Monoid AccessRecorder where
-  mempty = AccessRecorder
+  mempty =
+    AccessRecorder
     { varAccess = IntSet.empty
     , funAccess = IntSet.empty
     , foreignFunAccess = IntSet.empty
     }
-  lhs `mappend` rhs = AccessRecorder
-    { varAccess = (varAccess lhs) `mappend` (varAccess rhs)
-    , funAccess = (funAccess lhs) `mappend` (funAccess rhs)
-    , foreignFunAccess = (foreignFunAccess lhs) `mappend` (foreignFunAccess rhs)
+  lhs `mappend` rhs =
+    AccessRecorder
+    { varAccess = varAccess lhs `mappend` varAccess rhs
+    , funAccess = funAccess lhs `mappend` funAccess rhs
+    , foreignFunAccess = foreignFunAccess lhs `mappend` foreignFunAccess rhs
     }
 
 data FunctionDef = FunctionDef
@@ -94,8 +98,10 @@ data ForeignFunctionDecl = ForeignFunctionDecl
   }
 
 data FunctionCall
-  = NativeFunctionCall FunID [Expr]
-  | ForeignFunctionCall FunID [Expr]
+  = NativeFunctionCall FunID
+                       [Expr]
+  | ForeignFunctionCall FunID
+                        [Expr]
   | PrintCall [Expr]
 
 data Expr

@@ -20,16 +20,17 @@ import Value (Value(..))
 translate :: Program -> Bytecode
 translate p =
   Bytecode
-     { bytecodeLibraries = programLibraries p
-     , bytecodeConstants = consts finalEnv
-     , bytecodeForeignFunctions = foreignFuns finalEnv
-     , bytecodeFunctions = bcFuns
-     }
+  { bytecodeLibraries = programLibraries p
+  , bytecodeConstants = consts finalEnv
+  , bytecodeForeignFunctions = foreignFuns finalEnv
+  , bytecodeFunctions = bcFuns
+  }
   where
     lastForeignFunID fs
       | IntMap.null fs = FunID 0
       | otherwise = FunID $ fst $ IntMap.findMax fs
-    initEnv = emptyEnv
+    initEnv =
+      emptyEnv
       { lastForeignFun = lastForeignFunID $ programForeignFunctions p
       , foreignFuns = programForeignFunctions p
       , funs = programFunctions p
@@ -62,13 +63,16 @@ emptyEnv =
 
 introduceVariableInEnv :: Env -> VarDecl -> Env
 introduceVariableInEnv env (VarDecl vtype (VarID v)) =
-  let (Nothing, vars') = IntMap.insertLookupWithKey (\_ val _ -> val) v vtype (vars env)
-  in env { vars = vars' }
+  let (Nothing, vars') =
+        IntMap.insertLookupWithKey (\_ val _ -> val) v vtype (vars env)
+  in env
+     { vars = vars'
+     }
 
 type Translator a = WriterT BytecodeFunction (State Env) a
 
 runTranslator :: IntMap FunctionDef -> Env -> (IntMap BytecodeFunction, Env)
-runTranslator fs = State.runState $ (fst <$> Writer.runWriterT (mapM getBCFun fs))
+runTranslator fs = State.runState (fst <$> Writer.runWriterT (mapM getBCFun fs))
   where
     getBCFun f = snd <$> localTranslate (translateFunctionBody f)
 
@@ -110,7 +114,7 @@ translateFunctionBody f = do
   envBefore <- State.get
   State.put $
     envBefore
-    { currentRetType = (funDefRetType f)
+    { currentRetType = funDefRetType f
     }
   vs <- mapM introduceVariable $ funDefParams f
   forM_ vs (addOp . OpStore)
@@ -198,17 +202,23 @@ translateArgs args types = do
   let vals = convertArgs valsWithTypes types
   forM_ (reverse vals) Writer.tell
 
-generateNewForeignFunction :: String -> Maybe VarType -> [VarType] -> Translator FunID
+generateNewForeignFunction :: String
+                           -> Maybe VarType
+                           -> [VarType]
+                           -> Translator FunID
 generateNewForeignFunction name rettype params = do
   FunID f <- (inc . lastForeignFun) <$> State.get
-  State.modify $ \env -> env
-    { lastForeignFun = FunID f
-    , foreignFuns = IntMap.insert f (ffdecl $ FunID f) $ foreignFuns env
-    }
+  State.modify $
+    \env ->
+       env
+       { lastForeignFun = FunID f
+       , foreignFuns = IntMap.insert f (ffdecl $ FunID f) $ foreignFuns env
+       }
   pure $ FunID f
   where
     inc (FunID f) = FunID (f + 1)
-    ffdecl f = ForeignFunctionDecl
+    ffdecl f =
+      ForeignFunctionDecl
       { foreignFunDeclRetType = rettype
       , foreignFunDeclName = f
       , foreignFunDeclRealName = name
@@ -234,15 +244,15 @@ printCall args = do
   addOp $ OpForeignCall f
 
 functionCall :: FunctionCall -> Translator (Maybe VarType)
-functionCall (PrintCall args) =
-  printCall args >> pure Nothing
+functionCall (PrintCall args) = printCall args >> pure Nothing
 functionCall (ForeignFunctionCall (FunID fid) args) = do
   Just f <- (IntMap.lookup fid . foreignFuns) <$> State.get
   translateArgs args $ foreignFunDeclParams f
   addOp $ OpForeignCall (foreignFunDeclName f)
   pure $ foreignFunDeclRetType f
 functionCall (NativeFunctionCall fid args) = do
-  FunctionDef {funDefRetType = rettype, funDefParams = params} <- findFunction fid
+  FunctionDef {funDefRetType = rettype
+              ,funDefParams = params} <- findFunction fid
   translateArgs args $ map (\(VarDecl t _) -> t) params
   addOp $ OpCall fid
   pure rettype
@@ -253,8 +263,7 @@ loadVar vid = do
   addOp $ OpLoad vid
   pure vtype
 
-localTranslate :: Translator a
-               -> Translator (a, BytecodeFunction)
+localTranslate :: Translator a -> Translator (a, BytecodeFunction)
 localTranslate m = Trans.lift $ Writer.runWriterT m
 
 convertOp :: VarType -> VarType -> Maybe Op

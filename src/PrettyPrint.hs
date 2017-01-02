@@ -12,11 +12,12 @@ import qualified Data.List as List
 import Syntax
 
 prettyPrint :: Program -> String
-prettyPrint p = unlines
-  [ printLibs $ programLibraries p
-  , printForeignFunctions $ programForeignFunctions p
-  , printFunctions $ programFunctions p
-  ]
+prettyPrint p =
+  unlines
+    [ printLibs $ programLibraries p
+    , printForeignFunctions $ programForeignFunctions p
+    , printFunctions $ programFunctions p
+    ]
 
 printLibs :: [String] -> String
 printLibs libs = "Libraries: " ++ unwords libs
@@ -31,13 +32,16 @@ printForeignFunctions funs =
 
 printForeignFun :: ForeignFunctionDecl -> String
 printForeignFun fdecl =
-  show (foreignFunDeclRetType fdecl) ++ " " ++ foreignFunDeclRealName fdecl ++ " " ++ show (foreignFunDeclParams fdecl)
+  show (foreignFunDeclRetType fdecl) ++
+  " " ++
+  foreignFunDeclRealName fdecl ++ " " ++ show (foreignFunDeclParams fdecl)
 
 printFunctions :: IntMap FunctionDef -> String
 printFunctions funs =
   "Functions: " ++
   IntMap.foldrWithKey
-    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ prettyPrintFunctionDef 0 val)
+    (\key val rest ->
+        rest ++ "\n" ++ show key ++ ": " ++ prettyPrintFunctionDef 0 val)
     ""
     funs
 
@@ -99,8 +103,7 @@ instance PrettyPrintSimple FunctionCall where
     prettyPrintSimple funname ++
     paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
   prettyPrintSimple (PrintCall args) =
-    "print" ++
-    paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
+    "print" ++ paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
 
 instance PrettyPrintSimple VarDecl where
   prettyPrintSimple (VarDecl vtype name) =
@@ -118,7 +121,7 @@ indent 0 str = str
 indent n str = "  " ++ indent (n - 1) str
 
 prettyPrintStatement :: Int -> Statement -> String
-prettyPrintStatement n (StatementNoop) = indent n ";"
+prettyPrintStatement n StatementNoop = indent n ";"
 prettyPrintStatement n (StatementFunctionCall fcall) =
   indent n (prettyPrintSimple fcall ++ ";")
 prettyPrintStatement n (StatementAssign var expr) =
@@ -134,17 +137,22 @@ prettyPrintStatement n (StatementIfElse e s1 s2) =
 prettyPrintStatement n (StatementBlock stmts) = prettyPrintBlock n stmts
 
 prettyPrintBlock :: Int -> Block -> String
-prettyPrintBlock n block = indent n "{\n" ++
+prettyPrintBlock n block =
+  indent n "{\n" ++
   unlines (map (indent (n + 1) . prettyPrintSimple) $ blockVariables block) ++
   printProgram (n + 1) (blockStatements block) ++ "\n" ++ indent n "}"
 
 prettyPrintFunctionDef :: Int -> FunctionDef -> String
 prettyPrintFunctionDef n fdef =
-  indent n (prettyPrintSimple (funDefRetType fdef) ++
-  " " ++ prettyPrintSimple (funDefName fdef) ++
-  paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef)))) ++
-  " [" ++ List.intercalate ", " (map prettyPrintSimple (funDefCaptures fdef)) ++ "]" ++
-  "\n" ++ prettyPrintBlock n (funDefBody fdef)
+  indent
+    n
+    (prettyPrintSimple (funDefRetType fdef) ++
+     " " ++
+     prettyPrintSimple (funDefName fdef) ++
+     paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef)))) ++
+  " [" ++
+  List.intercalate ", " (map prettyPrintSimple (funDefCaptures fdef)) ++
+  "]" ++ "\n" ++ prettyPrintBlock n (funDefBody fdef)
   where
     funDefCaptures = map VarID . IntSet.elems . varAccess . funDefAccesses
 

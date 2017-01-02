@@ -15,7 +15,8 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Monoid ((<>))
 
-import Syntax (VarType, VarID(..), FunID(..), ForeignFunctionDecl(..))
+import Syntax
+       (VarType, VarID(..), FunID(..), ForeignFunctionDecl(..))
 import Value (Value)
 
 newtype ConstID =
@@ -30,7 +31,8 @@ data Bytecode = Bytecode
   }
 
 instance Monoid Bytecode where
-  mempty = Bytecode
+  mempty =
+    Bytecode
     { bytecodeFunctions = IntMap.empty
     , bytecodeLibraries = []
     , bytecodeConstants = IntMap.empty

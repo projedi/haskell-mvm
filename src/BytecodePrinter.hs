@@ -32,20 +32,22 @@ prettyPrintForeignFuns :: IntMap ForeignFunctionDecl -> String
 prettyPrintForeignFuns funs =
   "Foreign functions: " ++
   IntMap.foldrWithKey
-    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ prettyPrintForeignFun val)
+    (\key val rest ->
+        rest ++ "\n" ++ show key ++ ": " ++ prettyPrintForeignFun val)
     ""
     funs
 
 prettyPrintForeignFun :: ForeignFunctionDecl -> String
 prettyPrintForeignFun fdecl =
-  show (foreignFunDeclRetType fdecl) ++ " " ++ foreignFunDeclRealName fdecl ++ " " ++ show (foreignFunDeclParams fdecl)
+  show (foreignFunDeclRetType fdecl) ++
+  " " ++
+  foreignFunDeclRealName fdecl ++ " " ++ show (foreignFunDeclParams fdecl)
 
 prettyPrintFuns :: IntMap BytecodeFunction -> String
-prettyPrintFuns funs =
+prettyPrintFuns =
   IntMap.foldrWithKey
     (\key code rest -> rest ++ "\n" ++ prettyPrintFunction key code)
     ""
-    funs
 
 prettyPrintFunction :: Int -> BytecodeFunction -> String
 prettyPrintFunction f (BytecodeFunction code) =

@@ -94,7 +94,7 @@ resolveLabelsInFun f (BytecodeFunction ops) =
   mconcat $ map (\(l, op) -> resolveLabelInOp (Pos f l) op) $ zip [0 ..] ops
 
 resolveLabels :: Bytecode -> IntMap Pos
-resolveLabels (Bytecode {bytecodeFunctions = funs}) =
+resolveLabels Bytecode {bytecodeFunctions = funs} =
   mconcat $ map (\(k, v) -> resolveLabelsInFun (FunID k) v) $ IntMap.toList funs
 
 createConstEnv :: Bytecode -> ConstEnv
@@ -238,7 +238,8 @@ performReturn = Except.throwError ()
 
 findForeignFunction :: FunID -> Interpreter (ForeignFunctionDecl, ForeignFun)
 findForeignFunction (FunID fid) = do
-  Just fdecl <- (IntMap.lookup fid . bytecodeForeignFunctions . bytecode) <$> Reader.ask
+  Just fdecl <-
+    (IntMap.lookup fid . bytecodeForeignFunctions . bytecode) <$> Reader.ask
   Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
   pure (fdecl, f)
 
