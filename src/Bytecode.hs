@@ -25,10 +25,16 @@ data Bytecode = Bytecode
   { bytecodeFunctions :: IntMap BytecodeFunction
   , bytecodeLibraries :: [String]
   , bytecodeConstants :: IntMap Value
+  , bytecodeForeignFunctions :: IntMap String
   }
 
 instance Monoid Bytecode where
-  mempty = Bytecode IntMap.empty [] IntMap.empty
+  mempty = Bytecode
+    { bytecodeFunctions = IntMap.empty
+    , bytecodeLibraries = []
+    , bytecodeConstants = IntMap.empty
+    , bytecodeForeignFunctions = IntMap.empty
+    }
   lhs `mappend` rhs =
     Bytecode
     { bytecodeFunctions =
@@ -36,6 +42,8 @@ instance Monoid Bytecode where
     , bytecodeLibraries = bytecodeLibraries lhs ++ bytecodeLibraries rhs
     , bytecodeConstants =
       IntMap.union (bytecodeConstants lhs) (bytecodeConstants rhs)
+    , bytecodeForeignFunctions =
+      IntMap.union (bytecodeForeignFunctions lhs) (bytecodeForeignFunctions rhs)
     }
 
 newtype BytecodeFunction =
@@ -53,7 +61,7 @@ data Op
                VarType
   | OpReturn
     -- TODO: That's a very long op.
-  | OpForeignCall String
+  | OpForeignCall FunID
                   (Maybe VarType)
                   [VarType]
   | OpLabel LabelID
@@ -92,8 +100,8 @@ instance Show Op where
   show (OpCall (FunID f)) = "call " ++ show f
   show (OpIntroVar v t) = "var " ++ show v ++ " : " ++ show t
   show OpReturn = "ret"
-  show (OpForeignCall name rettype types) =
-    "foreign " ++ name ++ " : " ++ show rettype ++ " " ++ show types
+  show (OpForeignCall (FunID f) rettype types) =
+    "foreign " ++ show f ++ " : " ++ show rettype ++ " " ++ show types
   show (OpLabel (LabelID l)) = "lbl " ++ show l
   show (OpJump (LabelID l)) = "jmp " ++ show l
   show (OpJumpIfZero (LabelID l)) = "jz " ++ show l

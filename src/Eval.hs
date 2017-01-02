@@ -12,22 +12,23 @@ import qualified Control.Monad.Except as Except
 import qualified Control.Monad.Trans as Trans
 import Data.Bits
 import Data.Foldable (asum)
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import qualified Data.List as List
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Maybe
 
 import ForeignEval
 import Syntax
 import Value
 
 eval :: Program -> IO ()
-eval (Program stmts libs) = do
+eval p = do
   libhandles <-
-    forM libs $
+    forM (programLibraries p) $
     \l -> do
       Right h <- dlopen l
       pure h
-  _ <- runExecute emptyEnv (execute (StatementBlock stmts))
+  runExecute $ startExecute (programForeignFunctions p) (programStatements p)
   forM_ libhandles dlclose
   pure ()
 
@@ -35,7 +36,6 @@ type LayerID = Int
 
 data FunctionImpl
   = FunctionBody (LayerID, [VarID], Block)
-  | FunctionForeign ForeignFun
 
 data Function =
   Function (Maybe VarType)
@@ -47,22 +47,25 @@ functionTypesMatch (Function lrettype lparams _) (Function rrettype rparams _) =
   lrettype == rrettype && lparams == rparams
 
 data Layer = Layer
-  { varEnv :: Map VarID Value
-  , funEnv :: Map FunID Function
+  { varEnv :: IntMap Value
+  , funEnv :: IntMap Function
   }
 
 emptyLayer :: Layer
-emptyLayer = Layer Map.empty Map.empty
+emptyLayer = Layer
+  { varEnv = IntMap.empty
+  , funEnv = IntMap.empty
+  }
 
 readVariableFromLayer :: Layer -> VarID -> Maybe Value
-readVariableFromLayer l name = Map.lookup name (varEnv l)
+readVariableFromLayer l (VarID vid) = IntMap.lookup vid (varEnv l)
 
 writeVariableToLayer :: Layer -> VarID -> Value -> Maybe Layer
-writeVariableToLayer l name value =
+writeVariableToLayer l (VarID vid) value =
   let (moldvalue, newvarenv) =
-        Map.insertLookupWithKey
+        IntMap.insertLookupWithKey
           (\_ newVal oldVal -> convert newVal (typeof oldVal))
-          name
+          vid
           value
           (varEnv l)
   in case moldvalue of
@@ -74,11 +77,11 @@ writeVariableToLayer l name value =
          }
 
 addVariableToLayer :: Layer -> VarID -> VarType -> Maybe Layer
-addVariableToLayer l name vtype =
+addVariableToLayer l (VarID vid) vtype =
   let (oldvalue, newvarenv) =
-        Map.insertLookupWithKey
+        IntMap.insertLookupWithKey
           (\_ a _ -> a)
-          name
+          vid
           (defaultValueFromType vtype)
           (varEnv l)
   in maybe
@@ -90,12 +93,12 @@ addVariableToLayer l name vtype =
        oldvalue
 
 getFunctionFromLayer :: Layer -> FunID -> Maybe Function
-getFunctionFromLayer l name = Map.lookup name (funEnv l)
+getFunctionFromLayer l (FunID fid) = IntMap.lookup fid (funEnv l)
 
 addFunctionToLayer :: Layer -> FunID -> Function -> Maybe Layer
-addFunctionToLayer l name f@(Function _ _ body) =
+addFunctionToLayer l (FunID fid) f@(Function _ _ body) =
   let (oldvalue, newfunenv) =
-        Map.insertLookupWithKey (\_ a _ -> a) name f (funEnv l)
+        IntMap.insertLookupWithKey (\_ a _ -> a) fid f (funEnv l)
   in case (oldvalue, body) of
        (Nothing, _) ->
          Just $
@@ -116,10 +119,14 @@ addFunctionToLayer l name f@(Function _ _ body) =
 
 data Env = Env
   { envLayers :: [Layer]
+  , envForeignFunctions :: IntMap ForeignFun
   }
 
 emptyEnv :: Env
-emptyEnv = Env []
+emptyEnv = Env
+  { envLayers = []
+  , envForeignFunctions = IntMap.empty
+  }
 
 modifyingLayer :: (Layer -> Maybe Layer) -> [Layer] -> Maybe [Layer]
 modifyingLayer _ [] = Nothing
@@ -230,10 +237,16 @@ withLayer lid m = do
   when (oldLid /= newLid) $ error "Scoping broke."
   pure res
 
-runExecute :: Env -> Execute a -> IO (Env, Maybe Value)
-runExecute env m = do
-  (val, env') <- runStateT (runExceptT m) env
-  pure (env', either id (const Nothing) val)
+runExecute :: Execute () -> IO ()
+runExecute m = do
+  _ <- runStateT (runExceptT m) emptyEnv
+  pure ()
+
+startExecute :: IntMap String -> Block -> Execute ()
+startExecute foreignFuns stmts = do
+  mfuns <- mapM (Trans.liftIO . findSymbol) foreignFuns
+  State.modify $ \env -> env { envForeignFunctions = fromJust <$> mfuns }
+  execute (StatementBlock stmts)
 
 declareVariable :: VarDecl -> Execute ()
 declareVariable (VarDecl vtype vname) = do
@@ -251,17 +264,6 @@ defineFunction f = do
           env
           (funDefName f)
           (Function (funDefRetType f) params (Just $ FunctionBody (lid, paramNames, funDefBody f)))
-  State.put env'
-
-declareForeignFunction :: (FunctionDecl, String) -> Execute ()
-declareForeignFunction ((FunctionDecl rettype name params), strname) = do
-  env <- State.get
-  Just f <- Trans.liftIO $ findSymbol strname
-  let Just env' =
-        addFunctionToEnv
-          env
-          name
-          (Function rettype params (Just $ FunctionForeign f))
   State.put env'
 
 printCall :: [Value] -> Execute ()
@@ -310,13 +312,17 @@ functionCall (PrintCall args) = do
   vals <- evaluateArgs args
   printCall vals
   pure Nothing
+functionCall (ForeignFunctionCall fdecl args) = do
+  vals <- evaluateArgs args
+  let (FunID fid) = foreignFunDeclName fdecl
+  Just f <- (IntMap.lookup fid . envForeignFunctions) <$> State.get
+  foreignFunctionCall (foreignFunDeclRetType fdecl) (foreignFunDeclParams fdecl) vals f
 functionCall (NativeFunctionCall fname args) = do
   env <- State.get
   vals <- evaluateArgs args
   let Just (Function rettype params (Just impl)) = getFunctionFromEnv env fname
   case impl of
     FunctionBody (lid, paramNames, body) -> nativeFunctionCall rettype params paramNames vals lid body
-    FunctionForeign f -> foreignFunctionCall rettype params vals f
 
 generateAssignment :: VarDecl -> Value -> Execute ()
 generateAssignment decl@(VarDecl _ name) val = do
@@ -402,7 +408,6 @@ evaluateAsInt e = do
 executeBlock :: Block -> Execute ()
 executeBlock block = withNewLayer $ do
   forM_ (blockVariables block) declareVariable
-  forM_ (blockForeignFunctions block) declareForeignFunction
   forM_ (blockFunctions block) defineFunction
   forM_ (blockStatements block) execute
 

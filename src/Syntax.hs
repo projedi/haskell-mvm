@@ -7,17 +7,20 @@ module Syntax
   , VarDecl(..)
   , Block(..)
   , Statement(..)
-  , FunctionDecl(..)
   , FunctionDef(..)
+  , ForeignFunctionDecl(..)
   , FunctionCall(..)
   , Expr(..)
   ) where
+
+import Data.IntMap (IntMap)
 
 import PreSyntax (VarType(..))
 
 data Program = Program
   { programStatements :: Block
   , programLibraries :: [String]
+  , programForeignFunctions :: IntMap String
   }
 
 type Symbol = String
@@ -35,7 +38,6 @@ data VarDecl =
 data Block = Block
   { blockVariables :: [VarDecl]
   , blockFunctions :: [FunctionDef]
-  , blockForeignFunctions :: [(FunctionDecl, String)]
   , blockStatements :: [Statement]
   }
 
@@ -52,12 +54,6 @@ data Statement
                     Block
   | StatementReturn (Maybe Expr)
 
-data FunctionDecl = FunctionDecl
-  { funDeclRetType :: Maybe VarType
-  , funDeclName :: FunID
-  , funDeclParams :: [VarType]
-  }
-
 data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
@@ -65,8 +61,16 @@ data FunctionDef = FunctionDef
   , funDefBody :: Block
   }
 
+data ForeignFunctionDecl = ForeignFunctionDecl
+  { foreignFunDeclRetType :: Maybe VarType
+  , foreignFunDeclName :: FunID
+  , foreignFunDeclRealName :: String
+  , foreignFunDeclParams :: [VarType]
+  }
+
 data FunctionCall
   = NativeFunctionCall FunID [Expr]
+  | ForeignFunctionCall ForeignFunctionDecl [Expr]
   | PrintCall [Expr]
 
 data Expr

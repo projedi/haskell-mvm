@@ -236,14 +236,15 @@ introduceVariable v vtype =
 performReturn :: Interpreter ()
 performReturn = Except.throwError ()
 
-findForeignFunction :: String -> Interpreter ForeignFun
-findForeignFunction fname = do
+findForeignFunction :: FunID -> Interpreter ForeignFun
+findForeignFunction (FunID fid) = do
+  Just fname <- (IntMap.lookup fid . bytecodeForeignFunctions . bytecode) <$> Reader.ask
   Just f <- Trans.liftIO $ findSymbol fname
   pure f
 
-foreignFunctionCall :: String -> Maybe VarType -> [VarType] -> Interpreter ()
-foreignFunctionCall fname rettype argtypes = do
-  fun <- findForeignFunction fname
+foreignFunctionCall :: FunID -> Maybe VarType -> [VarType] -> Interpreter ()
+foreignFunctionCall fid rettype argtypes = do
+  fun <- findForeignFunction fid
   vals <-
     forM argtypes $
     \expectedType -> do

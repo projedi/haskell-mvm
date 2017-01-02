@@ -12,19 +12,25 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Monoid ((<>))
 
 import Bytecode
 import Syntax
 import Value (Value(..))
 
 translate :: Program -> Bytecode
-translate (Program block libs) =
-  let (bc, finalEnv) =
-        runTranslator (translateBlock block) emptyEnv
-  in bc
-     { bytecodeLibraries = libs
+translate p =
+  bc
+     { bytecodeLibraries = programLibraries p
      , bytecodeConstants = consts finalEnv
+     , bytecodeForeignFunctions = programForeignFunctions p <> (foreignFunDeclRealName <$> newForeignFuns finalEnv)
      }
+  where
+    lastForeignFunID fs
+      | IntMap.null fs = FunID 0
+      | otherwise = FunID $ fst $ IntMap.findMax fs
+    initEnv = emptyEnv $ lastForeignFunID $ programForeignFunctions p
+    (bc, finalEnv) = runTranslator (translateBlock (programStatements p)) initEnv
 
 data Env = Env
   { currentFunction :: FunID
@@ -32,12 +38,14 @@ data Env = Env
   , lastLabel :: LabelID
   , lastConst :: ConstID
   , vars :: IntMap VarType
-  , funs :: IntMap FunctionDecl
+  , funs :: IntMap FunctionDef
   , consts :: IntMap Value
+  , newForeignFuns :: IntMap ForeignFunctionDecl
+  , lastForeignFun :: FunID
   }
 
-emptyEnv :: Env
-emptyEnv =
+emptyEnv :: FunID -> Env
+emptyEnv lastForeignFunID =
   Env
   { currentFunction = FunID 0
   , currentRetType = Nothing
@@ -46,6 +54,8 @@ emptyEnv =
   , vars = IntMap.empty
   , funs = IntMap.empty
   , consts = IntMap.empty
+  , newForeignFuns = IntMap.empty
+  , lastForeignFun = lastForeignFunID
   }
 
 findVariableInEnv :: Env -> VarID -> VarType
@@ -58,12 +68,13 @@ introduceVariableInEnv env (VarDecl vtype (VarID v)) =
   let (Nothing, vars') = IntMap.insertLookupWithKey (\_ val _ -> val) v vtype (vars env)
   in env { vars = vars' }
 
-introduceFunctionInEnv :: Env -> FunctionDecl -> Env
-introduceFunctionInEnv env fdecl@(FunctionDecl _ (FunID fid) _) =
-  let funs' = IntMap.insert fid fdecl (funs env)
+introduceFunctionInEnv :: Env -> FunctionDef -> Env
+introduceFunctionInEnv env fdef =
+  let (FunID fid) = funDefName fdef
+      funs' = IntMap.insert fid fdef (funs env)
   in env { funs = funs' }
 
-findFunctionInEnv :: Env -> FunID -> FunctionDecl
+findFunctionInEnv :: Env -> FunID -> FunctionDef
 findFunctionInEnv env (FunID fid) =
   let (Just f) = IntMap.lookup fid (funs env)
   in f
@@ -75,7 +86,12 @@ runTranslator m = State.runState (Writer.execWriterT m)
 
 addCodeTo :: BytecodeFunction -> FunID -> Translator ()
 addCodeTo code (FunID fid) =
-  Writer.tell $ Bytecode (IntMap.singleton fid code) [] IntMap.empty
+  Writer.tell $ Bytecode
+    { bytecodeFunctions = IntMap.singleton fid code
+    , bytecodeLibraries = []
+    , bytecodeConstants = IntMap.empty
+    , bytecodeForeignFunctions = IntMap.empty
+    }
 
 newLabel :: Translator LabelID
 newLabel = do
@@ -110,10 +126,10 @@ introduceVariable vdecl@(VarDecl vtype v) = do
   addOp $ OpIntroVar v vtype
   pure v
 
-introduceFunction :: FunctionDecl -> Translator ()
-introduceFunction fdecl = do
+introduceFunction :: FunctionDef -> Translator ()
+introduceFunction fdef = do
   env <- State.get
-  let env' = introduceFunctionInEnv env fdecl
+  let env' = introduceFunctionInEnv env fdef
   State.put env'
 
 namespaceBlock :: Translator a -> Translator a
@@ -144,12 +160,6 @@ translateNativeFunctionBody f =
      forM_ vs (addOp . OpStore)
      translateStatement $ StatementBlock $ funDefBody f
 
-translateForeignFunctionBody :: FunctionDecl -> String -> Translator ()
-translateForeignFunctionBody (FunctionDecl retType fid params) fname =
-  translateFunctionBody retType fid $
-  do embedExpressionTranslator $
-       addOpWithoutType $ OpForeignCall fname retType params
-
 translateReturn :: Translator ()
 translateReturn = do
   retType <- currentRetType <$> State.get
@@ -170,16 +180,7 @@ translateReturnWithValue expr = do
 translateBlock :: Block -> Translator ()
 translateBlock block = namespaceBlock $ do
   forM_ (blockVariables block) introduceVariable
-  forM_ (blockForeignFunctions block) $ \(f, name) -> do
-    introduceFunction f
-    translateForeignFunctionBody f name
-  forM_ (blockFunctions block) $ \f -> do
-    let fd = FunctionDecl
-          { funDeclRetType = funDefRetType f
-          , funDeclName = funDefName f
-          , funDeclParams = map (\(VarDecl t _) -> t) $ funDefParams f
-          }
-    introduceFunction fd
+  forM_ (blockFunctions block) introduceFunction
   forM_ (blockFunctions block) translateNativeFunctionBody
   forM_ (blockStatements block) translateStatement
 
@@ -237,7 +238,7 @@ runExpressionTranslator :: ExpressionTranslator a
                         -> State Env (a, BytecodeFunction)
 runExpressionTranslator = Writer.runWriterT
 
-findFunction :: FunID -> ExpressionTranslator FunctionDecl
+findFunction :: FunID -> ExpressionTranslator FunctionDef
 findFunction fname = do
   env <- State.get
   pure $ findFunctionInEnv env fname
@@ -260,15 +261,29 @@ translateArgs args types = do
   let vals = convertArgs valsWithTypes types
   forM_ (reverse vals) addCode
 
-generatePrintfDesc :: [VarType] -> ExpressionTranslator ()
-generatePrintfDesc types = do
-  cid <- newConstant $ ValueString $ Right str
-  addOpWithoutType (OpPushString cid)
+generateNewForeignFunction :: String -> Maybe VarType -> [VarType] -> ExpressionTranslator FunID
+generateNewForeignFunction name rettype params = do
+  FunID f <- (inc . lastForeignFun) <$> State.get
+  State.modify $ \env -> env
+    { lastForeignFun = FunID f
+    , newForeignFuns = IntMap.insert f (ffdecl $ FunID f) $ newForeignFuns env
+    }
+  pure $ FunID f
+  where
+    inc (FunID f) = FunID (f + 1)
+    ffdecl f = ForeignFunctionDecl
+      { foreignFunDeclRetType = rettype
+      , foreignFunDeclName = f
+      , foreignFunDeclRealName = name
+      , foreignFunDeclParams = params
+      }
+
+getPrintfDesc :: [VarType] -> String
+getPrintfDesc = concatMap desc
   where
     desc VarTypeInt = "%ld"
     desc VarTypeFloat = "%g"
     desc VarTypeString = "%s"
-    str = concatMap desc types
 
 printCall :: [Expr] -> ExpressionTranslator ()
 printCall [] = pure ()
@@ -276,15 +291,21 @@ printCall args = do
   valsWithTypes <- mapM (localTranslate . translateExpression) args
   forM_ (reverse (map snd valsWithTypes)) addCode
   let types = map fst valsWithTypes
-  generatePrintfDesc types
-  addOpWithoutType $ OpForeignCall "printf" Nothing (VarTypeString : types)
+  cid <- newConstant $ ValueString $ Right $ getPrintfDesc types
+  addOpWithoutType (OpPushString cid)
+  f <- generateNewForeignFunction "printf" Nothing (VarTypeString : types)
+  addOpWithoutType $ OpForeignCall f Nothing (VarTypeString : types)
 
 functionCall :: FunctionCall -> ExpressionTranslator (Maybe VarType)
 functionCall (PrintCall args) =
   printCall args >> pure Nothing
+functionCall (ForeignFunctionCall f args) = do
+  translateArgs args $ foreignFunDeclParams f
+  addOpWithoutType $ OpForeignCall (foreignFunDeclName f) (foreignFunDeclRetType f) (foreignFunDeclParams f)
+  pure $ foreignFunDeclRetType f
 functionCall (NativeFunctionCall fid args) = do
-  FunctionDecl rettype _ params <- findFunction fid
-  translateArgs args params
+  FunctionDef {funDefRetType = rettype, funDefParams = params} <- findFunction fid
+  translateArgs args $ map (\(VarDecl t _) -> t) params
   addOpWithoutType $ OpCall fid
   pure rettype
 
