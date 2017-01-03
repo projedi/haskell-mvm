@@ -14,7 +14,9 @@ module Syntax
   , NumVarType(NumVarTypeInt, NumVarTypeFloat)
   , numTypeToType
   , BinOp(..)
+  , binOpTypeFromArgs
   , UnOp(..)
+  , unOpTypeFromArg
   , Expr
     ( ExprFunctionCall
     , ExprVar
@@ -107,10 +109,51 @@ data BinOp
   | BinEq
   | BinLt
 
+binOpTypeFromArgs :: BinOp -> VarType -> VarType -> VarType
+binOpTypeFromArgs BinPlus VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinPlus VarTypeFloat VarTypeFloat = VarTypeFloat
+binOpTypeFromArgs BinPlus _ _ = error "Type mismatch"
+binOpTypeFromArgs BinMinus VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinMinus VarTypeFloat VarTypeFloat = VarTypeFloat
+binOpTypeFromArgs BinMinus _ _ = error "Type mismatch"
+binOpTypeFromArgs BinTimes VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinTimes VarTypeFloat VarTypeFloat = VarTypeFloat
+binOpTypeFromArgs BinTimes _ _ = error "Type mismatch"
+binOpTypeFromArgs BinDiv VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinDiv VarTypeFloat VarTypeFloat = VarTypeFloat
+binOpTypeFromArgs BinDiv _ _ = error "Type mismatch"
+binOpTypeFromArgs BinMod VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinMod _ _ = error "Type mismatch"
+binOpTypeFromArgs BinBitAnd VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinBitAnd _ _ = error "Type mismatch"
+binOpTypeFromArgs BinBitOr VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinBitOr _ _ = error "Type mismatch"
+binOpTypeFromArgs BinBitXor VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinBitXor _ _ = error "Type mismatch"
+binOpTypeFromArgs BinAnd VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinAnd _ _ = error "Type mismatch"
+binOpTypeFromArgs BinOr VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinOr _ _ = error "Type mismatch"
+binOpTypeFromArgs BinEq VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinEq VarTypeFloat VarTypeFloat = VarTypeInt
+binOpTypeFromArgs BinEq _ _ = error "Type mismatch"
+binOpTypeFromArgs BinLt VarTypeInt VarTypeInt = VarTypeInt
+binOpTypeFromArgs BinLt VarTypeFloat VarTypeFloat = VarTypeInt
+binOpTypeFromArgs BinLt _ _ = error "Type mismatch"
+
 data UnOp
   = UnNeg
   | UnNot
   | UnIntToFloat
+
+unOpTypeFromArg :: UnOp -> VarType -> VarType
+unOpTypeFromArg UnNeg VarTypeInt = VarTypeInt
+unOpTypeFromArg UnNeg VarTypeFloat = VarTypeFloat
+unOpTypeFromArg UnNeg _ = error "Type mismatch"
+unOpTypeFromArg UnNot VarTypeInt = VarTypeInt
+unOpTypeFromArg UnNot _ = error "Type mismatch"
+unOpTypeFromArg UnIntToFloat VarTypeInt = VarTypeFloat
+unOpTypeFromArg UnIntToFloat _ = error "Type mismatch"
 
 data Expr = Expr
   { exprType :: VarType
@@ -148,17 +191,10 @@ pattern ExprBinOp :: BinOp -> Expr -> Expr -> Expr
 pattern ExprBinOp op lhs rhs <- Expr { exprImpl = ExprBinOpImpl op lhs rhs } where
   ExprBinOp op lhs rhs = Expr { exprType = t, exprImpl = ExprBinOpImpl op lhs rhs }
     where
-      t
-       | exprType lhs == exprType rhs = exprType lhs
-       | otherwise = error "Type mismatch"
+      t = binOpTypeFromArgs op (exprType lhs) (exprType rhs)
 
 pattern ExprUnOp :: UnOp -> Expr -> Expr
 pattern ExprUnOp op e <- Expr { exprImpl = ExprUnOpImpl op e } where
-  ExprUnOp op@UnIntToFloat e = Expr { exprType = t, exprImpl = ExprUnOpImpl op e }
-    where
-      t
-       | exprType e == VarTypeInt = VarTypeFloat
-       | otherwise = error "Type mismatch"
   ExprUnOp op e = Expr { exprType = t, exprImpl = ExprUnOpImpl op e }
     where
-      t = exprType e
+      t = unOpTypeFromArg op $ exprType e
