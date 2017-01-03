@@ -11,8 +11,6 @@ module Syntax
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
-  , NumVarType(NumVarTypeInt, NumVarTypeFloat)
-  , numTypeToType
   , BinOp(..)
   , binOpTypeFromArgs
   , UnOp(..)
@@ -86,14 +84,6 @@ functionCallType :: FunctionCall -> Maybe VarType
 functionCallType NativeFunctionCall{ nativeFunCallRetType = rettype } = rettype
 functionCallType ForeignFunctionCall{ foreignFunCallRetType = rettype } = rettype
 functionCallType (PrintCall _) = Nothing
-
-newtype NumVarType = NumVarType { numTypeToType :: VarType }
-
-pattern NumVarTypeInt :: NumVarType
-pattern NumVarTypeInt = NumVarType VarTypeInt
-
-pattern NumVarTypeFloat :: NumVarType
-pattern NumVarTypeFloat = NumVarType VarTypeFloat
 
 data BinOp
   = BinPlus

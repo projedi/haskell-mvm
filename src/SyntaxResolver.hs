@@ -420,6 +420,8 @@ resolveFor vname eFrom eTo s = do
   withLayer $
     do vCur <- newVariable ResolvedSyntax.VarTypeInt
        vTo <- newVariable ResolvedSyntax.VarTypeInt
+       recordVarAccess vCur
+       recordVarAccess vTo
        let expr =
              ResolvedSyntax.ExprNot
                (ResolvedSyntax.ExprLt

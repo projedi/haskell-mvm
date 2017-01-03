@@ -30,6 +30,7 @@ library
                      , ResolvedSyntax
                      , Syntax
                      , SyntaxResolver
+                     , SyntaxTrimmer
                      , TypeChecker
                      , Util
                      , Value
