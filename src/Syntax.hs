@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternSynonyms #-}
 module Syntax
   ( Program(..)
   , VarID(..)
@@ -10,9 +11,21 @@ module Syntax
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
+  , NumVarType(NumVarTypeInt, NumVarTypeFloat)
+  , numTypeToType
   , BinOp(..)
   , UnOp(..)
-  , Expr(..)
+  , Expr
+    ( ExprFunctionCall
+    , ExprVar
+    , ExprInt
+    , ExprFloat
+    , ExprString
+    , ExprBinOp
+    , ExprUnOp
+    )
+  , exprType
+  , functionCallType
   ) where
 
 import Data.IntMap (IntMap)
@@ -55,11 +68,30 @@ data FunctionDef = FunctionDef
   }
 
 data FunctionCall
-  = NativeFunctionCall FunID
-                       [Expr]
-  | ForeignFunctionCall FunID
-                        [Expr]
+  = NativeFunctionCall
+    { nativeFunCallName :: FunID
+    , nativeFunCallRetType :: Maybe VarType
+    , nativeFunCallArgs :: [Expr]
+    }
+  | ForeignFunctionCall
+    { foreignFunCallName :: FunID
+    , foreignFunCallRetType :: Maybe VarType
+    , foreignFunCallArgs :: [Expr]
+    }
   | PrintCall [Expr]
+
+functionCallType :: FunctionCall -> Maybe VarType
+functionCallType NativeFunctionCall{ nativeFunCallRetType = rettype } = rettype
+functionCallType ForeignFunctionCall{ foreignFunCallRetType = rettype } = rettype
+functionCallType (PrintCall _) = Nothing
+
+newtype NumVarType = NumVarType { numTypeToType :: VarType }
+
+pattern NumVarTypeInt :: NumVarType
+pattern NumVarTypeInt = NumVarType VarTypeInt
+
+pattern NumVarTypeFloat :: NumVarType
+pattern NumVarTypeFloat = NumVarType VarTypeFloat
 
 data BinOp
   = BinPlus
@@ -78,15 +110,55 @@ data BinOp
 data UnOp
   = UnNeg
   | UnNot
+  | UnIntToFloat
 
-data Expr
-  = ExprFunctionCall FunctionCall
-  | ExprVar VarID
-  | ExprInt Int
-  | ExprFloat Double
-  | ExprString String
-  | ExprBinOp BinOp
-              Expr
-              Expr
-  | ExprUnOp UnOp
-             Expr
+data Expr = Expr
+  { exprType :: VarType
+  , exprImpl :: ExprImpl
+  }
+
+data ExprImpl
+  = ExprFunctionCallImpl FunctionCall
+  | ExprVarImpl VarID
+  | ExprIntImpl Int
+  | ExprFloatImpl Double
+  | ExprStringImpl String
+  | ExprBinOpImpl BinOp Expr Expr
+  | ExprUnOpImpl UnOp Expr
+
+pattern ExprFunctionCall :: FunctionCall -> Expr
+pattern ExprFunctionCall fcall <- Expr { exprImpl = ExprFunctionCallImpl fcall } where
+  ExprFunctionCall fcall = Expr { exprType = t, exprImpl = ExprFunctionCallImpl fcall }
+    where
+      Just t = functionCallType fcall
+
+pattern ExprVar :: VarType -> VarID -> Expr
+pattern ExprVar vType v = Expr { exprType = vType, exprImpl = ExprVarImpl v }
+
+pattern ExprInt :: Int -> Expr
+pattern ExprInt val = Expr { exprType = VarTypeInt, exprImpl = ExprIntImpl val }
+
+pattern ExprFloat :: Double -> Expr
+pattern ExprFloat val = Expr { exprType = VarTypeFloat, exprImpl = ExprFloatImpl val }
+
+pattern ExprString :: String -> Expr
+pattern ExprString val = Expr { exprType = VarTypeString, exprImpl = ExprStringImpl val }
+
+pattern ExprBinOp :: BinOp -> Expr -> Expr -> Expr
+pattern ExprBinOp op lhs rhs <- Expr { exprImpl = ExprBinOpImpl op lhs rhs } where
+  ExprBinOp op lhs rhs = Expr { exprType = t, exprImpl = ExprBinOpImpl op lhs rhs }
+    where
+      t
+       | exprType lhs == exprType rhs = exprType lhs
+       | otherwise = error "Type mismatch"
+
+pattern ExprUnOp :: UnOp -> Expr -> Expr
+pattern ExprUnOp op e <- Expr { exprImpl = ExprUnOpImpl op e } where
+  ExprUnOp op@UnIntToFloat e = Expr { exprType = t, exprImpl = ExprUnOpImpl op e }
+    where
+      t
+       | exprType e == VarTypeInt = VarTypeFloat
+       | otherwise = error "Type mismatch"
+  ExprUnOp op e = Expr { exprType = t, exprImpl = ExprUnOpImpl op e }
+    where
+      t = exprType e

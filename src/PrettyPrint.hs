@@ -84,14 +84,16 @@ prettyPrintBinOp BinLt = "<"
 unOpPrec :: UnOp -> Int
 unOpPrec UnNeg = 9
 unOpPrec UnNot = 9
+unOpPrec UnIntToFloat = 9
 
 prettyPrintUnOp :: UnOp -> String
 prettyPrintUnOp UnNeg = "-"
 prettyPrintUnOp UnNot = "!"
+prettyPrintUnOp UnIntToFloat = "(double)"
 
 prettyPrintExpr :: Int -> Expr -> String
 prettyPrintExpr _ (ExprFunctionCall fcall) = prettyPrintSimple fcall
-prettyPrintExpr _ (ExprVar varName) = prettyPrintSimple varName
+prettyPrintExpr _ (ExprVar _ varName) = prettyPrintSimple varName
 prettyPrintExpr _ (ExprInt n) = show n
 prettyPrintExpr _ (ExprFloat n) = show n
 prettyPrintExpr _ (ExprString str) = show str
@@ -102,6 +104,7 @@ prettyPrintExpr n (ExprBinOp op el er) =
   parenIfNeeded n (binOpPrec op) $
   prettyPrintExpr (binOpPrec op) el ++
   " " ++ prettyPrintBinOp op ++ " " ++ prettyPrintExpr (binOpPrec op) er
+prettyPrintExpr _ _ = undefined -- TODO: Remove when pattern synonyms have COMPLETE pragma.
 
 class PrettyPrintSimple a  where
   prettyPrintSimple :: a -> String
@@ -113,10 +116,10 @@ instance PrettyPrintSimple FunID where
   prettyPrintSimple = show
 
 instance PrettyPrintSimple FunctionCall where
-  prettyPrintSimple (NativeFunctionCall funname args) =
+  prettyPrintSimple NativeFunctionCall{ nativeFunCallName = funname, nativeFunCallArgs = args} =
     prettyPrintSimple funname ++
     paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
-  prettyPrintSimple (ForeignFunctionCall funname args) =
+  prettyPrintSimple ForeignFunctionCall{ foreignFunCallName = funname, foreignFunCallArgs = args} =
     prettyPrintSimple funname ++
     paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
   prettyPrintSimple (PrintCall args) =

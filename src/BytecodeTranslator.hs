@@ -241,12 +241,12 @@ printCall args = do
 
 functionCall :: FunctionCall -> Translator (Maybe VarType)
 functionCall (PrintCall args) = printCall args >> pure Nothing
-functionCall (ForeignFunctionCall (FunID fid) args) = do
+functionCall ForeignFunctionCall{ foreignFunCallName = (FunID fid), foreignFunCallArgs = args} = do
   Just f <- (IntMap.lookup fid . foreignFuns) <$> State.get
   translateArgs args $ foreignFunDeclParams f
   addOp $ OpForeignCall (foreignFunDeclName f)
   pure $ foreignFunDeclRetType f
-functionCall (NativeFunctionCall fid args) = do
+functionCall NativeFunctionCall{ nativeFunCallName = fid, nativeFunCallArgs = args} = do
   FunctionDef {funDefRetType = rettype
               ,funDefParams = params} <- findFunction fid
   translateArgs args $ map (\(VarDecl t _) -> t) params
@@ -347,7 +347,7 @@ translateExpression :: Expr -> Translator VarType
 translateExpression (ExprFunctionCall fcall) = do
   Just rettype <- functionCall fcall
   pure rettype
-translateExpression (ExprVar vname) = loadVar vname
+translateExpression (ExprVar _ vname) = loadVar vname
 translateExpression (ExprInt i) = do
   cid <- newConstant $ ValueInt i
   addOpWithType (OpPushInt cid)
@@ -434,3 +434,9 @@ translateExpression (ExprBinOp BinLt lhs rhs) =
     , ((VarTypeFloat, VarTypeInt), (VarTypeFloat, OpLtFloat))
     , ((VarTypeFloat, VarTypeFloat), (VarTypeFloat, OpLtFloat))
     ]
+translateExpression (ExprUnOp UnIntToFloat e) = do
+  eType <- translateExpression e
+  case eType of
+    VarTypeInt -> addOpWithType OpIntToFloat
+    _ -> error "Type mismatch"
+translateExpression _ = undefined -- TODO: Remove when pattern synonyms have COMPLETE pragma.

@@ -229,7 +229,7 @@ functionCall (PrintCall args) = do
   vals <- evaluateArgs args
   printCall vals
   pure Nothing
-functionCall (ForeignFunctionCall (FunID fid) args) = do
+functionCall ForeignFunctionCall{ foreignFunCallName = FunID fid, foreignFunCallArgs = args} = do
   vals <- evaluateArgs args
   Just (fdecl, f) <- (IntMap.lookup fid . envForeignFunctions) <$> State.get
   foreignFunctionCall
@@ -237,7 +237,7 @@ functionCall (ForeignFunctionCall (FunID fid) args) = do
     (foreignFunDeclParams fdecl)
     vals
     f
-functionCall (NativeFunctionCall (FunID fid) args) = do
+functionCall NativeFunctionCall{ nativeFunCallName = (FunID fid), nativeFunCallArgs = args} = do
   vals <- evaluateArgs args
   Just f <- (IntMap.lookup fid . envFunctions) <$> State.get
   nativeFunctionCall f vals
@@ -285,7 +285,7 @@ evaluate :: Expr -> Execute Value
 evaluate (ExprFunctionCall fcall) = do
   Just val <- functionCall fcall
   pure val
-evaluate (ExprVar vname) = readVariable vname
+evaluate (ExprVar _ vname) = readVariable vname
 evaluate (ExprInt i) = pure $ ValueInt i
 evaluate (ExprFloat f) = pure $ ValueFloat f
 evaluate (ExprString s) = pure $ ValueString $ Right s
@@ -314,6 +314,11 @@ evaluate (ExprBinOp BinEq el er) =
   ((fromBool .) . (==)) <$> evaluate el <*> evaluate er
 evaluate (ExprBinOp BinLt el er) =
   ((fromBool .) . (<)) <$> evaluate el <*> evaluate er
+evaluate (ExprUnOp UnIntToFloat e) = go <$> evaluate e
+  where
+    go (ValueInt i) = ValueFloat $ fromIntegral i
+    go _ = error "Type mismatch"
+evaluate _ = undefined -- TODO: Remove when pattern synonyms have COMPLETE pragma.
 
 evaluateAsBool :: Expr -> Execute Bool
 evaluateAsBool e = do
