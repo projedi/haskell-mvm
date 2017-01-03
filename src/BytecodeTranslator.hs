@@ -357,18 +357,18 @@ translateExpression (ExprFloat f) = do
 translateExpression (ExprString s) = do
   cid <- newConstant $ ValueString $ Right s
   addOpWithType (OpPushString cid)
-translateExpression (ExprNeg e) = do
+translateExpression (ExprUnOp UnNeg e) = do
   eType <- translateExpression e
   case eType of
     VarTypeInt -> addOpWithType OpNegateInt
     VarTypeFloat -> addOpWithType OpNegateFloat
     _ -> error "Type mismatch"
-translateExpression (ExprNot e) = do
+translateExpression (ExprUnOp UnNot e) = do
   eType <- translateExpression e
   case eType of
     VarTypeInt -> addOpWithType OpNotInt
     _ -> error "Type mismatch"
-translateExpression (ExprPlus lhs rhs) =
+translateExpression (ExprBinOp BinPlus lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList
     [ ((VarTypeInt, VarTypeInt), (VarTypeInt, OpPlusInt))
@@ -376,7 +376,7 @@ translateExpression (ExprPlus lhs rhs) =
     , ((VarTypeFloat, VarTypeInt), (VarTypeFloat, OpPlusFloat))
     , ((VarTypeFloat, VarTypeFloat), (VarTypeFloat, OpPlusFloat))
     ]
-translateExpression (ExprMinus lhs rhs) =
+translateExpression (ExprBinOp BinMinus lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList
     [ ((VarTypeInt, VarTypeInt), (VarTypeInt, OpMinusInt))
@@ -384,7 +384,7 @@ translateExpression (ExprMinus lhs rhs) =
     , ((VarTypeFloat, VarTypeInt), (VarTypeFloat, OpMinusFloat))
     , ((VarTypeFloat, VarTypeFloat), (VarTypeFloat, OpMinusFloat))
     ]
-translateExpression (ExprTimes lhs rhs) =
+translateExpression (ExprBinOp BinTimes lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList
     [ ((VarTypeInt, VarTypeInt), (VarTypeInt, OpTimesInt))
@@ -392,7 +392,7 @@ translateExpression (ExprTimes lhs rhs) =
     , ((VarTypeFloat, VarTypeInt), (VarTypeFloat, OpTimesFloat))
     , ((VarTypeFloat, VarTypeFloat), (VarTypeFloat, OpTimesFloat))
     ]
-translateExpression (ExprDiv lhs rhs) =
+translateExpression (ExprBinOp BinDiv lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList
     [ ((VarTypeInt, VarTypeInt), (VarTypeInt, OpDivInt))
@@ -400,25 +400,25 @@ translateExpression (ExprDiv lhs rhs) =
     , ((VarTypeFloat, VarTypeInt), (VarTypeFloat, OpDivFloat))
     , ((VarTypeFloat, VarTypeFloat), (VarTypeFloat, OpDivFloat))
     ]
-translateExpression (ExprMod lhs rhs) =
+translateExpression (ExprBinOp BinMod lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList [((VarTypeInt, VarTypeInt), (VarTypeInt, OpModInt))]
-translateExpression (ExprBitAnd lhs rhs) =
+translateExpression (ExprBinOp BinBitAnd lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList [((VarTypeInt, VarTypeInt), (VarTypeInt, OpBitAndInt))]
-translateExpression (ExprBitOr lhs rhs) =
+translateExpression (ExprBinOp BinBitOr lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList [((VarTypeInt, VarTypeInt), (VarTypeInt, OpBitOrInt))]
-translateExpression (ExprBitXor lhs rhs) =
+translateExpression (ExprBinOp BinBitXor lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList [((VarTypeInt, VarTypeInt), (VarTypeInt, OpBitXorInt))]
-translateExpression (ExprAnd lhs rhs) =
+translateExpression (ExprBinOp BinAnd lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList [((VarTypeInt, VarTypeInt), (VarTypeInt, OpAndInt))]
-translateExpression (ExprOr lhs rhs) =
+translateExpression (ExprBinOp BinOr lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList [((VarTypeInt, VarTypeInt), (VarTypeInt, OpOrInt))]
-translateExpression (ExprEq lhs rhs) =
+translateExpression (ExprBinOp BinEq lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList
     [ ((VarTypeInt, VarTypeInt), (VarTypeInt, OpEqInt))
@@ -426,7 +426,7 @@ translateExpression (ExprEq lhs rhs) =
     , ((VarTypeFloat, VarTypeInt), (VarTypeFloat, OpEqFloat))
     , ((VarTypeFloat, VarTypeFloat), (VarTypeFloat, OpEqFloat))
     ]
-translateExpression (ExprLt lhs rhs) =
+translateExpression (ExprBinOp BinLt lhs rhs) =
   translateBinOp lhs rhs $
   Map.fromList
     [ ((VarTypeInt, VarTypeInt), (VarTypeInt, OpLtInt))

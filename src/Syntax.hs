@@ -10,6 +10,8 @@ module Syntax
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
+  , BinOp(..)
+  , UnOp(..)
   , Expr(..)
   ) where
 
@@ -59,35 +61,32 @@ data FunctionCall
                         [Expr]
   | PrintCall [Expr]
 
+data BinOp
+  = BinPlus
+  | BinMinus
+  | BinTimes
+  | BinDiv
+  | BinMod
+  | BinBitAnd
+  | BinBitOr
+  | BinBitXor
+  | BinAnd
+  | BinOr
+  | BinEq
+  | BinLt
+
+data UnOp
+  = UnNeg
+  | UnNot
+
 data Expr
   = ExprFunctionCall FunctionCall
   | ExprVar VarID
   | ExprInt Int
   | ExprFloat Double
   | ExprString String
-  | ExprNeg Expr
-  | ExprPlus Expr
+  | ExprBinOp BinOp
+              Expr
+              Expr
+  | ExprUnOp UnOp
              Expr
-  | ExprMinus Expr
-              Expr
-  | ExprTimes Expr
-              Expr
-  | ExprDiv Expr
-            Expr
-  | ExprMod Expr
-            Expr
-  | ExprBitAnd Expr
-               Expr
-  | ExprBitOr Expr
-              Expr
-  | ExprBitXor Expr
-               Expr
-  | ExprNot Expr
-  | ExprAnd Expr
-            Expr
-  | ExprOr Expr
-           Expr
-  | ExprEq Expr
-           Expr
-  | ExprLt Expr
-           Expr

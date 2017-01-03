@@ -111,37 +111,42 @@ typecheckExpr (ResolvedSyntax.ExprVar v) = pure $ Syntax.ExprVar v
 typecheckExpr (ResolvedSyntax.ExprInt i) = pure $ Syntax.ExprInt i
 typecheckExpr (ResolvedSyntax.ExprFloat f) = pure $ Syntax.ExprFloat f
 typecheckExpr (ResolvedSyntax.ExprString s) = pure $ Syntax.ExprString s
-typecheckExpr (ResolvedSyntax.ExprNeg e) = Syntax.ExprNeg <$> typecheckExpr e
+typecheckExpr (ResolvedSyntax.ExprNeg e) =
+  Syntax.ExprUnOp Syntax.UnNeg <$> typecheckExpr e
 typecheckExpr (ResolvedSyntax.ExprPlus lhs rhs) =
-  Syntax.ExprPlus <$> typecheckExpr lhs <*> typecheckExpr rhs
+  Syntax.ExprBinOp Syntax.BinPlus <$> typecheckExpr lhs <*> typecheckExpr rhs
 typecheckExpr (ResolvedSyntax.ExprMinus lhs rhs) =
-  Syntax.ExprMinus <$> typecheckExpr lhs <*> typecheckExpr rhs
+  Syntax.ExprBinOp Syntax.BinMinus <$> typecheckExpr lhs <*> typecheckExpr rhs
 typecheckExpr (ResolvedSyntax.ExprTimes lhs rhs) =
-  Syntax.ExprTimes <$> typecheckExpr lhs <*> typecheckExpr rhs
+  Syntax.ExprBinOp Syntax.BinTimes <$> typecheckExpr lhs <*> typecheckExpr rhs
 typecheckExpr (ResolvedSyntax.ExprDiv lhs rhs) =
-  Syntax.ExprDiv <$> typecheckExpr lhs <*> typecheckExpr rhs
+  Syntax.ExprBinOp Syntax.BinDiv <$> typecheckExpr lhs <*> typecheckExpr rhs
 typecheckExpr (ResolvedSyntax.ExprMod lhs rhs) =
-  Syntax.ExprMod <$> typecheckExpr lhs <*> typecheckExpr rhs
+  Syntax.ExprBinOp Syntax.BinMod <$> typecheckExpr lhs <*> typecheckExpr rhs
 typecheckExpr (ResolvedSyntax.ExprBitAnd lhs rhs) =
-  Syntax.ExprBitAnd <$> typecheckExpr lhs <*> typecheckExpr rhs
+  Syntax.ExprBinOp Syntax.BinBitAnd <$> typecheckExpr lhs <*> typecheckExpr rhs
 typecheckExpr (ResolvedSyntax.ExprBitOr lhs rhs) =
-  Syntax.ExprBitOr <$> typecheckExpr lhs <*> typecheckExpr rhs
+  Syntax.ExprBinOp Syntax.BinBitOr <$> typecheckExpr lhs <*> typecheckExpr rhs
 typecheckExpr (ResolvedSyntax.ExprBitXor lhs rhs) =
-  Syntax.ExprBitXor <$> typecheckExpr lhs <*> typecheckExpr rhs
-typecheckExpr (ResolvedSyntax.ExprNot e) = Syntax.ExprNot <$> typecheckExpr e
+  Syntax.ExprBinOp Syntax.BinBitXor <$> typecheckExpr lhs <*> typecheckExpr rhs
+typecheckExpr (ResolvedSyntax.ExprNot e) =
+  Syntax.ExprUnOp Syntax.UnNot <$> typecheckExpr e
 typecheckExpr (ResolvedSyntax.ExprAnd lhs rhs) =
-  Syntax.ExprAnd <$> typecheckExpr lhs <*> typecheckExpr rhs
+  Syntax.ExprBinOp Syntax.BinAnd <$> typecheckExpr lhs <*> typecheckExpr rhs
 typecheckExpr (ResolvedSyntax.ExprOr lhs rhs) =
-  Syntax.ExprOr <$> typecheckExpr lhs <*> typecheckExpr rhs
+  Syntax.ExprBinOp Syntax.BinOr <$> typecheckExpr lhs <*> typecheckExpr rhs
 typecheckExpr (ResolvedSyntax.ExprEq lhs rhs) =
-  Syntax.ExprEq <$> typecheckExpr lhs <*> typecheckExpr rhs
+  Syntax.ExprBinOp Syntax.BinEq <$> typecheckExpr lhs <*> typecheckExpr rhs
 typecheckExpr (ResolvedSyntax.ExprNeq lhs rhs) =
-  Syntax.ExprNot <$> (Syntax.ExprEq <$> typecheckExpr lhs <*> typecheckExpr rhs)
+  Syntax.ExprUnOp Syntax.UnNot <$>
+  (Syntax.ExprBinOp Syntax.BinEq <$> typecheckExpr lhs <*> typecheckExpr rhs)
 typecheckExpr (ResolvedSyntax.ExprLt lhs rhs) =
-  Syntax.ExprLt <$> typecheckExpr lhs <*> typecheckExpr rhs
+  Syntax.ExprBinOp Syntax.BinLt <$> typecheckExpr lhs <*> typecheckExpr rhs
 typecheckExpr (ResolvedSyntax.ExprLeq lhs rhs) =
-  Syntax.ExprNot <$> (Syntax.ExprLt <$> typecheckExpr rhs <*> typecheckExpr lhs)
+  Syntax.ExprUnOp Syntax.UnNot <$>
+  (Syntax.ExprBinOp Syntax.BinLt <$> typecheckExpr rhs <*> typecheckExpr lhs)
 typecheckExpr (ResolvedSyntax.ExprGt lhs rhs) =
-  Syntax.ExprLt <$> typecheckExpr rhs <*> typecheckExpr lhs
+  Syntax.ExprBinOp Syntax.BinLt <$> typecheckExpr rhs <*> typecheckExpr lhs
 typecheckExpr (ResolvedSyntax.ExprGeq lhs rhs) =
-  Syntax.ExprNot <$> (Syntax.ExprLt <$> typecheckExpr lhs <*> typecheckExpr rhs)
+  Syntax.ExprUnOp Syntax.UnNot <$>
+  (Syntax.ExprBinOp Syntax.BinLt <$> typecheckExpr lhs <*> typecheckExpr rhs)

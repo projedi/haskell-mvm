@@ -289,29 +289,31 @@ evaluate (ExprVar vname) = readVariable vname
 evaluate (ExprInt i) = pure $ ValueInt i
 evaluate (ExprFloat f) = pure $ ValueFloat f
 evaluate (ExprString s) = pure $ ValueString $ Right s
-evaluate (ExprNeg e) = negate <$> evaluate e
-evaluate (ExprPlus el er) = (+) <$> evaluate el <*> evaluate er
-evaluate (ExprMinus el er) = (-) <$> evaluate el <*> evaluate er
-evaluate (ExprTimes el er) = (*) <$> evaluate el <*> evaluate er
-evaluate (ExprDiv el er) = (/) <$> evaluate el <*> evaluate er
-evaluate (ExprMod el er) = rem <$> evaluate el <*> evaluate er
-evaluate (ExprBitAnd el er) = (.&.) <$> evaluate el <*> evaluate er
-evaluate (ExprBitOr el er) = (.|.) <$> evaluate el <*> evaluate er
-evaluate (ExprBitXor el er) = xor <$> evaluate el <*> evaluate er
-evaluate (ExprNot e) = do
+evaluate (ExprUnOp UnNeg e) = negate <$> evaluate e
+evaluate (ExprBinOp BinPlus el er) = (+) <$> evaluate el <*> evaluate er
+evaluate (ExprBinOp BinMinus el er) = (-) <$> evaluate el <*> evaluate er
+evaluate (ExprBinOp BinTimes el er) = (*) <$> evaluate el <*> evaluate er
+evaluate (ExprBinOp BinDiv el er) = (/) <$> evaluate el <*> evaluate er
+evaluate (ExprBinOp BinMod el er) = rem <$> evaluate el <*> evaluate er
+evaluate (ExprBinOp BinBitAnd el er) = (.&.) <$> evaluate el <*> evaluate er
+evaluate (ExprBinOp BinBitOr el er) = (.|.) <$> evaluate el <*> evaluate er
+evaluate (ExprBinOp BinBitXor el er) = xor <$> evaluate el <*> evaluate er
+evaluate (ExprUnOp UnNot e) = do
   val <- evaluate e
   case val of
     ValueInt 0 -> pure $ ValueInt 1
     ValueInt _ -> pure $ ValueInt 0
     _ -> error "Type mismatch"
-evaluate (ExprAnd el er) =
+evaluate (ExprBinOp BinAnd el er) =
   (\lhs rhs -> fromBool (toBool lhs && toBool rhs)) <$> evaluate el <*>
   evaluate er
-evaluate (ExprOr el er) =
+evaluate (ExprBinOp BinOr el er) =
   (\lhs rhs -> fromBool (toBool lhs || toBool rhs)) <$> evaluate el <*>
   evaluate er
-evaluate (ExprEq el er) = ((fromBool .) . (==)) <$> evaluate el <*> evaluate er
-evaluate (ExprLt el er) = ((fromBool .) . (<)) <$> evaluate el <*> evaluate er
+evaluate (ExprBinOp BinEq el er) =
+  ((fromBool .) . (==)) <$> evaluate el <*> evaluate er
+evaluate (ExprBinOp BinLt el er) =
+  ((fromBool .) . (<)) <$> evaluate el <*> evaluate er
 
 evaluateAsBool :: Expr -> Execute Bool
 evaluateAsBool e = do

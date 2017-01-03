@@ -53,38 +53,55 @@ parenIfNeeded prevIndent currentIndent str
   | prevIndent > currentIndent = paren str
   | otherwise = str
 
+binOpPrec :: BinOp -> Int
+binOpPrec BinPlus = 7
+binOpPrec BinMinus = 7
+binOpPrec BinTimes = 8
+binOpPrec BinDiv = 8
+binOpPrec BinMod = 8
+binOpPrec BinBitAnd = 4
+binOpPrec BinBitOr = 2
+binOpPrec BinBitXor = 3
+binOpPrec BinAnd = 1
+binOpPrec BinOr = 0
+binOpPrec BinEq = 5
+binOpPrec BinLt = 6
+
+prettyPrintBinOp :: BinOp -> String
+prettyPrintBinOp BinPlus = "+"
+prettyPrintBinOp BinMinus = "-"
+prettyPrintBinOp BinTimes = "*"
+prettyPrintBinOp BinDiv = "/"
+prettyPrintBinOp BinMod = "%"
+prettyPrintBinOp BinBitAnd = "&"
+prettyPrintBinOp BinBitOr = "|"
+prettyPrintBinOp BinBitXor = "^"
+prettyPrintBinOp BinAnd = "&&"
+prettyPrintBinOp BinOr = "||"
+prettyPrintBinOp BinEq = "=="
+prettyPrintBinOp BinLt = "<"
+
+unOpPrec :: UnOp -> Int
+unOpPrec UnNeg = 9
+unOpPrec UnNot = 9
+
+prettyPrintUnOp :: UnOp -> String
+prettyPrintUnOp UnNeg = "-"
+prettyPrintUnOp UnNot = "!"
+
 prettyPrintExpr :: Int -> Expr -> String
 prettyPrintExpr _ (ExprFunctionCall fcall) = prettyPrintSimple fcall
 prettyPrintExpr _ (ExprVar varName) = prettyPrintSimple varName
 prettyPrintExpr _ (ExprInt n) = show n
 prettyPrintExpr _ (ExprFloat n) = show n
 prettyPrintExpr _ (ExprString str) = show str
-prettyPrintExpr n (ExprNeg e) = parenIfNeeded n 9 $ "-" ++ prettyPrintExpr 9 e
-prettyPrintExpr n (ExprPlus el er) =
-  parenIfNeeded n 7 $ prettyPrintExpr 7 el ++ " + " ++ prettyPrintExpr 7 er
-prettyPrintExpr n (ExprMinus el er) =
-  parenIfNeeded n 7 $ prettyPrintExpr 7 el ++ " - " ++ prettyPrintExpr 7 er
-prettyPrintExpr n (ExprTimes el er) =
-  parenIfNeeded n 8 $ prettyPrintExpr 8 el ++ " * " ++ prettyPrintExpr 8 er
-prettyPrintExpr n (ExprDiv el er) =
-  parenIfNeeded n 8 $ prettyPrintExpr 8 el ++ " / " ++ prettyPrintExpr 8 er
-prettyPrintExpr n (ExprMod el er) =
-  parenIfNeeded n 8 $ prettyPrintExpr 8 el ++ " % " ++ prettyPrintExpr 8 er
-prettyPrintExpr n (ExprBitAnd el er) =
-  parenIfNeeded n 4 $ prettyPrintExpr 4 el ++ " & " ++ prettyPrintExpr 4 er
-prettyPrintExpr n (ExprBitOr el er) =
-  parenIfNeeded n 2 $ prettyPrintExpr 2 el ++ " | " ++ prettyPrintExpr 2 er
-prettyPrintExpr n (ExprBitXor el er) =
-  parenIfNeeded n 3 $ prettyPrintExpr 3 el ++ " ^ " ++ prettyPrintExpr 3 er
-prettyPrintExpr n (ExprNot e) = parenIfNeeded n 9 $ "!" ++ prettyPrintExpr 9 e
-prettyPrintExpr n (ExprAnd el er) =
-  parenIfNeeded n 1 $ prettyPrintExpr 1 el ++ " && " ++ prettyPrintExpr 1 er
-prettyPrintExpr n (ExprOr el er) =
-  parenIfNeeded n 0 $ prettyPrintExpr 0 el ++ " || " ++ prettyPrintExpr 0 er
-prettyPrintExpr n (ExprEq el er) =
-  parenIfNeeded n 5 $ prettyPrintExpr 5 el ++ " == " ++ prettyPrintExpr 5 er
-prettyPrintExpr n (ExprLt el er) =
-  parenIfNeeded n 6 $ prettyPrintExpr 6 el ++ " < " ++ prettyPrintExpr 6 er
+prettyPrintExpr n (ExprUnOp op e) =
+  parenIfNeeded n (unOpPrec op) $
+  prettyPrintUnOp op ++ prettyPrintExpr (unOpPrec op) e
+prettyPrintExpr n (ExprBinOp op el er) =
+  parenIfNeeded n (binOpPrec op) $
+  prettyPrintExpr (binOpPrec op) el ++
+  " " ++ prettyPrintBinOp op ++ " " ++ prettyPrintExpr (binOpPrec op) er
 
 class PrettyPrintSimple a  where
   prettyPrintSimple :: a -> String
