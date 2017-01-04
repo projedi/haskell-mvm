@@ -28,6 +28,7 @@ translate p =
       emptyEnv
       { lastForeignFun = programLastFunID p
       , foreignFuns = programForeignFunctions p
+      , lastVar = programLastVarID p
       }
     (bcFuns, finalEnv) = runTranslator (programFunctions p) initEnv
 
@@ -37,6 +38,8 @@ data Env = Env
   , consts :: IntMap Value
   , foreignFuns :: IntMap ForeignFunctionDecl
   , lastForeignFun :: FunID
+  , captureMap :: IntMap VarID
+  , lastVar :: VarID
   }
 
 emptyEnv :: Env
@@ -47,6 +50,8 @@ emptyEnv =
   , consts = IntMap.empty
   , foreignFuns = IntMap.empty
   , lastForeignFun = FunID 0
+  , captureMap = IntMap.empty
+  , lastVar = VarID 0
   }
 
 type Translator a = WriterT BytecodeFunction (State Env) a
@@ -76,10 +81,37 @@ introduceVariable (VarDecl vtype v) = do
   addOp $ OpIntroVar v vtype
   pure v
 
+newVariable :: VarType -> Translator VarID
+newVariable vtype = do
+  v <- (inc . lastVar) <$> State.get
+  State.modify $
+    \env ->
+       env
+       { lastVar = v
+       }
+  introduceVariable (VarDecl vtype v)
+  where
+    inc (VarID vid) = VarID (vid + 1)
+
+loadVar :: VarID -> Translator ()
+loadVar (VarID vid) = do
+  realVar <- (IntMap.lookup vid . captureMap) <$> State.get
+  case realVar of
+    Nothing -> addOp $ OpLoad (VarID vid)
+    Just v -> addOp $ OpLoadPtr v
+
+storeVar :: VarID -> Translator ()
+storeVar (VarID vid) = do
+  realVar <- (IntMap.lookup vid . captureMap) <$> State.get
+  case realVar of
+    Nothing -> addOp $ OpStore (VarID vid)
+    Just v -> addOp $ OpStorePtr v
+
 translateFunctionBody :: FunctionDef -> Translator ()
 translateFunctionBody f = do
   vs <- mapM introduceVariable $ funDefParams f
   forM_ vs (addOp . OpStore)
+  translateCapturesInBody $ funDefCaptures f
   translateStatement $ StatementBlock $ funDefBody f
 
 translateBlock :: Block -> Translator ()
@@ -105,7 +137,7 @@ translateStatement (StatementWhile e block) = do
   addOp $ OpLabel labelAfterLoop
 translateStatement (StatementAssign v expr) = do
   translateExpression expr
-  addOp $ OpStore v
+  storeVar v
 translateStatement (StatementIfElse e blockTrue blockFalse) = do
   labelElseBranch <- newLabel
   labelAfterIf <- newLabel
@@ -173,6 +205,7 @@ functionCall f@ForeignFunctionCall{} = do
   addOp $ OpForeignCall (foreignFunCallName f)
   pure $ foreignFunCallRetType f
 functionCall f@NativeFunctionCall{} = do
+  translateCapturesForCall $ nativeFunCallCaptures f
   translateArgs $ nativeFunCallArgs f
   addOp $ OpCall $ nativeFunCallName f
   pure $ nativeFunCallRetType f
@@ -238,7 +271,7 @@ translateExpression :: Expr -> Translator ()
 translateExpression (ExprFunctionCall fcall) = do
   _ <- functionCall fcall
   pure ()
-translateExpression (ExprVar _ vname) = addOp $ OpLoad vname
+translateExpression (ExprVar _ vname) = loadVar vname
 translateExpression (ExprInt i) = do
   cid <- newConstant $ ValueInt i
   addOp (OpPushInt cid)
@@ -256,3 +289,18 @@ translateExpression e@(ExprBinOp op lhs rhs) = do
   translateExpression lhs
   addOp $ getBinOp op $ exprType e
 translateExpression _ = undefined -- TODO: Remove when pattern synonyms have COMPLETE pragma.
+
+translateCapturesForCall :: [VarID] -> Translator ()
+translateCapturesForCall vars = do
+  currentCaptures <- captureMap <$> State.get
+  forM_ (reverse vars) $ \(VarID vid) -> do
+    case IntMap.lookup vid currentCaptures of
+      Nothing -> addOp $ OpAddressOf (VarID vid)
+      Just v -> addOp $ OpLoad v
+
+translateCapturesInBody :: [VarID] -> Translator ()
+translateCapturesInBody vars = do
+  vs <- mapM (const $ newVariable VarTypePtr) vars
+  forM_ vs (addOp . OpStore)
+  State.modify $ \env -> env
+    { captureMap = IntMap.fromList $ zip (map (\(VarID vid) -> vid) vars) vs }
