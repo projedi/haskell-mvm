@@ -138,6 +138,7 @@ typecheckFunctionCall (ResolvedSyntax.NativeFunctionCall (Syntax.FunID fid) args
   pure $ Syntax.NativeFunctionCall
     { Syntax.nativeFunCallName = ResolvedSyntax.funDefName fdef
     , Syntax.nativeFunCallRetType = ResolvedSyntax.funDefRetType fdef
+    , Syntax.nativeFunCallCaptures = [] -- Filled by SyntaxTrimmer
     , Syntax.nativeFunCallArgs = args'
     }
 typecheckFunctionCall (ResolvedSyntax.ForeignFunctionCall (Syntax.FunID fid) args) = do

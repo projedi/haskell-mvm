@@ -70,6 +70,7 @@ data FunctionCall
   = NativeFunctionCall
     { nativeFunCallName :: FunID
     , nativeFunCallRetType :: Maybe VarType
+    , nativeFunCallCaptures :: [VarID] -- Filled by SyntaxTrimmer
     , nativeFunCallArgs :: [Expr]
     }
   | ForeignFunctionCall

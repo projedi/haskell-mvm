@@ -1,6 +1,8 @@
 module SyntaxTrimmer (trimAndSetCaptures) where
 
 import Control.Monad
+import Control.Monad.Reader (Reader, runReader)
+import qualified Control.Monad.Reader as Reader
 import Control.Monad.State (State, execState)
 import qualified Control.Monad.State as State
 import Control.Monad.Writer (Writer, execWriter)
@@ -209,4 +211,44 @@ setCaptures usage p = p
     go fdef =
       let FunID fid = funDefName fdef
           Just fusage = IntMap.lookup fid usage
-      in fdef { funDefCaptures = getCapturesAsList fusage }
+      in fdef { funDefCaptures = getCapturesAsList fusage
+              , funDefBody = runReader (setCapturesInBlock (funDefBody fdef)) usage
+              }
+
+type SetCaptures = Reader (IntMap Usage)
+
+setCapturesInBlock :: Block -> SetCaptures Block
+setCapturesInBlock block = do
+  stmts <- mapM setCapturesInStatement (blockStatements block)
+  pure $ block { blockStatements = stmts }
+
+setCapturesInStatement :: Statement -> SetCaptures Statement
+setCapturesInStatement (StatementBlock block) = StatementBlock <$> setCapturesInBlock block
+setCapturesInStatement (StatementFunctionCall fcall) = StatementFunctionCall <$> setCapturesInFunctionCall fcall
+setCapturesInStatement (StatementWhile e b) = StatementWhile <$> setCapturesInExpr e <*> setCapturesInBlock b
+setCapturesInStatement (StatementAssign v e) = StatementAssign v <$> setCapturesInExpr e
+setCapturesInStatement (StatementIfElse e bt bf) = StatementIfElse <$> setCapturesInExpr e <*> setCapturesInBlock bt <*> setCapturesInBlock bf
+setCapturesInStatement (StatementReturn Nothing) = pure $ StatementReturn Nothing
+setCapturesInStatement (StatementReturn (Just e)) = (StatementReturn . Just) <$> setCapturesInExpr e
+
+setCapturesInFunctionCall :: FunctionCall -> SetCaptures FunctionCall
+setCapturesInFunctionCall f@ForeignFunctionCall{} = do
+  args <- mapM setCapturesInExpr (foreignFunCallArgs f)
+  pure $ f { foreignFunCallArgs = args }
+setCapturesInFunctionCall (PrintCall args) = do
+  args' <- mapM setCapturesInExpr args
+  pure $ PrintCall args'
+setCapturesInFunctionCall f@NativeFunctionCall{nativeFunCallName = FunID fid} = do
+  args <- mapM setCapturesInExpr (nativeFunCallArgs f)
+  Just fusage <- (IntMap.lookup fid) <$> Reader.ask
+  pure $ f { nativeFunCallCaptures = getCapturesAsList fusage, nativeFunCallArgs = args }
+
+setCapturesInExpr :: Expr -> SetCaptures Expr
+setCapturesInExpr (ExprFunctionCall fcall) = ExprFunctionCall <$> setCapturesInFunctionCall fcall
+setCapturesInExpr (ExprVar t v) = pure $ ExprVar t v
+setCapturesInExpr (ExprInt i) = pure $ ExprInt i
+setCapturesInExpr (ExprFloat f) = pure $ ExprFloat f
+setCapturesInExpr (ExprString s) = pure $ ExprString s
+setCapturesInExpr (ExprBinOp op lhs rhs) = ExprBinOp op <$> setCapturesInExpr lhs <*> setCapturesInExpr rhs
+setCapturesInExpr (ExprUnOp op e) = ExprUnOp op <$> setCapturesInExpr e
+setCapturesInExpr _ = undefined -- TODO: Remove when pattern synonyms have COMPLETE pragma.

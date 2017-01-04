@@ -115,9 +115,10 @@ instance PrettyPrintSimple FunID where
   prettyPrintSimple = show
 
 instance PrettyPrintSimple FunctionCall where
-  prettyPrintSimple NativeFunctionCall{ nativeFunCallName = funname, nativeFunCallArgs = args} =
+  prettyPrintSimple NativeFunctionCall{ nativeFunCallName = funname, nativeFunCallArgs = args, nativeFunCallCaptures = captures} =
     prettyPrintSimple funname ++
-    paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
+    paren (List.intercalate ", " (map (prettyPrintExpr 0) args)) ++
+    "[" ++ (List.intercalate ", " (map prettyPrintSimple captures)) ++ "]"
   prettyPrintSimple ForeignFunctionCall{ foreignFunCallName = funname, foreignFunCallArgs = args} =
     prettyPrintSimple funname ++
     paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
