@@ -189,10 +189,10 @@ findFunctionInEnv env fname =
       (Just (_, mf)) = IntMap.lookup fid (funs env)
   in (f, mf)
 
-type Resolver = State Env
+type Resolver = WriterT [ResolvedSyntax.VarDecl] (State Env)
 
 runResolver :: Resolver () -> Env
-runResolver m = execState m emptyEnv
+runResolver m = execState (execWriterT m) emptyEnv
 
 findVariable :: PreSyntax.VarName -> Resolver ResolvedSyntax.VarID
 findVariable vname = do
@@ -204,13 +204,15 @@ newVariable vtype = do
   envBefore <- State.get
   let (v, envAfter) = newVariableInEnv envBefore vtype
   State.put envAfter
+  Writer.tell [ResolvedSyntax.VarDecl vtype v]
   pure v
 
 introduceVariable :: PreSyntax.VarDecl -> Resolver ResolvedSyntax.VarID
-introduceVariable vdecl = do
+introduceVariable vdecl@(PreSyntax.VarDecl vtype _) = do
   envBefore <- State.get
   let (v, envAfter) = introduceVariableInEnv envBefore vdecl
   State.put envAfter
+  Writer.tell [ResolvedSyntax.VarDecl vtype v]
   pure v
 
 introduceFunction :: PreSyntax.FunctionDecl -> Resolver ResolvedSyntax.FunID
@@ -250,12 +252,9 @@ resolveBlock stmts =
   withLayer $
   do forM_ stmts scanStatement
      stmts' <- resolveStatements stmts
-     l <- (head . layers) <$> State.get
-     lvars <- variablesInLayer l
      pure
        ResolvedSyntax.Block
-       { ResolvedSyntax.blockVariables = lvars
-       , ResolvedSyntax.blockStatements = stmts'
+       { ResolvedSyntax.blockStatements = stmts'
        }
 
 scanStatement :: PreSyntax.Statement -> Resolver ()
@@ -270,15 +269,6 @@ scanStatement (PreSyntax.StatementFunctionDef fdecl _) =
 scanStatement (PreSyntax.StatementForeignFunctionDecl fdecl) =
   resolveForeignFunctionDecl fdecl
 scanStatement _ = pure ()
-
-variablesInLayer :: Layer -> Resolver [ResolvedSyntax.VarDecl]
-variablesInLayer l = do
-  vs <- vars <$> State.get
-  pure $ map (go vs) $ Map.elems (varEnv l)
-  where
-    go vs (ResolvedSyntax.VarID vid) =
-      let Just vtype = IntMap.lookup vid vs
-      in ResolvedSyntax.VarDecl vtype (ResolvedSyntax.VarID vid)
 
 type StatementResolver = WriterT [ResolvedSyntax.Statement] Resolver
 
@@ -345,14 +335,15 @@ resolveFunctionDef :: PreSyntax.FunctionDecl
                    -> Resolver ()
 resolveFunctionDef fdecl@(PreSyntax.FunctionDecl rettype _ params) stmts = do
   f <- introduceFunction fdecl
-  (params', body) <-
-    withLayer $ (,) <$> mapM introduceParam params <*> resolveBlock stmts
+  (params', (body, locals)) <-
+    withLayer $ (,) <$> mapM introduceParam params <*> (Writer.listen $ resolveBlock stmts)
   markFunctionAsDefined f $
     NativeFunction
       ResolvedSyntax.FunctionDef
       { ResolvedSyntax.funDefRetType = rettype
       , ResolvedSyntax.funDefName = f
       , ResolvedSyntax.funDefParams = params'
+      , ResolvedSyntax.funDefLocals = locals
       , ResolvedSyntax.funDefBody = body
       }
   where
@@ -402,17 +393,12 @@ resolveFor vname eFrom eTo s = do
              ]
            block' =
              ResolvedSyntax.Block
-             { ResolvedSyntax.blockVariables = []
-             , ResolvedSyntax.blockStatements = stmts
+             { ResolvedSyntax.blockStatements = stmts
              }
        pure $
          ResolvedSyntax.StatementBlock
            ResolvedSyntax.Block
-           { ResolvedSyntax.blockVariables =
-             [ ResolvedSyntax.VarDecl ResolvedSyntax.VarTypeInt vCur
-             , ResolvedSyntax.VarDecl ResolvedSyntax.VarTypeInt vTo
-             ]
-           , ResolvedSyntax.blockStatements =
+           { ResolvedSyntax.blockStatements =
              [ ResolvedSyntax.StatementAssign vCur eFrom'
              , ResolvedSyntax.StatementAssign vTo eTo'
              , ResolvedSyntax.StatementWhile expr block'

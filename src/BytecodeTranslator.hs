@@ -112,11 +112,11 @@ translateFunctionBody f = do
   vs <- mapM introduceVariable $ funDefParams f
   forM_ vs (addOp . OpStore)
   translateCapturesInBody $ funDefCaptures f
+  forM_ (funDefLocals f) introduceVariable
   translateStatement $ StatementBlock $ funDefBody f
 
 translateBlock :: Block -> Translator ()
-translateBlock block = do
-  forM_ (blockVariables block) introduceVariable
+translateBlock block =
   forM_ (blockStatements block) translateStatement
 
 translateStatement :: Statement -> Translator ()

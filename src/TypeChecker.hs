@@ -58,12 +58,14 @@ runTypeChecker fs = runState (sequence $ fmap go fs)
       }
     go f = (flip runReaderT) (constEnv f) $ do
       forM_ (ResolvedSyntax.funDefParams f) introduceVariable
+      forM_ (ResolvedSyntax.funDefLocals f) introduceVariable
       body <- typecheckBlock $ ResolvedSyntax.funDefBody f
       pure
         Syntax.FunctionDef
         { Syntax.funDefRetType = ResolvedSyntax.funDefRetType f
         , Syntax.funDefName = ResolvedSyntax.funDefName f
         , Syntax.funDefParams = ResolvedSyntax.funDefParams f
+        , Syntax.funDefLocals = ResolvedSyntax.funDefLocals f
         , Syntax.funDefCaptures = [] -- Only filled by SyntaxTrimmer.
         , Syntax.funDefBody = body
         }
@@ -74,19 +76,16 @@ introduceVariable (ResolvedSyntax.VarDecl t (Syntax.VarID vid)) =
 
 typecheckBlock :: ResolvedSyntax.Block -> TypeChecker Syntax.Block
 typecheckBlock block = do
-  forM_ (ResolvedSyntax.blockVariables block) introduceVariable
   stmts <- mapM typecheckStatement (ResolvedSyntax.blockStatements block)
   pure
     Syntax.Block
-    { Syntax.blockVariables = ResolvedSyntax.blockVariables block
-    , Syntax.blockStatements = stmts
+    { Syntax.blockStatements = stmts
     }
 
 noopBlock :: Syntax.Block
 noopBlock =
   Syntax.Block
-  { Syntax.blockVariables = []
-  , Syntax.blockStatements = []
+  { Syntax.blockStatements = []
   }
 
 typecheckStatement :: ResolvedSyntax.Statement -> TypeChecker Syntax.Statement

@@ -42,8 +42,7 @@ data Program = Program
   }
 
 data Block = Block
-  { blockVariables :: [VarDecl]
-  , blockStatements :: [Statement]
+  { blockStatements :: [Statement]
   }
 
 data Statement
@@ -62,6 +61,7 @@ data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
+  , funDefLocals :: [VarDecl]
   , funDefCaptures :: [VarID] -- Filled by SyntaxTrimmer
   , funDefBody :: Block
   }

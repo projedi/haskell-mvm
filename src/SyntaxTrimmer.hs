@@ -111,11 +111,11 @@ markForeignFunctionAsUsed (FunID f) = Writer.tell $ mempty
 collectUsageInFunction :: FunctionDef -> CollectUsage ()
 collectUsageInFunction fdef = do
   forM_ (funDefParams fdef) markLocalVariable
+  forM_ (funDefLocals fdef) markLocalVariable
   collectUsageInBlock (funDefBody fdef)
 
 collectUsageInBlock :: Block -> CollectUsage ()
 collectUsageInBlock block = do
-  forM_ (blockVariables block) markLocalVariable
   forM_ (blockStatements block) collectUsageInStatement
 
 collectUsageInStatement :: Statement -> CollectUsage ()
@@ -183,12 +183,12 @@ trimVariables usages p = p
 trimVariablesInFunction :: Usage -> FunctionDef -> FunctionDef
 trimVariablesInFunction usage f = f
   { funDefBody = trimVariablesInBlock usage $ funDefBody f
+  , funDefLocals = trimVariableList usage $ funDefLocals f
   }
 
 trimVariablesInBlock :: Usage -> Block -> Block
 trimVariablesInBlock usage block = block
-  { blockVariables = trimVariableList usage $ blockVariables block
-  , blockStatements = trimVariablesInStatement usage <$> blockStatements block
+  { blockStatements = trimVariablesInStatement usage <$> blockStatements block
   }
 
 trimVariableList :: Usage -> [VarDecl] -> [VarDecl]

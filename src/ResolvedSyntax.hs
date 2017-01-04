@@ -41,8 +41,7 @@ data VarDecl =
           VarID
 
 data Block = Block
-  { blockVariables :: [VarDecl]
-  , blockStatements :: [Statement]
+  { blockStatements :: [Statement]
   }
 
 data Statement
@@ -67,6 +66,7 @@ data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
+  , funDefLocals :: [VarDecl]
   , funDefBody :: Block
   }
 

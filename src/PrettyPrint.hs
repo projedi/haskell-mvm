@@ -158,7 +158,6 @@ prettyPrintStatement n (StatementBlock stmts) = prettyPrintBlock n stmts
 prettyPrintBlock :: Int -> Block -> String
 prettyPrintBlock n block =
   indent n "{\n" ++
-  unlines (map (indent (n + 1) . prettyPrintSimple) $ blockVariables block) ++
   printProgram (n + 1) (blockStatements block) ++ "\n" ++ indent n "}"
 
 prettyPrintFunctionDef :: Int -> FunctionDef -> String
@@ -171,7 +170,9 @@ prettyPrintFunctionDef n fdef =
      paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef)))) ++
   " [" ++
   List.intercalate ", " (map prettyPrintSimple (funDefCaptures fdef)) ++
-  "]" ++ "\n" ++ prettyPrintBlock n (funDefBody fdef)
+  "]" ++ "\n" ++
+  unlines (map (indent (n + 1) . prettyPrintSimple) $ funDefLocals fdef) ++
+  prettyPrintBlock n (funDefBody fdef)
 
 printProgram :: Int -> [Statement] -> String
 printProgram n stmts =

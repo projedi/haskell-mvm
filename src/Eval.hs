@@ -206,6 +206,7 @@ nativeFunctionCall fdef vals = do
   res <-
     withNewLayer $
     do generateAssignments (funDefParams fdef) vals
+       forM_ (funDefLocals fdef) declareVariable
        executeBlockWithReturn (funDefBody fdef)
   case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
@@ -333,8 +334,7 @@ evaluateAsInt e = do
 executeBlock :: Block -> Execute ()
 executeBlock block =
   withNewLayer $
-  do forM_ (blockVariables block) declareVariable
-     forM_ (blockStatements block) execute
+  do forM_ (blockStatements block) execute
 
 execute :: Statement -> Execute ()
 execute (StatementBlock block) = executeBlock block
