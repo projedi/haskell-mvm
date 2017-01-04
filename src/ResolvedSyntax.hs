@@ -6,7 +6,6 @@ module ResolvedSyntax
   , VarDecl(..)
   , Block(..)
   , Statement(..)
-  , AccessRecorder(..)
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
@@ -14,8 +13,6 @@ module ResolvedSyntax
   ) where
 
 import Data.IntMap (IntMap)
-import Data.IntSet (IntSet)
-import qualified Data.IntSet as IntSet
 
 import PreSyntax (VarType(..))
 
@@ -66,31 +63,10 @@ data Statement
                 Block
   | StatementReturn (Maybe Expr)
 
-data AccessRecorder = AccessRecorder
-  { varAccess :: IntSet
-  , funAccess :: IntSet
-  , foreignFunAccess :: IntSet
-  }
-
-instance Monoid AccessRecorder where
-  mempty =
-    AccessRecorder
-    { varAccess = IntSet.empty
-    , funAccess = IntSet.empty
-    , foreignFunAccess = IntSet.empty
-    }
-  lhs `mappend` rhs =
-    AccessRecorder
-    { varAccess = varAccess lhs `mappend` varAccess rhs
-    , funAccess = funAccess lhs `mappend` funAccess rhs
-    , foreignFunAccess = foreignFunAccess lhs `mappend` foreignFunAccess rhs
-    }
-
 data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
-  , funDefAccesses :: AccessRecorder
   , funDefBody :: Block
   }
 

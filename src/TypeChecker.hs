@@ -64,7 +64,7 @@ runTypeChecker fs = runState (sequence $ fmap go fs)
         { Syntax.funDefRetType = ResolvedSyntax.funDefRetType f
         , Syntax.funDefName = ResolvedSyntax.funDefName f
         , Syntax.funDefParams = ResolvedSyntax.funDefParams f
-        , Syntax.funDefAccesses = ResolvedSyntax.funDefAccesses f
+        , Syntax.funDefCaptures = [] -- Only filled by SyntaxTrimmer.
         , Syntax.funDefBody = body
         }
 

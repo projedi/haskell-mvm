@@ -12,27 +12,31 @@ import Eval (eval)
 import qualified JIT
 import Parser (parseExpr)
 import PrettyPrint (prettyPrint)
+import Syntax (Program)
 import SyntaxResolver (resolve)
-import SyntaxTrimmer (trim)
+import SyntaxTrimmer (trimAndSetCaptures)
 import TypeChecker (typeCheck)
+
+getExpr :: String -> Program
+getExpr = trimAndSetCaptures . typeCheck . resolve . parseExpr
 
 evaluateFile :: FilePath -> IO ()
 evaluateFile fname = do
   contents <- readFile fname
-  let expr = trim $ typeCheck $ resolve $ parseExpr contents
+  let expr = getExpr contents
   eval expr
 
 interpretBytecode :: FilePath -> IO ()
 interpretBytecode fname = do
   contents <- readFile fname
-  let expr = trim $ typeCheck $ resolve $ parseExpr contents
+  let expr = getExpr contents
   let bc = Bytecode.translate expr
   Bytecode.interpret bc
 
 jit :: FilePath -> IO ()
 jit fname = do
   contents <- readFile fname
-  let expr = trim $ typeCheck $ resolve $ parseExpr contents
+  let expr = getExpr contents
   let bc = Bytecode.translate expr
   JIT.interpret bc
 
@@ -42,7 +46,7 @@ dumpBytecode fname = do
   putStrLn $ "\nDoing: " ++ fname
   putStrLn "======= FILE ======="
   putStrLn contents
-  let expr = trim $ typeCheck $ resolve $ parseExpr contents
+  let expr = getExpr contents
   putStrLn "======= CODE ======="
   putStrLn $ prettyPrint expr
   putStrLn "===== BYTECODE ====="

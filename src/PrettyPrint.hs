@@ -6,7 +6,6 @@ module PrettyPrint
 
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import qualified Data.IntSet as IntSet
 import qualified Data.List as List
 
 import Syntax
@@ -172,8 +171,6 @@ prettyPrintFunctionDef n fdef =
   " [" ++
   List.intercalate ", " (map prettyPrintSimple (funDefCaptures fdef)) ++
   "]" ++ "\n" ++ prettyPrintBlock n (funDefBody fdef)
-  where
-    funDefCaptures = map VarID . IntSet.elems . varAccess . funDefAccesses
 
 printProgram :: Int -> [Statement] -> String
 printProgram n stmts =

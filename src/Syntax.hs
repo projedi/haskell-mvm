@@ -7,7 +7,6 @@ module Syntax
   , VarDecl(..)
   , Block(..)
   , Statement(..)
-  , AccessRecorder(..)
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
@@ -32,7 +31,7 @@ import Data.IntMap (IntMap)
 
 import ResolvedSyntax
        (VarType(..), VarID(..), FunID(..), VarDecl(..),
-        AccessRecorder(..), ForeignFunctionDecl(..))
+        ForeignFunctionDecl(..))
 
 data Program = Program
   { programFunctions :: IntMap FunctionDef
@@ -63,7 +62,7 @@ data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
-  , funDefAccesses :: AccessRecorder
+  , funDefCaptures :: [VarID] -- Filled by SyntaxTrimmer
   , funDefBody :: Block
   }
 
