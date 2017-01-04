@@ -90,8 +90,8 @@ resolveLabelInOp p (OpLabel (LabelID l)) = IntMap.singleton l p
 resolveLabelInOp _ _ = IntMap.empty
 
 resolveLabelsInFun :: FunID -> BytecodeFunction -> IntMap Pos
-resolveLabelsInFun f (BytecodeFunction ops) =
-  mconcat $ map (\(l, op) -> resolveLabelInOp (Pos f l) op) $ zip [0 ..] ops
+resolveLabelsInFun f bf =
+  mconcat $ map (\(l, op) -> resolveLabelInOp (Pos f l) op) $ zip [0 ..] $ bytecodeFunctionOps bf
 
 resolveLabels :: Bytecode -> IntMap Pos
 resolveLabels Bytecode {bytecodeFunctions = funs} =
@@ -207,7 +207,7 @@ startInterpretation :: Interpreter ()
 startInterpretation = interpretFunction (FunID 0)
 
 interpretFunction :: FunID -> Interpreter ()
-interpretFunction f = do
+interpretFunction f@(FunID fid) = do
   posBefore <- pos <$> State.get
   State.modify $
     \env ->
@@ -215,6 +215,8 @@ interpretFunction f = do
        { pos = Pos f 0
        , layers = emptyLayer : layers env
        }
+  Just bf <- (IntMap.lookup fid . bytecodeFunctions . bytecode) <$> Reader.ask
+  forM_ (bytecodeFunctionLocals bf) introduceVariable
   interpretationLoop `Except.catchError` pure
   State.modify $
     \env ->
@@ -225,9 +227,9 @@ interpretFunction f = do
 
 getCurrentOp :: Interpreter (Maybe Op)
 getCurrentOp = do
-  funs <- (bytecodeFunctions . bytecode) <$> Reader.ask
   Pos (FunID f) l <- pos <$> State.get
-  let Just (BytecodeFunction ops) = IntMap.lookup f funs
+  Just bf <- (IntMap.lookup f <$> bytecodeFunctions . bytecode) <$> Reader.ask
+  let ops = bytecodeFunctionOps bf
   if l >= length ops
     then pure Nothing
     else pure $ Just $ ops !! l
@@ -250,8 +252,8 @@ interpretationLoop = do
       advancePos -- Will work even after jump: advances to next op after label.
       interpretationLoop
 
-introduceVariable :: VarID -> VarType -> Interpreter ()
-introduceVariable v vtype =
+introduceVariable :: VarDecl -> Interpreter ()
+introduceVariable (VarDecl vtype v) =
   State.modify $ \env -> introduceVariableInEnv env v vtype
 
 performReturn :: Interpreter ()
@@ -330,7 +332,6 @@ interpretCompOp f = interpretBinOp ((fromBool .) . f)
 
 interpretOp :: Op -> Interpreter ()
 interpretOp (OpCall f) = interpretFunction f
-interpretOp (OpIntroVar v vtype) = introduceVariable v vtype
 interpretOp OpReturn = performReturn
 interpretOp (OpForeignCall f) = foreignFunctionCall f
 interpretOp (OpLabel _) = pure () -- Resolved already

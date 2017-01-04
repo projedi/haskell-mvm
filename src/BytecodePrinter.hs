@@ -50,8 +50,14 @@ prettyPrintFuns =
     ""
 
 prettyPrintFunction :: Int -> BytecodeFunction -> String
-prettyPrintFunction f (BytecodeFunction code) =
-  "Function " ++ show f ++ ":\n" ++ printCodeWithIndent 2 code
+prettyPrintFunction f bf =
+  "Function " ++ show f ++ ":\n" ++
+  printVarsWithIndent 2 (bytecodeFunctionLocals bf) ++ "\n" ++
+  printCodeWithIndent 2 (bytecodeFunctionOps bf)
+
+printVarsWithIndent :: Int -> [VarDecl] -> String
+printVarsWithIndent indent =
+  concatMap (\(VarDecl t n) -> replicate indent ' ' ++ show t ++ " " ++ show n ++ "\n")
 
 printCodeWithIndent :: Int -> [Op] -> String
 printCodeWithIndent indent =

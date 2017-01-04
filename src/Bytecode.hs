@@ -1,5 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 module Bytecode
   ( Bytecode(..)
   , ConstID(..)
@@ -9,14 +7,13 @@ module Bytecode
   , LabelID(..)
   , BytecodeFunction(..)
   , Op(..)
+  , VarDecl(..)
   ) where
 
 import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
-import Data.Monoid ((<>))
 
 import Syntax
-       (VarType, VarID(..), FunID(..), ForeignFunctionDecl(..))
+       (VarDecl(..), VarID(..), FunID(..), ForeignFunctionDecl(..))
 import Value (Value)
 
 newtype ConstID =
@@ -30,28 +27,20 @@ data Bytecode = Bytecode
   , bytecodeForeignFunctions :: IntMap ForeignFunctionDecl
   }
 
-instance Monoid Bytecode where
-  mempty =
-    Bytecode
-    { bytecodeFunctions = IntMap.empty
-    , bytecodeLibraries = []
-    , bytecodeConstants = IntMap.empty
-    , bytecodeForeignFunctions = IntMap.empty
-    }
-  lhs `mappend` rhs =
-    Bytecode
-    { bytecodeFunctions =
-      IntMap.unionWith (<>) (bytecodeFunctions lhs) (bytecodeFunctions rhs)
-    , bytecodeLibraries = bytecodeLibraries lhs ++ bytecodeLibraries rhs
-    , bytecodeConstants =
-      IntMap.union (bytecodeConstants lhs) (bytecodeConstants rhs)
-    , bytecodeForeignFunctions =
-      IntMap.union (bytecodeForeignFunctions lhs) (bytecodeForeignFunctions rhs)
-    }
+data BytecodeFunction = BytecodeFunction
+  { bytecodeFunctionOps :: [Op]
+  , bytecodeFunctionLocals :: [VarDecl]
+  }
 
-newtype BytecodeFunction =
-  BytecodeFunction [Op]
-  deriving (Monoid, Show)
+instance Monoid BytecodeFunction where
+  mempty = BytecodeFunction
+    { bytecodeFunctionOps = []
+    , bytecodeFunctionLocals = []
+    }
+  lhs `mappend` rhs = BytecodeFunction
+    { bytecodeFunctionOps = bytecodeFunctionOps lhs `mappend` bytecodeFunctionOps rhs
+    , bytecodeFunctionLocals = bytecodeFunctionLocals lhs `mappend` bytecodeFunctionLocals rhs
+    }
 
 newtype LabelID =
   LabelID Int
@@ -60,8 +49,6 @@ newtype LabelID =
 -- Args are in pop order. Return value is on top of the stack.
 data Op
   = OpCall FunID
-  | OpIntroVar VarID
-               VarType
   | OpReturn
   | OpForeignCall FunID
   | OpLabel LabelID
@@ -101,7 +88,6 @@ data Op
 
 instance Show Op where
   show (OpCall (FunID f)) = "call " ++ show f
-  show (OpIntroVar v t) = "var " ++ show v ++ " : " ++ show t
   show OpReturn = "ret"
   show (OpForeignCall (FunID f)) = "foreign " ++ show f
   show (OpLabel (LabelID l)) = "lbl " ++ show l

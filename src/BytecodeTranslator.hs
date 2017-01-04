@@ -74,12 +74,17 @@ newLabel = do
     inc (LabelID lbl) = LabelID (lbl + 1)
 
 addOp :: Op -> Translator ()
-addOp op = Writer.tell (BytecodeFunction [op])
+addOp op = Writer.tell $ BytecodeFunction
+  { bytecodeFunctionOps = [op]
+  , bytecodeFunctionLocals = []
+  }
 
-introduceVariable :: VarDecl -> Translator VarID
-introduceVariable (VarDecl vtype v) = do
-  addOp $ OpIntroVar v vtype
-  pure v
+introduceVariable :: VarDecl -> Translator ()
+introduceVariable v = do
+  Writer.tell $ BytecodeFunction
+    { bytecodeFunctionOps = []
+    , bytecodeFunctionLocals = [v]
+    }
 
 newVariable :: VarType -> Translator VarID
 newVariable vtype = do
@@ -90,6 +95,7 @@ newVariable vtype = do
        { lastVar = v
        }
   introduceVariable (VarDecl vtype v)
+  pure v
   where
     inc (VarID vid) = VarID (vid + 1)
 
@@ -109,8 +115,9 @@ storeVar (VarID vid) = do
 
 translateFunctionBody :: FunctionDef -> Translator ()
 translateFunctionBody f = do
-  vs <- mapM introduceVariable $ funDefParams f
-  forM_ vs (addOp . OpStore)
+  forM_ (funDefParams f) $ \vdecl@(VarDecl _ v) -> do
+    introduceVariable vdecl
+    addOp $ OpStore v
   translateCapturesInBody $ funDefCaptures f
   forM_ (funDefLocals f) introduceVariable
   translateStatement $ StatementBlock $ funDefBody f
