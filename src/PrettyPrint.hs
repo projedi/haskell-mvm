@@ -9,12 +9,14 @@ import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
 import Syntax
+import Value (Value)
 
 prettyPrint :: Program -> String
 prettyPrint p =
   unlines
     [ printLibs $ programLibraries p
     , printForeignFunctions $ programForeignFunctions p
+    , printConstants $ programConstants p
     , printFunctions $ programFunctions p
     ]
 
@@ -43,6 +45,15 @@ printFunctions funs =
         rest ++ "\n" ++ show key ++ ": " ++ prettyPrintFunctionDef 0 val)
     ""
     funs
+
+printConstants :: IntMap Value -> String
+printConstants vals =
+  "Constants: " ++
+  IntMap.foldrWithKey
+    (\key val rest ->
+        rest ++ "\n" ++ show key ++ ": " ++ show val)
+    ""
+    vals
 
 paren :: String -> String
 paren str = "(" ++ str ++ ")"
@@ -93,9 +104,7 @@ prettyPrintUnOp UnIntToFloat = "(double)"
 prettyPrintExpr :: Int -> Expr -> String
 prettyPrintExpr _ (ExprFunctionCall fcall) = prettyPrintSimple fcall
 prettyPrintExpr _ (ExprVar _ varName) = prettyPrintSimple varName
-prettyPrintExpr _ (ExprInt n) = show n
-prettyPrintExpr _ (ExprFloat n) = show n
-prettyPrintExpr _ (ExprString str) = show str
+prettyPrintExpr _ (ExprConst _ c) = show c
 prettyPrintExpr n (ExprUnOp op e) =
   parenIfNeeded n (unOpPrec op) $
   prettyPrintUnOp op ++ prettyPrintExpr (unOpPrec op) e

@@ -3,6 +3,7 @@ module Syntax
   ( Program(..)
   , VarID(..)
   , FunID(..)
+  , ConstID(..)
   , VarType(..)
   , VarDecl(..)
   , Block(..)
@@ -17,9 +18,7 @@ module Syntax
   , Expr
     ( ExprFunctionCall
     , ExprVar
-    , ExprInt
-    , ExprFloat
-    , ExprString
+    , ExprConst
     , ExprBinOp
     , ExprUnOp
     )
@@ -30,15 +29,18 @@ module Syntax
 import Data.IntMap (IntMap)
 
 import ResolvedSyntax
-       (VarType(..), VarID(..), FunID(..), VarDecl(..),
+       (VarType(..), VarID(..), FunID(..), ConstID(..), VarDecl(..),
         ForeignFunctionDecl(..))
+import Value (Value)
 
 data Program = Program
   { programFunctions :: IntMap FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
+  , programConstants :: IntMap Value
   , programLastFunID :: FunID
   , programLastVarID :: VarID
+  , programLastConstID :: ConstID
   }
 
 data Block = Block
@@ -153,9 +155,7 @@ data Expr = Expr
 data ExprImpl
   = ExprFunctionCallImpl FunctionCall
   | ExprVarImpl VarID
-  | ExprIntImpl Int
-  | ExprFloatImpl Double
-  | ExprStringImpl String
+  | ExprConstImpl ConstID
   | ExprBinOpImpl BinOp Expr Expr
   | ExprUnOpImpl UnOp Expr
 
@@ -168,14 +168,8 @@ pattern ExprFunctionCall fcall <- Expr { exprImpl = ExprFunctionCallImpl fcall }
 pattern ExprVar :: VarType -> VarID -> Expr
 pattern ExprVar vType v = Expr { exprType = vType, exprImpl = ExprVarImpl v }
 
-pattern ExprInt :: Int -> Expr
-pattern ExprInt val = Expr { exprType = VarTypeInt, exprImpl = ExprIntImpl val }
-
-pattern ExprFloat :: Double -> Expr
-pattern ExprFloat val = Expr { exprType = VarTypeFloat, exprImpl = ExprFloatImpl val }
-
-pattern ExprString :: String -> Expr
-pattern ExprString val = Expr { exprType = VarTypeString, exprImpl = ExprStringImpl val }
+pattern ExprConst :: VarType -> ConstID -> Expr
+pattern ExprConst vType cid = Expr { exprType = vType, exprImpl = ExprConstImpl cid }
 
 pattern ExprBinOp :: BinOp -> Expr -> Expr -> Expr
 pattern ExprBinOp op lhs rhs <- Expr { exprImpl = ExprBinOpImpl op lhs rhs } where

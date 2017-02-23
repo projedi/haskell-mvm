@@ -148,9 +148,7 @@ collectUsageInFunctionCall (PrintCall args) =
 collectUsageInExpr :: Expr -> CollectUsage ()
 collectUsageInExpr (ExprFunctionCall fcall) = collectUsageInFunctionCall fcall
 collectUsageInExpr (ExprVar _ v) = markVariableAsUsed v
-collectUsageInExpr (ExprInt _) = pure ()
-collectUsageInExpr (ExprFloat _) = pure ()
-collectUsageInExpr (ExprString _) = pure ()
+collectUsageInExpr (ExprConst _ _) = pure ()
 collectUsageInExpr (ExprBinOp _ lhs rhs) = do
   collectUsageInExpr lhs
   collectUsageInExpr rhs
@@ -246,9 +244,7 @@ setCapturesInFunctionCall f@NativeFunctionCall{nativeFunCallName = FunID fid} = 
 setCapturesInExpr :: Expr -> SetCaptures Expr
 setCapturesInExpr (ExprFunctionCall fcall) = ExprFunctionCall <$> setCapturesInFunctionCall fcall
 setCapturesInExpr (ExprVar t v) = pure $ ExprVar t v
-setCapturesInExpr (ExprInt i) = pure $ ExprInt i
-setCapturesInExpr (ExprFloat f) = pure $ ExprFloat f
-setCapturesInExpr (ExprString s) = pure $ ExprString s
+setCapturesInExpr (ExprConst t c) = pure $ ExprConst t c
 setCapturesInExpr (ExprBinOp op lhs rhs) = ExprBinOp op <$> setCapturesInExpr lhs <*> setCapturesInExpr rhs
 setCapturesInExpr (ExprUnOp op e) = ExprUnOp op <$> setCapturesInExpr e
 setCapturesInExpr _ = undefined -- TODO: Remove when pattern synonyms have COMPLETE pragma.

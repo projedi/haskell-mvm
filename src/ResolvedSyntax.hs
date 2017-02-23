@@ -2,6 +2,7 @@ module ResolvedSyntax
   ( Program(..)
   , VarID(..)
   , FunID(..)
+  , ConstID(..)
   , VarType(..)
   , VarDecl(..)
   , Block(..)
@@ -15,13 +16,16 @@ module ResolvedSyntax
 import Data.IntMap (IntMap)
 
 import PreSyntax (VarType(..))
+import Value (Value)
 
 data Program = Program
   { programFunctions :: IntMap FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
+  , programConstants :: IntMap Value
   , programLastFunID :: FunID
   , programLastVarID :: VarID
+  , programLastConstID :: ConstID
   }
 
 newtype VarID =
@@ -35,6 +39,12 @@ newtype FunID =
 
 instance Show FunID where
   show (FunID i) = "fun_" ++ show i
+
+newtype ConstID =
+  ConstID Int
+
+instance Show ConstID where
+  show (ConstID i) = "const_" ++ show i
 
 data VarDecl =
   VarDecl VarType
@@ -87,9 +97,7 @@ data FunctionCall
 data Expr
   = ExprFunctionCall FunctionCall
   | ExprVar VarID
-  | ExprInt Int
-  | ExprFloat Double
-  | ExprString String
+  | ExprConst ConstID
   | ExprNeg Expr
   | ExprPlus Expr
              Expr

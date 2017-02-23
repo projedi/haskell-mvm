@@ -27,7 +27,7 @@ eval p = do
     \l -> do
       Right h <- dlopen l
       pure h
-  runExecute $ startExecute (programForeignFunctions p) (programFunctions p)
+  runExecute $ startExecute (programForeignFunctions p) (programFunctions p) (programConstants p)
   forM_ libhandles dlclose
   pure ()
 
@@ -82,6 +82,7 @@ data Env = Env
   { envLayers :: [Layer]
   , envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   , envFunctions :: IntMap FunctionDef
+  , envConsts :: IntMap Value
   }
 
 emptyEnv :: Env
@@ -90,6 +91,7 @@ emptyEnv =
   { envLayers = []
   , envForeignFunctions = IntMap.empty
   , envFunctions = IntMap.empty
+  , envConsts = IntMap.empty
   }
 
 modifyingLayer :: (Layer -> Maybe Layer) -> [Layer] -> Maybe [Layer]
@@ -128,6 +130,9 @@ addVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname vtype =
          { envLayers = l' : otherlayers
          })
 addVariableToEnv _ _ _ = error "Env broke"
+
+readConstantFromEnv :: Env -> ConstID -> Maybe Value
+readConstantFromEnv env (ConstID cid) = IntMap.lookup cid (envConsts env)
 
 type Execute a = ExceptT (Maybe Value) (StateT Env IO) a
 
@@ -172,14 +177,15 @@ runExecute m = do
   _ <- runStateT (runExceptT m) emptyEnv
   pure ()
 
-startExecute :: IntMap ForeignFunctionDecl -> IntMap FunctionDef -> Execute ()
-startExecute foreignFuns nativeFuns = do
+startExecute :: IntMap ForeignFunctionDecl -> IntMap FunctionDef -> IntMap Value -> Execute ()
+startExecute foreignFuns nativeFuns consts = do
   funs <- mapM getForeignFun foreignFuns
   State.modify $
     \env ->
        env
        { envForeignFunctions = funs
        , envFunctions = nativeFuns
+       , envConsts = consts
        }
   let Just mainFun = IntMap.lookup 0 nativeFuns
   _ <- nativeFunctionCall mainFun []
@@ -282,14 +288,18 @@ writeVariable name val = do
   let Just env' = writeVariableToEnv env name val
   State.put env'
 
+readConstant :: ConstID -> Execute Value
+readConstant name = do
+  env <- State.get
+  let Just val = readConstantFromEnv env name
+  pure val
+
 evaluate :: Expr -> Execute Value
 evaluate (ExprFunctionCall fcall) = do
   Just val <- functionCall fcall
   pure val
 evaluate (ExprVar _ vname) = readVariable vname
-evaluate (ExprInt i) = pure $ ValueInt i
-evaluate (ExprFloat f) = pure $ ValueFloat f
-evaluate (ExprString s) = pure $ ValueString $ Right s
+evaluate (ExprConst _ c) = readConstant c
 evaluate (ExprUnOp UnNeg e) = negate <$> evaluate e
 evaluate (ExprBinOp BinPlus el er) = (+) <$> evaluate el <*> evaluate er
 evaluate (ExprBinOp BinMinus el er) = (-) <$> evaluate el <*> evaluate er

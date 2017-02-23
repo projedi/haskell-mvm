@@ -13,7 +13,7 @@ import Data.Bits
 import Foreign.C.String (CString)
 import qualified Foreign.C.String as CString
 
-import Syntax (VarType(..))
+import PreSyntax (VarType(..))
 import Util
 
 data Value

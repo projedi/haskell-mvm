@@ -13,6 +13,8 @@ import qualified Data.IntMap as IntMap
 
 import qualified ResolvedSyntax
 import qualified Syntax
+import Value (Value)
+import qualified Value
 
 typeCheck :: ResolvedSyntax.Program -> Syntax.Program
 typeCheck p =
@@ -20,16 +22,20 @@ typeCheck p =
   { Syntax.programFunctions = fs
   , Syntax.programLibraries = ResolvedSyntax.programLibraries p
   , Syntax.programForeignFunctions = envForeignFunctions finalEnv
+  , Syntax.programConstants = envConsts finalEnv
   , Syntax.programLastFunID = envLastFunID finalEnv
   , Syntax.programLastVarID = envLastVarID finalEnv
+  , Syntax.programLastConstID = envLastConstID finalEnv
   }
   where
     startEnv =
       Env
       { envFuns = ResolvedSyntax.programFunctions p
       , envForeignFunctions = ResolvedSyntax.programForeignFunctions p
+      , envConsts = ResolvedSyntax.programConstants p
       , envLastFunID = ResolvedSyntax.programLastFunID p
       , envLastVarID = ResolvedSyntax.programLastVarID p
+      , envLastConstID = ResolvedSyntax.programLastConstID p
       , envVars = IntMap.empty
       }
     (fs, finalEnv) = runTypeChecker (ResolvedSyntax.programFunctions p) startEnv
@@ -41,8 +47,10 @@ data ConstEnv = ConstEnv
 data Env = Env
   { envFuns :: IntMap ResolvedSyntax.FunctionDef
   , envForeignFunctions :: IntMap ResolvedSyntax.ForeignFunctionDecl
+  , envConsts :: IntMap Value
   , envLastFunID :: Syntax.FunID
   , envLastVarID :: Syntax.VarID
+  , envLastConstID :: Syntax.ConstID
   , envVars :: IntMap Syntax.VarType
   }
 
@@ -170,9 +178,9 @@ typecheckExpr (ResolvedSyntax.ExprFunctionCall fcall) =
 typecheckExpr (ResolvedSyntax.ExprVar (Syntax.VarID v)) = do
   Just t <- (IntMap.lookup v . envVars) <$> State.get
   pure $ Syntax.ExprVar t (Syntax.VarID v)
-typecheckExpr (ResolvedSyntax.ExprInt i) = pure $ Syntax.ExprInt i
-typecheckExpr (ResolvedSyntax.ExprFloat f) = pure $ Syntax.ExprFloat f
-typecheckExpr (ResolvedSyntax.ExprString s) = pure $ Syntax.ExprString s
+typecheckExpr (ResolvedSyntax.ExprConst (Syntax.ConstID cid)) = do
+  Just v <- (IntMap.lookup cid . envConsts) <$> State.get
+  pure $ Syntax.ExprConst (Value.typeof v) (Syntax.ConstID cid)
 typecheckExpr (ResolvedSyntax.ExprNeg e) =
   Syntax.ExprUnOp Syntax.UnNeg <$> typecheckExpr e
 typecheckExpr (ResolvedSyntax.ExprPlus lhs rhs) =
