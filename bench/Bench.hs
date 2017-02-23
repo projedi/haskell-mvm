@@ -19,7 +19,6 @@ originalPerfTestList =
 perfTests :: Benchmark
 perfTests = bgroup "Perf"
   [ testWithParams "Dumb" ["--dumb"] names
-  , testWithParams "Bytecode" ["--eval"] names
   , testWithParams "JIT" [] names
   ]
   where

@@ -20,8 +20,6 @@ data Value
   = ValueInt Int
   | ValueFloat Double
   | ValueString (Either CString String)
-  -- TODO: That's specific to BytecodeInterpreter. And it's value is VarID
-  | ValuePtr Int
   deriving (Show)
 
 instance Eq Value where
@@ -123,7 +121,6 @@ showIO (ValueInt i) = pure $ show i
 showIO (ValueFloat f) = doubleToString f
 showIO (ValueString (Left cs)) = CString.peekCString cs
 showIO (ValueString (Right s)) = pure s
-showIO (ValuePtr _) = error "Type mismatch"
 
 typeIs :: Value -> VarType -> Bool
 typeIs v vtype = typeof v == vtype
@@ -132,13 +129,11 @@ typeof :: Value -> VarType
 typeof (ValueInt _) = VarTypeInt
 typeof (ValueFloat _) = VarTypeFloat
 typeof (ValueString _) = VarTypeString
-typeof (ValuePtr _) = VarTypePtr
 
 defaultValueFromType :: VarType -> Value
 defaultValueFromType VarTypeInt = ValueInt 0
 defaultValueFromType VarTypeFloat = ValueFloat 0
 defaultValueFromType VarTypeString = ValueString $ Right ""
-defaultValueFromType VarTypePtr = ValuePtr 0
 
 convert :: Value -> VarType -> Value
 convert v vtype

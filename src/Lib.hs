@@ -5,9 +5,6 @@ module Lib
 import Control.Monad (forM_)
 import System.Environment (getArgs)
 
-import qualified BytecodePrinter as Bytecode
-import qualified BytecodeInterpreter as Bytecode
-import qualified BytecodeTranslator as Bytecode
 import Eval (eval)
 import qualified JIT
 import Parser (parseExpr)
@@ -26,22 +23,14 @@ evaluateFile fname = do
   let expr = getExpr contents
   eval expr
 
-interpretBytecode :: FilePath -> IO ()
-interpretBytecode fname = do
-  contents <- readFile fname
-  let expr = getExpr contents
-  let bc = Bytecode.translate expr
-  Bytecode.interpret bc
-
 jit :: FilePath -> IO ()
 jit fname = do
   contents <- readFile fname
   let expr = getExpr contents
-  let bc = Bytecode.translate expr
-  JIT.interpret bc
+  JIT.interpret expr
 
-dumpBytecode :: FilePath -> IO ()
-dumpBytecode fname = do
+dump :: FilePath -> IO ()
+dump fname = do
   contents <- readFile fname
   putStrLn $ "\nDoing: " ++ fname
   putStrLn "======= FILE ======="
@@ -49,14 +38,11 @@ dumpBytecode fname = do
   let expr = getExpr contents
   putStrLn "======= CODE ======="
   putStrLn $ prettyPrint expr
-  putStrLn "===== BYTECODE ====="
-  putStrLn $ Bytecode.prettyPrint $ Bytecode.translate expr
 
 getOperation :: [String] -> (FilePath -> IO (), [String])
 getOperation [] = (const $ pure (), [])
 getOperation ("--dumb":args) = (evaluateFile, args)
-getOperation ("--dump":args) = (dumpBytecode, args)
-getOperation ("--eval":args) = (interpretBytecode, args)
+getOperation ("--dump":args) = (dump, args)
 getOperation args = (jit, args)
 
 someFunc :: IO ()

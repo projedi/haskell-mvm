@@ -16,10 +16,6 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Lib
-                     , Bytecode
-                     , BytecodeInterpreter
-                     , BytecodePrinter
-                     , BytecodeTranslator
                      , Eval
                      , ForeignEval
                      , JIT

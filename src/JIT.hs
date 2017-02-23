@@ -2,7 +2,7 @@ module JIT
   ( interpret
   ) where
 
-import Bytecode
+import Syntax
 
-interpret :: Bytecode -> IO ()
+interpret :: Program -> IO ()
 interpret = undefined

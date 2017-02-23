@@ -107,7 +107,6 @@ passTests =
   testGroup
     "Pass"
     [ testsWithParams "Dumb" 1 "expected" ["--dumb"] names
-    , testsWithParams "Bytecode" 1 "expected" ["--eval"] names
     , testsWithParams "JIT" 1 "expected" [] names
     ]
   where
@@ -119,7 +118,6 @@ failTests =
   testGroup
     "Fail"
     [ testsWithParams "Dumb" 30 "expected" ["--dumb"] names
-    , testsWithParams "Bytecode" 30 "expected" ["--eval"] names
     , testsWithParams "JIT" 30 "expected" [] names
     ]
   where
@@ -130,7 +128,6 @@ intensiveTests =
   testGroup
     "Intensive"
     [ testsWithParams "Dumb" 300 "expected" ["--dumb"] names
-    , testsWithParams "Bytecode" 300 "expected" ["--eval"] names
     , testsWithParams "JIT" 300 "expected" [] names
     ]
   where
@@ -141,7 +138,6 @@ graphicsTests =
   testGroup
     "Graphics"
     [ testsWithParams "Dumb" 300 "ppm" ["--dumb"] names
-    , testsWithParams "Bytecode" 300 "ppm" ["--eval"] names
     , testsWithParams "JIT" 300 "ppm" [] names
     ]
   where
