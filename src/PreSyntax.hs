@@ -7,11 +7,11 @@ data Program = Program
 
 type Symbol = String
 
-data VarName =
+newtype VarName =
   VarName Symbol
   deriving (Eq, Ord, Show)
 
-data FunctionName =
+newtype FunctionName =
   FunctionName Symbol
   deriving (Eq, Ord, Show)
 

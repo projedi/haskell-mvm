@@ -34,8 +34,8 @@ dlclose (LibHandle handle) = DL.dlclose handle
 
 findSymbol :: String -> IO (Maybe ForeignFun)
 findSymbol name =
-  catch ((Just . ForeignFun) <$> DL.dlsym DL.Default name) $
-  \(_ :: IOError) -> pure Nothing
+  catch (Just . ForeignFun <$> DL.dlsym DL.Default name) $ \(_ :: IOError) ->
+    pure Nothing
 
 withValue :: Value -> (FFI.Arg -> IO a) -> IO a
 withValue (ValueInt i) fun = fun (FFI.argInt i)
@@ -51,9 +51,11 @@ withValues (v:vs) f = withValue v $ \a -> withValues vs $ \as -> f (a : as)
 
 call' :: Maybe VarType -> (forall a. FFI.RetType a -> IO a) -> IO (Maybe Value)
 call' Nothing fun = fun FFI.retVoid >> pure Nothing
-call' (Just VarTypeInt) fun = (Just . ValueInt) <$> fun FFI.retInt
-call' (Just VarTypeFloat) fun = (Just . ValueFloat . realToFrac) <$> fun FFI.retCDouble
-call' (Just VarTypeString) fun = (Just . ValueString . Left) <$> fun FFI.retCString
+call' (Just VarTypeInt) fun = Just . ValueInt <$> fun FFI.retInt
+call' (Just VarTypeFloat) fun =
+  Just . ValueFloat . realToFrac <$> fun FFI.retCDouble
+call' (Just VarTypeString) fun =
+  Just . ValueString . Left <$> fun FFI.retCString
 
 call :: ForeignFun -> Maybe VarType -> [Value] -> IO (Maybe Value)
 call (ForeignFun fun) rettype vals =

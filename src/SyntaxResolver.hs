@@ -21,14 +21,14 @@ import Value (Value(..))
 resolve :: PreSyntax.Program -> ResolvedSyntax.Program
 resolve p =
   ResolvedSyntax.Program
-  { ResolvedSyntax.programLibraries = PreSyntax.programLibraries p
-  , ResolvedSyntax.programFunctions = nativeFuns
-  , ResolvedSyntax.programForeignFunctions = foreignFuns
-  , ResolvedSyntax.programConstants = consts finalEnv
-  , ResolvedSyntax.programLastFunID = lastFun finalEnv
-  , ResolvedSyntax.programLastVarID = lastVar finalEnv
-  , ResolvedSyntax.programLastConstID = lastConst finalEnv
-  }
+    { ResolvedSyntax.programLibraries = PreSyntax.programLibraries p
+    , ResolvedSyntax.programFunctions = nativeFuns
+    , ResolvedSyntax.programForeignFunctions = foreignFuns
+    , ResolvedSyntax.programConstants = consts finalEnv
+    , ResolvedSyntax.programLastFunID = lastFun finalEnv
+    , ResolvedSyntax.programLastVarID = lastVar finalEnv
+    , ResolvedSyntax.programLastConstID = lastConst finalEnv
+    }
   where
     mainFunDecl =
       PreSyntax.FunctionDecl Nothing (PreSyntax.FunctionName "main") []
@@ -48,39 +48,24 @@ data Layer = Layer
   }
 
 emptyLayer :: Layer
-emptyLayer =
-  Layer
-  { varEnv = Map.empty
-  , funEnv = Map.empty
-  }
+emptyLayer = Layer {varEnv = Map.empty, funEnv = Map.empty}
 
-newVariableInLayer :: Layer
-                   -> PreSyntax.VarName
-                   -> ResolvedSyntax.VarID
-                   -> Maybe Layer
+newVariableInLayer ::
+     Layer -> PreSyntax.VarName -> ResolvedSyntax.VarID -> Maybe Layer
 newVariableInLayer l@Layer {varEnv = lvars} vname vid =
   case Map.insertLookupWithKey (\_ val _ -> val) vname vid lvars of
-    (Nothing, lvars') ->
-      Just $
-      l
-      { varEnv = lvars'
-      }
+    (Nothing, lvars') -> Just $ l {varEnv = lvars'}
     (Just _, _) -> Nothing
 
-findFunctionInLayer :: Layer -> PreSyntax.FunctionName -> Maybe ResolvedSyntax.FunID
+findFunctionInLayer ::
+     Layer -> PreSyntax.FunctionName -> Maybe ResolvedSyntax.FunID
 findFunctionInLayer Layer {funEnv = lfuns} fname = Map.lookup fname lfuns
 
-newFunctionInLayer :: Layer
-                   -> PreSyntax.FunctionName
-                   -> ResolvedSyntax.FunID
-                   -> Maybe Layer
+newFunctionInLayer ::
+     Layer -> PreSyntax.FunctionName -> ResolvedSyntax.FunID -> Maybe Layer
 newFunctionInLayer l@Layer {funEnv = lfuns} fname fid =
   case Map.insertLookupWithKey (\_ val _ -> val) fname fid lfuns of
-    (Nothing, lfuns') ->
-      Just $
-      l
-      { funEnv = lfuns'
-      }
+    (Nothing, lfuns') -> Just $ l {funEnv = lfuns'}
     (Just _, _) -> Nothing
 
 data Function
@@ -100,49 +85,42 @@ data Env = Env
 emptyEnv :: Env
 emptyEnv =
   Env
-  { vars = IntMap.empty
-  , funs = IntMap.empty
-  , consts = IntMap.empty
-  , lastVar = ResolvedSyntax.VarID (-1)
-  , lastFun = ResolvedSyntax.FunID (-1)
-  , lastConst = ResolvedSyntax.ConstID (-1)
-  , layers = [emptyLayer]
-  }
+    { vars = IntMap.empty
+    , funs = IntMap.empty
+    , consts = IntMap.empty
+    , lastVar = ResolvedSyntax.VarID (-1)
+    , lastFun = ResolvedSyntax.FunID (-1)
+    , lastConst = ResolvedSyntax.ConstID (-1)
+    , layers = [emptyLayer]
+    }
 
 newVariableInEnv :: Env -> ResolvedSyntax.VarType -> (ResolvedSyntax.VarID, Env)
 newVariableInEnv env vtype =
   let (ResolvedSyntax.VarID v) = inc $ lastVar env
       (Nothing, vars') =
         IntMap.insertLookupWithKey (\_ val _ -> val) v vtype (vars env)
-  in ( ResolvedSyntax.VarID v
-     , env
-       { lastVar = ResolvedSyntax.VarID v
-       , vars = vars'
-       })
+   in ( ResolvedSyntax.VarID v
+      , env {lastVar = ResolvedSyntax.VarID v, vars = vars'})
   where
     inc (ResolvedSyntax.VarID lastVarID) = ResolvedSyntax.VarID (lastVarID + 1)
 
-introduceVariableInEnv :: Env
-                       -> PreSyntax.VarDecl
-                       -> (ResolvedSyntax.VarID, Env)
+introduceVariableInEnv ::
+     Env -> PreSyntax.VarDecl -> (ResolvedSyntax.VarID, Env)
 introduceVariableInEnv env (PreSyntax.VarDecl vtype vname) =
   let (v, env'@Env {layers = (l:ls)}) = newVariableInEnv env vtype
       Just l' = newVariableInLayer l vname v
-  in ( v
-     , env'
-       { layers = l' : ls
-       })
+   in (v, env' {layers = l' : ls})
 
-checkExistingFunctionInEnv
-  :: Env
+checkExistingFunctionInEnv ::
+     Env
   -> ResolvedSyntax.FunID
   -> PreSyntax.FunctionDecl
   -> (ResolvedSyntax.FunID, Env)
 checkExistingFunctionInEnv env (ResolvedSyntax.FunID fid) fdecl =
   let Just (existingDecl, _) = IntMap.lookup fid $ funs env
-  in if declMatch existingDecl fdecl
-       then (ResolvedSyntax.FunID fid, env)
-       else error "Type mismatch"
+   in if declMatch existingDecl fdecl
+        then (ResolvedSyntax.FunID fid, env)
+        else error "Type mismatch"
   where
     declMatch (PreSyntax.FunctionDecl lrettype _ lparams) (PreSyntax.FunctionDecl rrettype _ rparams) =
       (lrettype == rrettype) && (getTypes lparams == getTypes rparams)
@@ -157,61 +135,45 @@ newFunctionInEnv env fdecl =
           f
           (fdecl, Nothing)
           (funs env)
-  in ( ResolvedSyntax.FunID f
-     , env
-       { lastFun = ResolvedSyntax.FunID f
-       , funs = funs'
-       })
+   in ( ResolvedSyntax.FunID f
+      , env {lastFun = ResolvedSyntax.FunID f, funs = funs'})
   where
     inc (ResolvedSyntax.FunID lastFunID) = ResolvedSyntax.FunID (lastFunID + 1)
 
-introduceFunctionInEnv :: Env
-                       -> PreSyntax.FunctionDecl
-                       -> (ResolvedSyntax.FunID, Env)
+introduceFunctionInEnv ::
+     Env -> PreSyntax.FunctionDecl -> (ResolvedSyntax.FunID, Env)
 introduceFunctionInEnv env fdecl@(PreSyntax.FunctionDecl _ fname _) =
   case findFunctionInLayer (head $ layers env) fname of
     Just fid -> checkExistingFunctionInEnv env fid fdecl
     Nothing ->
       let (f, env'@Env {layers = l:ls}) = newFunctionInEnv env fdecl
           Just l' = newFunctionInLayer l fname f
-      in ( f
-         , env'
-           { layers = l' : ls
-           })
+       in (f, env' {layers = l' : ls})
 
 markFunctionAsDefinedInEnv :: Env -> ResolvedSyntax.FunID -> Function -> Env
 markFunctionAsDefinedInEnv env (ResolvedSyntax.FunID fid) f =
-  env
-  { funs = go $ funs env
-  }
+  env {funs = go $ funs env}
   where
     go = IntMap.alter (\(Just (fdecl, Nothing)) -> Just (fdecl, Just f)) fid
 
-findFunctionInEnv :: Env
-                  -> PreSyntax.FunctionName
-                  -> (ResolvedSyntax.FunID, Maybe Function)
+findFunctionInEnv ::
+     Env -> PreSyntax.FunctionName -> (ResolvedSyntax.FunID, Maybe Function)
 findFunctionInEnv env fname =
   let (Just f@(ResolvedSyntax.FunID fid)) =
         asum (map (`findFunctionInLayer` fname) (layers env))
       (Just (_, mf)) = IntMap.lookup fid (funs env)
-  in (f, mf)
+   in (f, mf)
 
 introduceConstInEnv :: Env -> Value -> (ResolvedSyntax.ConstID, Env)
 introduceConstInEnv env val =
   let (ResolvedSyntax.ConstID cid) = inc $ lastConst env
       (Nothing, consts') =
-        IntMap.insertLookupWithKey
-          (\_ v _ -> v)
-          cid
-          val
-          (consts env)
-  in ( ResolvedSyntax.ConstID cid
-     , env
-       { lastConst = ResolvedSyntax.ConstID cid
-       , consts = consts'
-       })
+        IntMap.insertLookupWithKey (\_ v _ -> v) cid val (consts env)
+   in ( ResolvedSyntax.ConstID cid
+      , env {lastConst = ResolvedSyntax.ConstID cid, consts = consts'})
   where
-    inc (ResolvedSyntax.ConstID lastConstID) = ResolvedSyntax.ConstID (lastConstID + 1)
+    inc (ResolvedSyntax.ConstID lastConstID) =
+      ResolvedSyntax.ConstID (lastConstID + 1)
 
 type Resolver = WriterT [ResolvedSyntax.VarDecl] (State Env)
 
@@ -220,24 +182,32 @@ runResolver m = execState (execWriterT m) emptyEnv
 
 findVariable :: PreSyntax.VarName -> Resolver ResolvedSyntax.VarID
 findVariable vname = do
-  Just v <- (asum . map (Map.lookup vname . varEnv) . layers) <$> State.get
+  Just v <- State.gets (asum . map (Map.lookup vname . varEnv) . layers)
+  pure v
+
+updateVariable ::
+     (Env -> (ResolvedSyntax.VarID, ResolvedSyntax.VarType, Env))
+  -> Resolver ResolvedSyntax.VarID
+updateVariable action = do
+  envBefore <- State.get
+  let (v, vtype, envAfter) = action envBefore
+  State.put envAfter
+  Writer.tell [ResolvedSyntax.VarDecl vtype v]
   pure v
 
 newVariable :: ResolvedSyntax.VarType -> Resolver ResolvedSyntax.VarID
-newVariable vtype = do
-  envBefore <- State.get
-  let (v, envAfter) = newVariableInEnv envBefore vtype
-  State.put envAfter
-  Writer.tell [ResolvedSyntax.VarDecl vtype v]
-  pure v
+newVariable vtype =
+  updateVariable
+    (\envBefore ->
+       let (v, envAfter) = newVariableInEnv envBefore vtype
+        in (v, vtype, envAfter))
 
 introduceVariable :: PreSyntax.VarDecl -> Resolver ResolvedSyntax.VarID
-introduceVariable vdecl@(PreSyntax.VarDecl vtype _) = do
-  envBefore <- State.get
-  let (v, envAfter) = introduceVariableInEnv envBefore vdecl
-  State.put envAfter
-  Writer.tell [ResolvedSyntax.VarDecl vtype v]
-  pure v
+introduceVariable vdecl@(PreSyntax.VarDecl vtype _) =
+  updateVariable
+    (\envBefore ->
+       let (v, envAfter) = introduceVariableInEnv envBefore vdecl
+        in (v, vtype, envAfter))
 
 introduceFunction :: PreSyntax.FunctionDecl -> Resolver ResolvedSyntax.FunID
 introduceFunction fdecl = do
@@ -250,8 +220,8 @@ markFunctionAsDefined :: ResolvedSyntax.FunID -> Function -> Resolver ()
 markFunctionAsDefined fid f =
   State.modify (\env -> markFunctionAsDefinedInEnv env fid f)
 
-findFunction :: PreSyntax.FunctionName
-             -> Resolver (ResolvedSyntax.FunID, Maybe Function)
+findFunction ::
+     PreSyntax.FunctionName -> Resolver (ResolvedSyntax.FunID, Maybe Function)
 findFunction fname = do
   env <- State.get
   pure $ findFunctionInEnv env fname
@@ -265,28 +235,17 @@ introduceConst val = do
 
 withLayer :: Resolver a -> Resolver a
 withLayer m = do
-  State.modify $
-    \env ->
-       env
-       { layers = emptyLayer : layers env
-       }
+  State.modify $ \env -> env {layers = emptyLayer : layers env}
   res <- m
-  State.modify $
-    \env ->
-       env
-       { layers = tail $ layers env
-       }
+  State.modify $ \env -> env {layers = tail $ layers env}
   pure res
 
 resolveBlock :: [PreSyntax.Statement] -> Resolver ResolvedSyntax.Block
 resolveBlock stmts =
-  withLayer $
-  do forM_ stmts scanStatement
-     stmts' <- resolveStatements stmts
-     pure
-       ResolvedSyntax.Block
-       { ResolvedSyntax.blockStatements = stmts'
-       }
+  withLayer $ do
+    forM_ stmts scanStatement
+    stmts' <- resolveStatements stmts
+    pure ResolvedSyntax.Block {ResolvedSyntax.blockStatements = stmts'}
 
 scanStatement :: PreSyntax.Statement -> Resolver ()
 scanStatement (PreSyntax.StatementVarDecl vdecl) =
@@ -303,8 +262,8 @@ scanStatement _ = pure ()
 
 type StatementResolver = WriterT [ResolvedSyntax.Statement] Resolver
 
-resolveStatements :: [PreSyntax.Statement]
-                  -> Resolver [ResolvedSyntax.Statement]
+resolveStatements ::
+     [PreSyntax.Statement] -> Resolver [ResolvedSyntax.Statement]
 resolveStatements stmts = execWriterT $ forM_ stmts resolveStatement
 
 addStmt :: ResolvedSyntax.Statement -> StatementResolver ()
@@ -361,22 +320,22 @@ resolveStatement (PreSyntax.StatementReturn (Just e)) = do
   addStmt $ ResolvedSyntax.StatementReturn $ Just e'
 resolveStatement (PreSyntax.StatementForeignFunctionDecl _) = pure ()
 
-resolveFunctionDef :: PreSyntax.FunctionDecl
-                   -> [PreSyntax.Statement]
-                   -> Resolver ()
+resolveFunctionDef ::
+     PreSyntax.FunctionDecl -> [PreSyntax.Statement] -> Resolver ()
 resolveFunctionDef fdecl@(PreSyntax.FunctionDecl rettype _ params) stmts = do
   f <- introduceFunction fdecl
   (params', (body, locals)) <-
-    withLayer $ (,) <$> mapM introduceParam params <*> (Writer.listen $ resolveBlock stmts)
+    withLayer $
+    (,) <$> mapM introduceParam params <*> Writer.listen (resolveBlock stmts)
   markFunctionAsDefined f $
     NativeFunction
       ResolvedSyntax.FunctionDef
-      { ResolvedSyntax.funDefRetType = rettype
-      , ResolvedSyntax.funDefName = f
-      , ResolvedSyntax.funDefParams = params'
-      , ResolvedSyntax.funDefLocals = locals
-      , ResolvedSyntax.funDefBody = body
-      }
+        { ResolvedSyntax.funDefRetType = rettype
+        , ResolvedSyntax.funDefName = f
+        , ResolvedSyntax.funDefParams = params'
+        , ResolvedSyntax.funDefLocals = locals
+        , ResolvedSyntax.funDefBody = body
+        }
   where
     introduceParam p@(PreSyntax.VarDecl t _) =
       ResolvedSyntax.VarDecl t <$> introduceVariable p
@@ -387,15 +346,15 @@ resolveForeignFunctionDecl fdecl@(PreSyntax.FunctionDecl rettype (PreSyntax.Func
   markFunctionAsDefined f $
     ForeignFunction
       ResolvedSyntax.ForeignFunctionDecl
-      { ResolvedSyntax.foreignFunDeclRetType = rettype
-      , ResolvedSyntax.foreignFunDeclName = f
-      , ResolvedSyntax.foreignFunDeclRealName = name
-      , ResolvedSyntax.foreignFunDeclParams =
-        map (\(PreSyntax.VarDecl vtype _) -> vtype) params
-      }
+        { ResolvedSyntax.foreignFunDeclRetType = rettype
+        , ResolvedSyntax.foreignFunDeclName = f
+        , ResolvedSyntax.foreignFunDeclRealName = name
+        , ResolvedSyntax.foreignFunDeclParams =
+            map (\(PreSyntax.VarDecl vtype _) -> vtype) params
+        }
 
-resolveFor
-  :: PreSyntax.VarName
+resolveFor ::
+     PreSyntax.VarName
   -> PreSyntax.Expr
   -> PreSyntax.Expr
   -> PreSyntax.Statement
@@ -405,39 +364,37 @@ resolveFor vname eFrom eTo s = do
   eFrom' <- resolveExpr eFrom
   eTo' <- resolveExpr eTo
   block <- resolveBlock [s]
-  withLayer $
-    do vCur <- newVariable ResolvedSyntax.VarTypeInt
-       vTo <- newVariable ResolvedSyntax.VarTypeInt
-       incrConst <- introduceConst (ValueInt 1)
-       let expr =
-             ResolvedSyntax.ExprNot
-               (ResolvedSyntax.ExprLt
-                  (ResolvedSyntax.ExprVar vTo)
-                  (ResolvedSyntax.ExprVar vCur))
-           stmts =
-             [ ResolvedSyntax.StatementAssign v (ResolvedSyntax.ExprVar vCur)
-             , ResolvedSyntax.StatementBlock block
-             , ResolvedSyntax.StatementAssign
-                 vCur
-                 (ResolvedSyntax.ExprPlus
-                    (ResolvedSyntax.ExprVar vCur)
-                    (ResolvedSyntax.ExprConst incrConst))
-             ]
-           block' =
-             ResolvedSyntax.Block
-             { ResolvedSyntax.blockStatements = stmts
-             }
-       pure $
-         ResolvedSyntax.StatementBlock
-           ResolvedSyntax.Block
-           { ResolvedSyntax.blockStatements =
-             [ ResolvedSyntax.StatementAssign vCur eFrom'
-             , ResolvedSyntax.StatementAssign vTo eTo'
-             , ResolvedSyntax.StatementWhile expr block'
-             ]
-           }
+  withLayer $ do
+    vCur <- newVariable ResolvedSyntax.VarTypeInt
+    vTo <- newVariable ResolvedSyntax.VarTypeInt
+    incrConst <- introduceConst (ValueInt 1)
+    let expr =
+          ResolvedSyntax.ExprNot
+            (ResolvedSyntax.ExprLt
+               (ResolvedSyntax.ExprVar vTo)
+               (ResolvedSyntax.ExprVar vCur))
+        stmts =
+          [ ResolvedSyntax.StatementAssign v (ResolvedSyntax.ExprVar vCur)
+          , ResolvedSyntax.StatementBlock block
+          , ResolvedSyntax.StatementAssign
+              vCur
+              (ResolvedSyntax.ExprPlus
+                 (ResolvedSyntax.ExprVar vCur)
+                 (ResolvedSyntax.ExprConst incrConst))
+          ]
+        block' = ResolvedSyntax.Block {ResolvedSyntax.blockStatements = stmts}
+    pure $
+      ResolvedSyntax.StatementBlock
+        ResolvedSyntax.Block
+          { ResolvedSyntax.blockStatements =
+              [ ResolvedSyntax.StatementAssign vCur eFrom'
+              , ResolvedSyntax.StatementAssign vTo eTo'
+              , ResolvedSyntax.StatementWhile expr block'
+              ]
+          }
 
-resolveFunctionCall :: PreSyntax.FunctionCall -> Resolver ResolvedSyntax.FunctionCall
+resolveFunctionCall ::
+     PreSyntax.FunctionCall -> Resolver ResolvedSyntax.FunctionCall
 resolveFunctionCall (PreSyntax.FunctionCall (PreSyntax.FunctionName "print") args) =
   ResolvedSyntax.PrintCall <$> mapM resolveExpr args
 resolveFunctionCall (PreSyntax.FunctionCall fname args) = do
@@ -445,7 +402,7 @@ resolveFunctionCall (PreSyntax.FunctionCall fname args) = do
   case mf of
     Just (ForeignFunction f) ->
       ResolvedSyntax.ForeignFunctionCall (ResolvedSyntax.foreignFunDeclName f) <$>
-        mapM resolveExpr args
+      mapM resolveExpr args
     Just (NativeFunction _) ->
       ResolvedSyntax.NativeFunctionCall fid <$> mapM resolveExpr args
     Nothing -- Because of prescanning in the block, this is definetely not a foreign call.

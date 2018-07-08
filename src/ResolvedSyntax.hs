@@ -50,7 +50,7 @@ data VarDecl =
   VarDecl VarType
           VarID
 
-data Block = Block
+newtype Block = Block
   { blockStatements :: [Statement]
   }
 

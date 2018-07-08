@@ -1,14 +1,12 @@
-{-# LANGUAGE LambdaCase #-}
-
 module Eval
   ( eval
   ) where
 
 import Control.Monad (forM, forM_, when)
-import Control.Monad.State (StateT, runStateT)
-import qualified Control.Monad.State as State
 import Control.Monad.Except (ExceptT, runExceptT)
 import qualified Control.Monad.Except as Except
+import Control.Monad.State (StateT, runStateT)
+import qualified Control.Monad.State as State
 import qualified Control.Monad.Trans as Trans
 import Data.Bits
 import Data.Foldable (asum)
@@ -23,25 +21,24 @@ import Value
 eval :: Program -> IO ()
 eval p = do
   libhandles <-
-    forM (programLibraries p) $
-    \l -> do
+    forM (programLibraries p) $ \l -> do
       Right h <- dlopen l
       pure h
-  runExecute $ startExecute (programForeignFunctions p) (programFunctions p) (programConstants p)
+  runExecute $
+    startExecute
+      (programForeignFunctions p)
+      (programFunctions p)
+      (programConstants p)
   forM_ libhandles dlclose
-  pure ()
 
 type LayerID = Int
 
-data Layer = Layer
+newtype Layer = Layer
   { varEnv :: IntMap Value
   }
 
 emptyLayer :: Layer
-emptyLayer =
-  Layer
-  { varEnv = IntMap.empty
-  }
+emptyLayer = Layer {varEnv = IntMap.empty}
 
 readVariableFromLayer :: Layer -> VarID -> Maybe Value
 readVariableFromLayer l (VarID vid) = IntMap.lookup vid (varEnv l)
@@ -54,13 +51,9 @@ writeVariableToLayer l (VarID vid) value =
           vid
           value
           (varEnv l)
-  in case moldvalue of
-       Nothing -> Nothing
-       Just _ ->
-         Just $
-         l
-         { varEnv = newvarenv
-         }
+   in case moldvalue of
+        Nothing -> Nothing
+        Just _ -> Just $ l {varEnv = newvarenv}
 
 addVariableToLayer :: Layer -> VarID -> VarType -> Maybe Layer
 addVariableToLayer l (VarID vid) vtype =
@@ -70,13 +63,7 @@ addVariableToLayer l (VarID vid) vtype =
           vid
           (defaultValueFromType vtype)
           (varEnv l)
-  in maybe
-       (Just $
-        l
-        { varEnv = newvarenv
-        })
-       (const Nothing)
-       oldvalue
+   in maybe (Just $ l {varEnv = newvarenv}) (const Nothing) oldvalue
 
 data Env = Env
   { envLayers :: [Layer]
@@ -88,11 +75,11 @@ data Env = Env
 emptyEnv :: Env
 emptyEnv =
   Env
-  { envLayers = []
-  , envForeignFunctions = IntMap.empty
-  , envFunctions = IntMap.empty
-  , envConsts = IntMap.empty
-  }
+    { envLayers = []
+    , envForeignFunctions = IntMap.empty
+    , envFunctions = IntMap.empty
+    , envConsts = IntMap.empty
+    }
 
 modifyingLayer :: (Layer -> Maybe Layer) -> [Layer] -> Maybe [Layer]
 modifyingLayer _ [] = Nothing
@@ -112,10 +99,7 @@ writeVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname val =
          (\l -> writeVariableToLayer l vname val)
          (curlayer : otherlayers) of
     Just (curlayer':otherlayers') ->
-      Just
-        (env
-         { envLayers = curlayer' : otherlayers'
-         })
+      Just (env {envLayers = curlayer' : otherlayers'})
     Just _ -> error "Impossible"
     Nothing -> Nothing
 writeVariableToEnv _ _ _ = error "Env broke"
@@ -124,11 +108,7 @@ addVariableToEnv :: Env -> VarID -> VarType -> Maybe Env
 addVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname vtype =
   case addVariableToLayer curlayer vname vtype of
     Nothing -> Nothing
-    Just l' ->
-      Just
-        (env
-         { envLayers = l' : otherlayers
-         })
+    Just l' -> Just (env {envLayers = l' : otherlayers})
 addVariableToEnv _ _ _ = error "Env broke"
 
 readConstantFromEnv :: Env -> ConstID -> Maybe Value
@@ -148,28 +128,19 @@ withNewLayer m = do
   where
     newLayer =
       State.modify
-        (\env@Env {envLayers = layers} ->
-            env
-            { envLayers = emptyLayer : layers
-            })
+        (\env@Env {envLayers = layers} -> env {envLayers = emptyLayer : layers})
     dropLayer =
       State.modify
-        (\env@Env {envLayers = layers} ->
-            env
-            { envLayers = tail layers
-            })
+        (\env@Env {envLayers = layers} -> env {envLayers = tail layers})
 
 currentLayer :: Execute LayerID
-currentLayer = (length . envLayers) <$> State.get
+currentLayer = State.gets (length . envLayers)
 
 splitLayers :: LayerID -> Execute [Layer]
 splitLayers lid = do
   env@Env {envLayers = ls} <- State.get
   let (newenv, preserve) = List.splitAt lid $ List.reverse ls
-  State.put $
-    env
-    { envLayers = List.reverse newenv
-    }
+  State.put $ env {envLayers = List.reverse newenv}
   pure $ List.reverse preserve
 
 runExecute :: Execute () -> IO ()
@@ -177,16 +148,19 @@ runExecute m = do
   _ <- runStateT (runExceptT m) emptyEnv
   pure ()
 
-startExecute :: IntMap ForeignFunctionDecl -> IntMap FunctionDef -> IntMap Value -> Execute ()
+startExecute ::
+     IntMap ForeignFunctionDecl
+  -> IntMap FunctionDef
+  -> IntMap Value
+  -> Execute ()
 startExecute foreignFuns nativeFuns consts = do
   funs <- mapM getForeignFun foreignFuns
-  State.modify $
-    \env ->
-       env
-       { envForeignFunctions = funs
-       , envFunctions = nativeFuns
-       , envConsts = consts
-       }
+  State.modify $ \env ->
+    env
+      { envForeignFunctions = funs
+      , envFunctions = nativeFuns
+      , envConsts = consts
+      }
   let Just mainFun = IntMap.lookup 0 nativeFuns
   _ <- nativeFunctionCall mainFun []
   pure ()
@@ -203,27 +177,28 @@ declareVariable (VarDecl vtype vname) = do
 
 printCall :: [Value] -> Execute ()
 printCall vals =
-  Trans.liftIO $
-  do str <- concat <$> mapM showIO vals
-     putStr str
+  Trans.liftIO $ do
+    str <- concat <$> mapM showIO vals
+    putStr str
 
 nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)
 nativeFunctionCall fdef vals = do
   res <-
-    withNewLayer $
-    do generateAssignments (funDefParams fdef) vals
-       forM_ (funDefLocals fdef) declareVariable
-       executeBlockWithReturn (funDefBody fdef)
+    withNewLayer $ do
+      generateAssignments (funDefParams fdef) vals
+      forM_ (funDefLocals fdef) declareVariable
+      executeBlockWithReturn (funDefBody fdef)
   case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
     (Just val, Just valtype) -> pure $ Just $ convert val valtype
     _ -> error "Type mismatch"
 
-foreignFunctionCall :: Maybe VarType
-                    -> [VarType]
-                    -> [Value]
-                    -> ForeignFun
-                    -> Execute (Maybe Value)
+foreignFunctionCall ::
+     Maybe VarType
+  -> [VarType]
+  -> [Value]
+  -> ForeignFun
+  -> Execute (Maybe Value)
 foreignFunctionCall rettype params vals fun =
   Trans.liftIO $ call fun rettype (convertVals params vals)
   where
@@ -236,17 +211,21 @@ functionCall (PrintCall args) = do
   vals <- evaluateArgs args
   printCall vals
   pure Nothing
-functionCall ForeignFunctionCall{ foreignFunCallName = FunID fid, foreignFunCallArgs = args} = do
+functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
+                                 , foreignFunCallArgs = args
+                                 } = do
   vals <- evaluateArgs args
-  Just (fdecl, f) <- (IntMap.lookup fid . envForeignFunctions) <$> State.get
+  Just (fdecl, f) <- State.gets (IntMap.lookup fid . envForeignFunctions)
   foreignFunctionCall
     (foreignFunDeclRetType fdecl)
     (foreignFunDeclParams fdecl)
     vals
     f
-functionCall NativeFunctionCall{ nativeFunCallName = (FunID fid), nativeFunCallArgs = args} = do
+functionCall NativeFunctionCall { nativeFunCallName = (FunID fid)
+                                , nativeFunCallArgs = args
+                                } = do
   vals <- evaluateArgs args
-  Just f <- (IntMap.lookup fid . envFunctions) <$> State.get
+  Just f <- State.gets (IntMap.lookup fid . envFunctions)
   nativeFunctionCall f vals
 
 generateAssignment :: VarDecl -> Value -> Execute ()
@@ -322,9 +301,9 @@ evaluate (ExprBinOp BinOr el er) =
   (\lhs rhs -> fromBool (toBool lhs || toBool rhs)) <$> evaluate el <*>
   evaluate er
 evaluate (ExprBinOp BinEq el er) =
-  ((fromBool .) . (==)) <$> evaluate el <*> evaluate er
+  (fromBool .) . (==) <$> evaluate el <*> evaluate er
 evaluate (ExprBinOp BinLt el er) =
-  ((fromBool .) . (<)) <$> evaluate el <*> evaluate er
+  (fromBool .) . (<) <$> evaluate el <*> evaluate er
 evaluate (ExprUnOp UnIntToFloat e) = go <$> evaluate e
   where
     go (ValueInt i) = ValueFloat $ fromIntegral i
@@ -342,18 +321,16 @@ evaluateAsInt e = do
   pure i
 
 executeBlock :: Block -> Execute ()
-executeBlock block =
-  withNewLayer $
-  do forM_ (blockStatements block) execute
+executeBlock block = withNewLayer $ forM_ (blockStatements block) execute
 
 execute :: Statement -> Execute ()
 execute (StatementBlock block) = executeBlock block
 execute (StatementFunctionCall fcall) = functionCall fcall >> pure ()
 execute s@(StatementWhile e block) = do
   res <- evaluateAsBool e
-  when res $
-    do executeBlock block
-       execute s
+  when res $ do
+    executeBlock block
+    execute s
 execute (StatementAssign var e) = do
   res <- evaluate e
   writeVariable var res

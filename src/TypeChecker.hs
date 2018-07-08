@@ -1,4 +1,5 @@
 {-# LANGUAGE ViewPatterns #-}
+
 module TypeChecker
   ( typeCheck
   ) where
@@ -19,28 +20,28 @@ import qualified Value
 typeCheck :: ResolvedSyntax.Program -> Syntax.Program
 typeCheck p =
   Syntax.Program
-  { Syntax.programFunctions = fs
-  , Syntax.programLibraries = ResolvedSyntax.programLibraries p
-  , Syntax.programForeignFunctions = envForeignFunctions finalEnv
-  , Syntax.programConstants = envConsts finalEnv
-  , Syntax.programLastFunID = envLastFunID finalEnv
-  , Syntax.programLastVarID = envLastVarID finalEnv
-  , Syntax.programLastConstID = envLastConstID finalEnv
-  }
+    { Syntax.programFunctions = fs
+    , Syntax.programLibraries = ResolvedSyntax.programLibraries p
+    , Syntax.programForeignFunctions = envForeignFunctions finalEnv
+    , Syntax.programConstants = envConsts finalEnv
+    , Syntax.programLastFunID = envLastFunID finalEnv
+    , Syntax.programLastVarID = envLastVarID finalEnv
+    , Syntax.programLastConstID = envLastConstID finalEnv
+    }
   where
     startEnv =
       Env
-      { envFuns = ResolvedSyntax.programFunctions p
-      , envForeignFunctions = ResolvedSyntax.programForeignFunctions p
-      , envConsts = ResolvedSyntax.programConstants p
-      , envLastFunID = ResolvedSyntax.programLastFunID p
-      , envLastVarID = ResolvedSyntax.programLastVarID p
-      , envLastConstID = ResolvedSyntax.programLastConstID p
-      , envVars = IntMap.empty
-      }
+        { envFuns = ResolvedSyntax.programFunctions p
+        , envForeignFunctions = ResolvedSyntax.programForeignFunctions p
+        , envConsts = ResolvedSyntax.programConstants p
+        , envLastFunID = ResolvedSyntax.programLastFunID p
+        , envLastVarID = ResolvedSyntax.programLastVarID p
+        , envLastConstID = ResolvedSyntax.programLastConstID p
+        , envVars = IntMap.empty
+        }
     (fs, finalEnv) = runTypeChecker (ResolvedSyntax.programFunctions p) startEnv
 
-data ConstEnv = ConstEnv
+newtype ConstEnv = ConstEnv
   { constEnvRetType :: Maybe Syntax.VarType
   }
 
@@ -56,45 +57,39 @@ data Env = Env
 
 type TypeChecker = ReaderT ConstEnv (State Env)
 
-runTypeChecker :: IntMap ResolvedSyntax.FunctionDef
-               -> Env
-               -> (IntMap Syntax.FunctionDef, Env)
-runTypeChecker fs = runState (sequence $ fmap go fs)
+runTypeChecker ::
+     IntMap ResolvedSyntax.FunctionDef
+  -> Env
+  -> (IntMap Syntax.FunctionDef, Env)
+runTypeChecker fs = runState (traverse go fs)
   where
-    constEnv f = ConstEnv
-      { constEnvRetType = ResolvedSyntax.funDefRetType f
-      }
-    go f = (flip runReaderT) (constEnv f) $ do
-      forM_ (ResolvedSyntax.funDefParams f) introduceVariable
-      forM_ (ResolvedSyntax.funDefLocals f) introduceVariable
-      body <- typecheckBlock $ ResolvedSyntax.funDefBody f
-      pure
-        Syntax.FunctionDef
-        { Syntax.funDefRetType = ResolvedSyntax.funDefRetType f
-        , Syntax.funDefName = ResolvedSyntax.funDefName f
-        , Syntax.funDefParams = ResolvedSyntax.funDefParams f
-        , Syntax.funDefLocals = ResolvedSyntax.funDefLocals f
-        , Syntax.funDefCaptures = [] -- Only filled by SyntaxTrimmer.
-        , Syntax.funDefBody = body
-        }
+    constEnv f = ConstEnv {constEnvRetType = ResolvedSyntax.funDefRetType f}
+    go f =
+      flip runReaderT (constEnv f) $ do
+        forM_ (ResolvedSyntax.funDefParams f) introduceVariable
+        forM_ (ResolvedSyntax.funDefLocals f) introduceVariable
+        body <- typecheckBlock $ ResolvedSyntax.funDefBody f
+        pure
+          Syntax.FunctionDef
+            { Syntax.funDefRetType = ResolvedSyntax.funDefRetType f
+            , Syntax.funDefName = ResolvedSyntax.funDefName f
+            , Syntax.funDefParams = ResolvedSyntax.funDefParams f
+            , Syntax.funDefLocals = ResolvedSyntax.funDefLocals f
+            , Syntax.funDefCaptures = [] -- Only filled by SyntaxTrimmer.
+            , Syntax.funDefBody = body
+            }
 
 introduceVariable :: ResolvedSyntax.VarDecl -> TypeChecker ()
 introduceVariable (ResolvedSyntax.VarDecl t (Syntax.VarID vid)) =
-  State.modify $ \env -> env { envVars = IntMap.insert vid t (envVars env) }
+  State.modify $ \env -> env {envVars = IntMap.insert vid t (envVars env)}
 
 typecheckBlock :: ResolvedSyntax.Block -> TypeChecker Syntax.Block
 typecheckBlock block = do
   stmts <- mapM typecheckStatement (ResolvedSyntax.blockStatements block)
-  pure
-    Syntax.Block
-    { Syntax.blockStatements = stmts
-    }
+  pure Syntax.Block {Syntax.blockStatements = stmts}
 
 noopBlock :: Syntax.Block
-noopBlock =
-  Syntax.Block
-  { Syntax.blockStatements = []
-  }
+noopBlock = Syntax.Block {Syntax.blockStatements = []}
 
 typecheckStatement :: ResolvedSyntax.Statement -> TypeChecker Syntax.Statement
 typecheckStatement (ResolvedSyntax.StatementBlock block) =
@@ -117,18 +112,20 @@ typecheckStatement (ResolvedSyntax.StatementIfElse e bt bf) =
   Syntax.StatementIfElse <$> typecheckExpr e <*> typecheckBlock bt <*>
   typecheckBlock bf
 typecheckStatement (ResolvedSyntax.StatementIf e bt) =
-  Syntax.StatementIfElse <$> typecheckExpr e <*> typecheckBlock bt <*> pure noopBlock
+  Syntax.StatementIfElse <$> typecheckExpr e <*> typecheckBlock bt <*>
+  pure noopBlock
 typecheckStatement (ResolvedSyntax.StatementReturn Nothing) = do
-  Nothing <- constEnvRetType <$> Reader.ask
+  Nothing <- Reader.asks constEnvRetType
   pure $ Syntax.StatementReturn Nothing
 typecheckStatement (ResolvedSyntax.StatementReturn (Just e)) = do
-  Just expectedType <- constEnvRetType <$> Reader.ask
-  (Syntax.StatementReturn . Just . convertExprTo expectedType) <$> typecheckExpr e
+  Just expectedType <- Reader.asks constEnvRetType
+  Syntax.StatementReturn . Just . convertExprTo expectedType <$> typecheckExpr e
 
 convertExprTo :: Syntax.VarType -> Syntax.Expr -> Syntax.Expr
 convertExprTo Syntax.VarTypeInt e@(Syntax.exprType -> Syntax.VarTypeInt) = e
 convertExprTo Syntax.VarTypeFloat e@(Syntax.exprType -> Syntax.VarTypeFloat) = e
-convertExprTo Syntax.VarTypeString e@(Syntax.exprType -> Syntax.VarTypeString) = e
+convertExprTo Syntax.VarTypeString e@(Syntax.exprType -> Syntax.VarTypeString) =
+  e
 convertExprTo Syntax.VarTypeFloat e@(Syntax.exprType -> Syntax.VarTypeInt) =
   Syntax.ExprUnOp Syntax.UnIntToFloat e
 convertExprTo _ _ = error "Type mismatch"
@@ -138,24 +135,33 @@ convertArgsTo [] [] = []
 convertArgsTo (t:ts) (e:es) = convertExprTo t e : convertArgsTo ts es
 convertArgsTo _ _ = error "Type mismatch"
 
-typecheckFunctionCall :: ResolvedSyntax.FunctionCall -> TypeChecker Syntax.FunctionCall
+typecheckFunctionCall ::
+     ResolvedSyntax.FunctionCall -> TypeChecker Syntax.FunctionCall
 typecheckFunctionCall (ResolvedSyntax.NativeFunctionCall (Syntax.FunID fid) args) = do
-  Just fdef <- (IntMap.lookup fid . envFuns) <$> State.get
-  args' <- convertArgsTo (map (\(ResolvedSyntax.VarDecl t _) -> t) $ ResolvedSyntax.funDefParams fdef) <$> mapM typecheckExpr args
-  pure $ Syntax.NativeFunctionCall
-    { Syntax.nativeFunCallName = ResolvedSyntax.funDefName fdef
-    , Syntax.nativeFunCallRetType = ResolvedSyntax.funDefRetType fdef
-    , Syntax.nativeFunCallCaptures = [] -- Filled by SyntaxTrimmer
-    , Syntax.nativeFunCallArgs = args'
-    }
+  Just fdef <- State.gets (IntMap.lookup fid . envFuns)
+  args' <-
+    convertArgsTo
+      (map (\(ResolvedSyntax.VarDecl t _) -> t) $
+       ResolvedSyntax.funDefParams fdef) <$>
+    mapM typecheckExpr args
+  pure $
+    Syntax.NativeFunctionCall
+      { Syntax.nativeFunCallName = ResolvedSyntax.funDefName fdef
+      , Syntax.nativeFunCallRetType = ResolvedSyntax.funDefRetType fdef
+      , Syntax.nativeFunCallCaptures = [] -- Filled by SyntaxTrimmer
+      , Syntax.nativeFunCallArgs = args'
+      }
 typecheckFunctionCall (ResolvedSyntax.ForeignFunctionCall (Syntax.FunID fid) args) = do
-  Just fdef <- (IntMap.lookup fid . envForeignFunctions) <$> State.get
-  args' <- convertArgsTo (ResolvedSyntax.foreignFunDeclParams fdef) <$> mapM typecheckExpr args
-  pure $ Syntax.ForeignFunctionCall
-    { Syntax.foreignFunCallName = ResolvedSyntax.foreignFunDeclName fdef
-    , Syntax.foreignFunCallRetType = ResolvedSyntax.foreignFunDeclRetType fdef
-    , Syntax.foreignFunCallArgs = args'
-    }
+  Just fdef <- State.gets (IntMap.lookup fid . envForeignFunctions)
+  args' <-
+    convertArgsTo (ResolvedSyntax.foreignFunDeclParams fdef) <$>
+    mapM typecheckExpr args
+  pure $
+    Syntax.ForeignFunctionCall
+      { Syntax.foreignFunCallName = ResolvedSyntax.foreignFunDeclName fdef
+      , Syntax.foreignFunCallRetType = ResolvedSyntax.foreignFunDeclRetType fdef
+      , Syntax.foreignFunCallArgs = args'
+      }
 typecheckFunctionCall (ResolvedSyntax.PrintCall args) =
   Syntax.PrintCall <$> mapM typecheckExpr args
 
@@ -168,7 +174,8 @@ selectBinOpType Syntax.VarTypeFloat Syntax.VarTypeInt = Syntax.VarTypeFloat
 selectBinOpType _ _ = error "Type mismatch"
 
 typecheckBinOp :: Syntax.BinOp -> Syntax.Expr -> Syntax.Expr -> Syntax.Expr
-typecheckBinOp op lhs rhs = Syntax.ExprBinOp op (convertExprTo t lhs) (convertExprTo t rhs)
+typecheckBinOp op lhs rhs =
+  Syntax.ExprBinOp op (convertExprTo t lhs) (convertExprTo t rhs)
   where
     t = selectBinOpType (Syntax.exprType lhs) (Syntax.exprType rhs)
 
@@ -176,10 +183,10 @@ typecheckExpr :: ResolvedSyntax.Expr -> TypeChecker Syntax.Expr
 typecheckExpr (ResolvedSyntax.ExprFunctionCall fcall) =
   Syntax.ExprFunctionCall <$> typecheckFunctionCall fcall
 typecheckExpr (ResolvedSyntax.ExprVar (Syntax.VarID v)) = do
-  Just t <- (IntMap.lookup v . envVars) <$> State.get
+  Just t <- State.gets (IntMap.lookup v . envVars)
   pure $ Syntax.ExprVar t (Syntax.VarID v)
 typecheckExpr (ResolvedSyntax.ExprConst (Syntax.ConstID cid)) = do
-  Just v <- (IntMap.lookup cid . envConsts) <$> State.get
+  Just v <- State.gets (IntMap.lookup cid . envConsts)
   pure $ Syntax.ExprConst (Value.typeof v) (Syntax.ConstID cid)
 typecheckExpr (ResolvedSyntax.ExprNeg e) =
   Syntax.ExprUnOp Syntax.UnNeg <$> typecheckExpr e

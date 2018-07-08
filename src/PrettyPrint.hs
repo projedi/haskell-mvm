@@ -42,7 +42,7 @@ printFunctions funs =
   "Functions: " ++
   IntMap.foldrWithKey
     (\key val rest ->
-        rest ++ "\n" ++ show key ++ ": " ++ prettyPrintFunctionDef 0 val)
+       rest ++ "\n" ++ show key ++ ": " ++ prettyPrintFunctionDef 0 val)
     ""
     funs
 
@@ -50,8 +50,7 @@ printConstants :: IntMap Value -> String
 printConstants vals =
   "Constants: " ++
   IntMap.foldrWithKey
-    (\key val rest ->
-        rest ++ "\n" ++ show key ++ ": " ++ show val)
+    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ show val)
     ""
     vals
 
@@ -114,7 +113,7 @@ prettyPrintExpr n (ExprBinOp op el er) =
   " " ++ prettyPrintBinOp op ++ " " ++ prettyPrintExpr (binOpPrec op) er
 prettyPrintExpr _ _ = undefined -- TODO: Remove when pattern synonyms have COMPLETE pragma.
 
-class PrettyPrintSimple a  where
+class PrettyPrintSimple a where
   prettyPrintSimple :: a -> String
 
 instance PrettyPrintSimple VarID where
@@ -124,11 +123,16 @@ instance PrettyPrintSimple FunID where
   prettyPrintSimple = show
 
 instance PrettyPrintSimple FunctionCall where
-  prettyPrintSimple NativeFunctionCall{ nativeFunCallName = funname, nativeFunCallArgs = args, nativeFunCallCaptures = captures} =
+  prettyPrintSimple NativeFunctionCall { nativeFunCallName = funname
+                                       , nativeFunCallArgs = args
+                                       , nativeFunCallCaptures = captures
+                                       } =
     prettyPrintSimple funname ++
     paren (List.intercalate ", " (map (prettyPrintExpr 0) args)) ++
-    "[" ++ (List.intercalate ", " (map prettyPrintSimple captures)) ++ "]"
-  prettyPrintSimple ForeignFunctionCall{ foreignFunCallName = funname, foreignFunCallArgs = args} =
+    "[" ++ List.intercalate ", " (map prettyPrintSimple captures) ++ "]"
+  prettyPrintSimple ForeignFunctionCall { foreignFunCallName = funname
+                                        , foreignFunCallArgs = args
+                                        } =
     prettyPrintSimple funname ++
     paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
   prettyPrintSimple (PrintCall args) =
@@ -179,7 +183,8 @@ prettyPrintFunctionDef n fdef =
      paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef)))) ++
   " [" ++
   List.intercalate ", " (map prettyPrintSimple (funDefCaptures fdef)) ++
-  "]" ++ "\n" ++
+  "]" ++
+  "\n" ++
   unlines (map (indent (n + 1) . prettyPrintSimple) $ funDefLocals fdef) ++
   prettyPrintBlock n (funDefBody fdef)
 

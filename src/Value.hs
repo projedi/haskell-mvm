@@ -73,7 +73,7 @@ instance Integral Value where
   toInteger _ = error "Type mismatch"
   quotRem (ValueInt il) (ValueInt ir) =
     let (rl, rr) = quotRem il ir
-    in (ValueInt rl, ValueInt rr)
+     in (ValueInt rl, ValueInt rr)
   quotRem _ _ = error "Type mismatch"
 
 instance Fractional Value where

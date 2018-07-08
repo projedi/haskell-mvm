@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternSynonyms #-}
+
 module Syntax
   ( Program(..)
   , VarID(..)
@@ -15,13 +16,7 @@ module Syntax
   , binOpTypeFromArgs
   , UnOp(..)
   , unOpTypeFromArg
-  , Expr
-    ( ExprFunctionCall
-    , ExprVar
-    , ExprConst
-    , ExprBinOp
-    , ExprUnOp
-    )
+  , Expr(ExprFunctionCall, ExprVar, ExprConst, ExprBinOp, ExprUnOp)
   , exprType
   , functionCallType
   ) where
@@ -29,8 +24,13 @@ module Syntax
 import Data.IntMap (IntMap)
 
 import ResolvedSyntax
-       (VarType(..), VarID(..), FunID(..), ConstID(..), VarDecl(..),
-        ForeignFunctionDecl(..))
+  ( ConstID(..)
+  , ForeignFunctionDecl(..)
+  , FunID(..)
+  , VarDecl(..)
+  , VarID(..)
+  , VarType(..)
+  )
 import Value (Value)
 
 data Program = Program
@@ -43,7 +43,7 @@ data Program = Program
   , programLastConstID :: ConstID
   }
 
-data Block = Block
+newtype Block = Block
   { blockStatements :: [Statement]
   }
 
@@ -69,22 +69,18 @@ data FunctionDef = FunctionDef
   }
 
 data FunctionCall
-  = NativeFunctionCall
-    { nativeFunCallName :: FunID
-    , nativeFunCallRetType :: Maybe VarType
-    , nativeFunCallCaptures :: [VarID] -- Filled by SyntaxTrimmer
-    , nativeFunCallArgs :: [Expr]
-    }
-  | ForeignFunctionCall
-    { foreignFunCallName :: FunID
-    , foreignFunCallRetType :: Maybe VarType
-    , foreignFunCallArgs :: [Expr]
-    }
+  = NativeFunctionCall { nativeFunCallName :: FunID
+                       , nativeFunCallRetType :: Maybe VarType
+                       , nativeFunCallCaptures :: [VarID] -- Filled by SyntaxTrimmer
+                       , nativeFunCallArgs :: [Expr] }
+  | ForeignFunctionCall { foreignFunCallName :: FunID
+                        , foreignFunCallRetType :: Maybe VarType
+                        , foreignFunCallArgs :: [Expr] }
   | PrintCall [Expr]
 
 functionCallType :: FunctionCall -> Maybe VarType
-functionCallType NativeFunctionCall{ nativeFunCallRetType = rettype } = rettype
-functionCallType ForeignFunctionCall{ foreignFunCallRetType = rettype } = rettype
+functionCallType NativeFunctionCall {nativeFunCallRetType = rettype} = rettype
+functionCallType ForeignFunctionCall {foreignFunCallRetType = rettype} = rettype
 functionCallType (PrintCall _) = Nothing
 
 data BinOp
@@ -156,29 +152,41 @@ data ExprImpl
   = ExprFunctionCallImpl FunctionCall
   | ExprVarImpl VarID
   | ExprConstImpl ConstID
-  | ExprBinOpImpl BinOp Expr Expr
-  | ExprUnOpImpl UnOp Expr
+  | ExprBinOpImpl BinOp
+                  Expr
+                  Expr
+  | ExprUnOpImpl UnOp
+                 Expr
 
 pattern ExprFunctionCall :: FunctionCall -> Expr
-pattern ExprFunctionCall fcall <- Expr { exprImpl = ExprFunctionCallImpl fcall } where
-  ExprFunctionCall fcall = Expr { exprType = t, exprImpl = ExprFunctionCallImpl fcall }
-    where
-      Just t = functionCallType fcall
+
+pattern ExprFunctionCall fcall <-
+        Expr{exprImpl = ExprFunctionCallImpl fcall}
+  where ExprFunctionCall fcall
+          = Expr{exprType = t, exprImpl = ExprFunctionCallImpl fcall}
+          where Just t = functionCallType fcall
 
 pattern ExprVar :: VarType -> VarID -> Expr
-pattern ExprVar vType v = Expr { exprType = vType, exprImpl = ExprVarImpl v }
+
+pattern ExprVar vType v =
+        Expr{exprType = vType, exprImpl = ExprVarImpl v}
 
 pattern ExprConst :: VarType -> ConstID -> Expr
-pattern ExprConst vType cid = Expr { exprType = vType, exprImpl = ExprConstImpl cid }
+
+pattern ExprConst vType cid =
+        Expr{exprType = vType, exprImpl = ExprConstImpl cid}
 
 pattern ExprBinOp :: BinOp -> Expr -> Expr -> Expr
-pattern ExprBinOp op lhs rhs <- Expr { exprImpl = ExprBinOpImpl op lhs rhs } where
-  ExprBinOp op lhs rhs = Expr { exprType = t, exprImpl = ExprBinOpImpl op lhs rhs }
-    where
-      t = binOpTypeFromArgs op (exprType lhs) (exprType rhs)
+
+pattern ExprBinOp op lhs rhs <-
+        Expr{exprImpl = ExprBinOpImpl op lhs rhs}
+  where ExprBinOp op lhs rhs
+          = Expr{exprType = t, exprImpl = ExprBinOpImpl op lhs rhs}
+          where t = binOpTypeFromArgs op (exprType lhs) (exprType rhs)
 
 pattern ExprUnOp :: UnOp -> Expr -> Expr
-pattern ExprUnOp op e <- Expr { exprImpl = ExprUnOpImpl op e } where
-  ExprUnOp op e = Expr { exprType = t, exprImpl = ExprUnOpImpl op e }
-    where
-      t = unOpTypeFromArg op $ exprType e
+
+pattern ExprUnOp op e <- Expr{exprImpl = ExprUnOpImpl op e}
+  where ExprUnOp op e
+          = Expr{exprType = t, exprImpl = ExprUnOpImpl op e}
+          where t = unOpTypeFromArg op $ exprType e

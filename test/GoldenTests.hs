@@ -8,8 +8,8 @@ import qualified Data.Algorithm.Diff as Diff
 import qualified Data.Algorithm.DiffOutput as DiffOutput
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
-import System.FilePath ((</>), (<.>), replaceExtension)
 import System.Exit (ExitCode(..))
+import System.FilePath ((<.>), (</>), replaceExtension)
 import qualified System.Process
 import Test.Tasty
 import Test.Tasty.ExpectedFailure (expectFail)
@@ -98,7 +98,6 @@ sdlTestList =
   , "original/perf/plot"
   ]
 -}
-
 tests :: TestTree
 tests = testGroup "Golden" [passTests, failTests, intensiveTests, graphicsTests]
 
@@ -143,7 +142,8 @@ graphicsTests =
   where
     names = graphicsTestList ++ originalGraphicsTestList
 
-testsWithParams :: String -> Integer -> String -> [String] -> [String] -> TestTree
+testsWithParams ::
+     String -> Integer -> String -> [String] -> [String] -> TestTree
 testsWithParams name timeout expectedExtension flags names =
   localOption (mkTimeout (1000000 * timeout)) $
   testGroup name $ map (test expectedExtension flags) names
