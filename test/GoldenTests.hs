@@ -127,8 +127,8 @@ intensiveTests :: TestTree
 intensiveTests =
   testGroup
     "Intensive"
-    [ testsWithParams "Dumb" 300 "expected" ["--dumb"] names
-    , testsWithParams "JIT" 300 "expected" [] names
+    [ testsWithParams "Dumb" 30 "expected" ["--dumb"] names
+    , testsWithParams "JIT" 30 "expected" [] names
     ]
   where
     names = intensiveTestList ++ originalIntensiveTestList
@@ -137,8 +137,8 @@ graphicsTests :: TestTree
 graphicsTests =
   testGroup
     "Graphics"
-    [ testsWithParams "Dumb" 300 "ppm" ["--dumb"] names
-    , testsWithParams "JIT" 300 "ppm" [] names
+    [ testsWithParams "Dumb" 30 "ppm" ["--dumb"] names
+    , testsWithParams "JIT" 30 "ppm" [] names
     ]
   where
     names = graphicsTestList ++ originalGraphicsTestList
