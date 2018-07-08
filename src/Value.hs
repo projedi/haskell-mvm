@@ -5,7 +5,6 @@ module Value
   , typeIs
   , typeof
   , defaultValueFromType
-  , convert
   , showIO
   ) where
 
@@ -134,9 +133,3 @@ defaultValueFromType :: VarType -> Value
 defaultValueFromType VarTypeInt = ValueInt 0
 defaultValueFromType VarTypeFloat = ValueFloat 0
 defaultValueFromType VarTypeString = ValueString $ Right ""
-
-convert :: Value -> VarType -> Value
-convert v vtype
-  | v `typeIs` vtype = v
-convert (ValueInt i) VarTypeFloat = ValueFloat $ fromIntegral i
-convert _ _ = error "Type mismatch"

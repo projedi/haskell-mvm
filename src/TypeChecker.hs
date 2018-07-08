@@ -83,6 +83,9 @@ introduceVariable :: ResolvedSyntax.VarDecl -> TypeChecker ()
 introduceVariable (ResolvedSyntax.VarDecl t (Syntax.VarID vid)) =
   State.modify $ \env -> env {envVars = IntMap.insert vid t (envVars env)}
 
+getVariableType :: ResolvedSyntax.VarID -> TypeChecker (Maybe Syntax.VarType)
+getVariableType (Syntax.VarID v) = State.gets (IntMap.lookup v . envVars)
+
 typecheckBlock :: ResolvedSyntax.Block -> TypeChecker Syntax.Block
 typecheckBlock block = do
   stmts <- mapM typecheckStatement (ResolvedSyntax.blockStatements block)
@@ -98,14 +101,15 @@ typecheckStatement (ResolvedSyntax.StatementFunctionCall fcall) =
   Syntax.StatementFunctionCall <$> typecheckFunctionCall fcall
 typecheckStatement (ResolvedSyntax.StatementWhile e block) =
   Syntax.StatementWhile <$> typecheckExpr e <*> typecheckBlock block
-typecheckStatement (ResolvedSyntax.StatementAssign v e) =
-  Syntax.StatementAssign v <$> typecheckExpr e
+typecheckStatement (ResolvedSyntax.StatementAssign v e) = do
+  Just t <- getVariableType v
+  Syntax.StatementAssign v . convertExprTo t <$> typecheckExpr e
 typecheckStatement (ResolvedSyntax.StatementAssignPlus v e) =
-  Syntax.StatementAssign v <$> typecheckExpr e'
+  typecheckStatement (ResolvedSyntax.StatementAssign v e')
   where
     e' = ResolvedSyntax.ExprPlus (ResolvedSyntax.ExprVar v) e
 typecheckStatement (ResolvedSyntax.StatementAssignMinus v e) =
-  Syntax.StatementAssign v <$> typecheckExpr e'
+  typecheckStatement (ResolvedSyntax.StatementAssign v e')
   where
     e' = ResolvedSyntax.ExprMinus (ResolvedSyntax.ExprVar v) e
 typecheckStatement (ResolvedSyntax.StatementIfElse e bt bf) =
@@ -182,9 +186,9 @@ typecheckBinOp op lhs rhs =
 typecheckExpr :: ResolvedSyntax.Expr -> TypeChecker Syntax.Expr
 typecheckExpr (ResolvedSyntax.ExprFunctionCall fcall) =
   Syntax.ExprFunctionCall <$> typecheckFunctionCall fcall
-typecheckExpr (ResolvedSyntax.ExprVar (Syntax.VarID v)) = do
-  Just t <- State.gets (IntMap.lookup v . envVars)
-  pure $ Syntax.ExprVar t (Syntax.VarID v)
+typecheckExpr (ResolvedSyntax.ExprVar v) = do
+  Just t <- getVariableType v
+  pure $ Syntax.ExprVar t v
 typecheckExpr (ResolvedSyntax.ExprConst (Syntax.ConstID cid)) = do
   Just v <- State.gets (IntMap.lookup cid . envConsts)
   pure $ Syntax.ExprConst (Value.typeof v) (Syntax.ConstID cid)

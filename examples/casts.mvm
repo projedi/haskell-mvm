@@ -1,0 +1,12 @@
+double x;
+x = 1;
+
+print(x, "\n");
+
+void f(double y) {
+  print(y, "\n");
+}
+
+int p;
+p = 2;
+f(p);

@@ -46,14 +46,11 @@ readVariableFromLayer l (VarID vid) = IntMap.lookup vid (varEnv l)
 writeVariableToLayer :: Layer -> VarID -> Value -> Maybe Layer
 writeVariableToLayer l (VarID vid) value =
   let (moldvalue, newvarenv) =
-        IntMap.insertLookupWithKey
-          (\_ newVal oldVal -> convert newVal (typeof oldVal))
-          vid
-          value
-          (varEnv l)
+        IntMap.insertLookupWithKey (\_ a _ -> a) vid value (varEnv l)
    in case moldvalue of
-        Nothing -> Nothing
-        Just _ -> Just $ l {varEnv = newvarenv}
+        Just oldValue
+          | typeIs value (typeof oldValue) -> Just $ l {varEnv = newvarenv}
+        _ -> Nothing
 
 addVariableToLayer :: Layer -> VarID -> VarType -> Maybe Layer
 addVariableToLayer l (VarID vid) vtype =
@@ -190,7 +187,8 @@ nativeFunctionCall fdef vals = do
       executeBlockWithReturn (funDefBody fdef)
   case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
-    (Just val, Just valtype) -> pure $ Just $ convert val valtype
+    (Just val, Just valtype)
+      | typeIs val valtype -> pure $ Just val
     _ -> error "Type mismatch"
 
 foreignFunctionCall ::
@@ -200,11 +198,12 @@ foreignFunctionCall ::
   -> ForeignFun
   -> Execute (Maybe Value)
 foreignFunctionCall rettype params vals fun =
-  Trans.liftIO $ call fun rettype (convertVals params vals)
+  Trans.liftIO $ call fun rettype (assertVals params vals)
   where
-    convertVals [] [] = []
-    convertVals (vtype:ps) (v:vs) = convert v vtype : convertVals ps vs
-    convertVals _ _ = error "Type mismatch"
+    assertVals [] [] = []
+    assertVals (vtype:ps) (v:vs)
+      | typeIs v vtype = v : assertVals ps vs
+    assertVals _ _ = error "Type mismatch"
 
 functionCall :: FunctionCall -> Execute (Maybe Value)
 functionCall (PrintCall args) = do
