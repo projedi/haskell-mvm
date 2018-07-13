@@ -190,3 +190,6 @@ pattern ExprUnOp op e <- Expr{exprImpl = ExprUnOpImpl op e}
   where ExprUnOp op e
           = Expr{exprType = t, exprImpl = ExprUnOpImpl op e}
           where t = unOpTypeFromArg op $ exprType e
+
+{-# COMPLETE ExprFunctionCall, ExprVar, ExprConst, ExprBinOp,
+  ExprUnOp :: Expr #-}

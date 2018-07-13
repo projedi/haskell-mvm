@@ -161,7 +161,6 @@ collectUsageInExpr (ExprBinOp _ lhs rhs) = do
   collectUsageInExpr lhs
   collectUsageInExpr rhs
 collectUsageInExpr (ExprUnOp _ e) = collectUsageInExpr e
-collectUsageInExpr _ = undefined -- TODO: Remove when pattern synonyms have COMPLETE pragma.
 
 trim :: IntMap Usage -> Program -> Program
 trim usages p = trimVariables usages $ trimFunctions fullUsage p
@@ -278,4 +277,3 @@ setCapturesInExpr (ExprConst t c) = pure $ ExprConst t c
 setCapturesInExpr (ExprBinOp op lhs rhs) =
   ExprBinOp op <$> setCapturesInExpr lhs <*> setCapturesInExpr rhs
 setCapturesInExpr (ExprUnOp op e) = ExprUnOp op <$> setCapturesInExpr e
-setCapturesInExpr _ = undefined -- TODO: Remove when pattern synonyms have COMPLETE pragma.

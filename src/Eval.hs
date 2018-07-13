@@ -307,7 +307,6 @@ evaluate (ExprUnOp UnIntToFloat e) = go <$> evaluate e
   where
     go (ValueInt i) = ValueFloat $ fromIntegral i
     go _ = error "Type mismatch"
-evaluate _ = undefined -- TODO: Remove when pattern synonyms have COMPLETE pragma.
 
 evaluateAsBool :: Expr -> Execute Bool
 evaluateAsBool e = do

@@ -111,7 +111,6 @@ prettyPrintExpr n (ExprBinOp op el er) =
   parenIfNeeded n (binOpPrec op) $
   prettyPrintExpr (binOpPrec op) el ++
   " " ++ prettyPrintBinOp op ++ " " ++ prettyPrintExpr (binOpPrec op) er
-prettyPrintExpr _ _ = undefined -- TODO: Remove when pattern synonyms have COMPLETE pragma.
 
 class PrettyPrintSimple a where
   prettyPrintSimple :: a -> String
