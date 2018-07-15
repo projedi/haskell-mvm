@@ -6,7 +6,6 @@ import Control.Monad (forM_)
 import System.Environment (getArgs)
 
 import Eval (eval)
-import qualified JIT
 import Parser (parseExpr)
 import PrettyPrint (prettyPrint)
 import SyntaxResolver (resolve)
@@ -22,12 +21,6 @@ evaluateFile fname = do
   let expr = getExpr contents
   eval expr
 
-jit :: FilePath -> IO ()
-jit fname = do
-  contents <- readFile fname
-  let expr = getExpr contents
-  JIT.interpret expr
-
 dump :: FilePath -> IO ()
 dump fname = do
   contents <- readFile fname
@@ -42,7 +35,7 @@ getOperation :: [String] -> (FilePath -> IO (), [String])
 getOperation [] = (const $ pure (), [])
 getOperation ("--dumb":args) = (evaluateFile, args)
 getOperation ("--dump":args) = (dump, args)
-getOperation args = (jit, args)
+getOperation args = (evaluateFile, args)
 
 someFunc :: IO ()
 someFunc = do

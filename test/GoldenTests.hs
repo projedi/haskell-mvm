@@ -107,7 +107,6 @@ passTests =
   testGroup
     "Pass"
     [ testsWithParams "Dumb" 1 "expected" ["--dumb"] names
-    , testsWithParams "JIT" 1 "expected" [] names
     ]
   where
     names = testList ++ originalTestList
@@ -118,7 +117,6 @@ failTests =
   testGroup
     "Fail"
     [ testsWithParams "Dumb" 30 "expected" ["--dumb"] names
-    , testsWithParams "JIT" 30 "expected" [] names
     ]
   where
     names = failTestList ++ originalFailTestList
@@ -128,7 +126,6 @@ intensiveTests =
   testGroup
     "Intensive"
     [ testsWithParams "Dumb" 30 "expected" ["--dumb"] names
-    , testsWithParams "JIT" 30 "expected" [] names
     ]
   where
     names = intensiveTestList ++ originalIntensiveTestList
@@ -138,7 +135,6 @@ graphicsTests =
   testGroup
     "Graphics"
     [ testsWithParams "Dumb" 30 "ppm" ["--dumb"] names
-    , testsWithParams "JIT" 30 "ppm" [] names
     ]
   where
     names = graphicsTestList ++ originalGraphicsTestList
