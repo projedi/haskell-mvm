@@ -2,7 +2,7 @@ module JIT
   ( interpret
   ) where
 
-import Syntax
+import TypedSyntax
 
 interpret :: Program -> IO ()
 interpret = undefined

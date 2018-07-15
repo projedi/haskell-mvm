@@ -24,9 +24,9 @@ library
                      , PreSyntax
                      , PrettyPrint
                      , ResolvedSyntax
-                     , Syntax
                      , SyntaxResolver
                      , TypeChecker
+                     , TypedSyntax
                      , Util
                      , Value
                      , VarUsageResolver

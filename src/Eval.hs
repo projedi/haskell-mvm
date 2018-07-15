@@ -15,7 +15,7 @@ import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
 import ForeignEval
-import Syntax
+import TypedSyntax
 import Value
 
 eval :: Program -> IO ()

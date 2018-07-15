@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternSynonyms #-}
 
-module Syntax
+module TypedSyntax
   ( Program(..)
   , VarID(..)
   , FunID(..)

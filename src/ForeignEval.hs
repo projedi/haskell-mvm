@@ -15,7 +15,7 @@ import Foreign.Ptr (FunPtr())
 import System.IO.Error (IOError, ioeGetErrorString)
 import qualified System.Posix.DynamicLinker as DL
 
-import Syntax (VarType(..))
+import TypedSyntax (VarType(..))
 import Value
 
 newtype LibHandle =

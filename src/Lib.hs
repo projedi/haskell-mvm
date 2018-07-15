@@ -9,9 +9,9 @@ import Eval (eval)
 import qualified JIT
 import Parser (parseExpr)
 import PrettyPrint (prettyPrint)
-import Syntax (Program)
 import SyntaxResolver (resolve)
 import TypeChecker (typeCheck)
+import TypedSyntax (Program)
 
 getExpr :: String -> Program
 getExpr = typeCheck . resolve . parseExpr

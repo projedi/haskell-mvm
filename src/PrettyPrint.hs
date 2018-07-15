@@ -8,7 +8,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
-import Syntax
+import TypedSyntax
 import Value (Value)
 
 prettyPrint :: Program -> String
