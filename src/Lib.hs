@@ -8,12 +8,13 @@ import System.Environment (getArgs)
 import Eval (eval)
 import Parser (parseExpr)
 import PrettyPrint (prettyPrint)
+import SimplifiedSyntax (Program)
 import SyntaxResolver (resolve)
+import SyntaxSimplifier (simplify)
 import TypeChecker (typeCheck)
-import TypedSyntax (Program)
 
 getExpr :: String -> Program
-getExpr = typeCheck . resolve . parseExpr
+getExpr = simplify . typeCheck . resolve . parseExpr
 
 evaluateFile :: FilePath -> IO ()
 evaluateFile fname = do

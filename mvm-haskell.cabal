@@ -23,7 +23,9 @@ library
                      , PreSyntax
                      , PrettyPrint
                      , ResolvedSyntax
+                     , SimplifiedSyntax
                      , SyntaxResolver
+                     , SyntaxSimplifier
                      , TypeChecker
                      , TypedSyntax
                      , Util
