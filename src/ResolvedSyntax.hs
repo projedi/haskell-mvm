@@ -27,6 +27,7 @@ data Program = Program
 
 newtype VarID =
   VarID Int
+  deriving (Eq)
 
 instance Show VarID where
   show (VarID i) = "var_" ++ show i
@@ -74,6 +75,7 @@ data FunctionDef = FunctionDef
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
   , funDefLocals :: [VarDecl]
+  , funDefCaptures :: [VarID]
   , funDefBody :: Block
   }
 

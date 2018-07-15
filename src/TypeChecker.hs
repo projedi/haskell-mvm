@@ -66,7 +66,7 @@ runTypeChecker fs = runState (traverse go fs)
             , Syntax.funDefName = ResolvedSyntax.funDefName f
             , Syntax.funDefParams = ResolvedSyntax.funDefParams f
             , Syntax.funDefLocals = ResolvedSyntax.funDefLocals f
-            , Syntax.funDefCaptures = [] -- Only filled by SyntaxTrimmer.
+            , Syntax.funDefCaptures = ResolvedSyntax.funDefCaptures f
             , Syntax.funDefBody = body
             }
 
@@ -143,7 +143,6 @@ typecheckFunctionCall (ResolvedSyntax.NativeFunctionCall (Syntax.FunID fid) args
     Syntax.NativeFunctionCall
       { Syntax.nativeFunCallName = ResolvedSyntax.funDefName fdef
       , Syntax.nativeFunCallRetType = ResolvedSyntax.funDefRetType fdef
-      , Syntax.nativeFunCallCaptures = [] -- Filled by SyntaxTrimmer
       , Syntax.nativeFunCallArgs = args'
       }
 typecheckFunctionCall (ResolvedSyntax.ForeignFunctionCall (Syntax.FunID fid) args) = do

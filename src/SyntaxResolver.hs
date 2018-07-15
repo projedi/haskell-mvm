@@ -11,12 +11,14 @@ import qualified Control.Monad.Writer as Writer
 import Data.Foldable (asum)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
 
 import qualified PreSyntax
 import qualified ResolvedSyntax
 import Value (Value(..))
+import qualified VarUsageResolver
 
 resolve :: PreSyntax.Program -> ResolvedSyntax.Program
 resolve p =
@@ -30,8 +32,9 @@ resolve p =
     mainFunDecl =
       PreSyntax.FunctionDecl Nothing (PreSyntax.FunctionName "main") []
     finalEnv =
-      runResolver
-        (resolveFunctionDef mainFunDecl $ PreSyntax.programStatements p)
+      runResolver $ do
+        resolveFunctionDef mainFunDecl $ PreSyntax.programStatements p
+        resolveCaptures
     foreignFuns = IntMap.mapMaybe asForeign $ funs finalEnv
     asForeign (_, Just (ForeignFunction f)) = Just f
     asForeign _ = Nothing
@@ -349,6 +352,7 @@ resolveFunctionDef fdecl@(PreSyntax.FunctionDecl rettype _ params) stmts = do
         , ResolvedSyntax.funDefName = f
         , ResolvedSyntax.funDefParams = params'
         , ResolvedSyntax.funDefLocals = locals usages
+        , ResolvedSyntax.funDefCaptures = [] -- Will be filled out later.
         , ResolvedSyntax.funDefBody = body
         }
       (varAccess usages)
@@ -471,3 +475,44 @@ resolveExpr (PreSyntax.ExprGt lhs rhs) =
   ResolvedSyntax.ExprGt <$> resolveExpr lhs <*> resolveExpr rhs
 resolveExpr (PreSyntax.ExprGeq lhs rhs) =
   ResolvedSyntax.ExprGeq <$> resolveExpr lhs <*> resolveExpr rhs
+
+resolveCaptures :: Resolver ()
+resolveCaptures = do
+  entries <- State.gets (IntMap.mapMaybe asNative . funs)
+  let varUsages =
+        IntMap.map (map ResolvedSyntax.VarID) $
+        VarUsageResolver.resolveVarUsage entries
+  State.modify $ \env ->
+    env {funs = IntMap.mapWithKey (modifyFun varUsages) $ funs env}
+  where
+    asNative (_, Just (NativeFunction f vs fs)) =
+      Just $
+      VarUsageResolver.UsageEntry
+        { VarUsageResolver.vars = map (\(ResolvedSyntax.VarID i) -> i) vs
+        , VarUsageResolver.locals =
+            map (\(ResolvedSyntax.VarDecl _ (ResolvedSyntax.VarID i)) -> i) $
+            ResolvedSyntax.funDefLocals f
+        , VarUsageResolver.funs = map (\(ResolvedSyntax.FunID i) -> i) fs
+        }
+    asNative _ = Nothing
+    modifyFun ::
+         IntMap [ResolvedSyntax.VarID]
+      -> Int
+      -> (PreSyntax.FunctionDecl, Maybe Function)
+      -> (PreSyntax.FunctionDecl, Maybe Function)
+    modifyFun varUsages fid (fdecl, Just (NativeFunction f vs fs)) =
+      ( fdecl
+      , Just (NativeFunction (updateCaptures f (varUsages IntMap.! fid)) vs fs))
+    modifyFun _ _ f = f
+    updateCaptures ::
+         ResolvedSyntax.FunctionDef
+      -> [ResolvedSyntax.VarID]
+      -> ResolvedSyntax.FunctionDef
+    updateCaptures f usages =
+      f
+        { ResolvedSyntax.funDefCaptures =
+            usages List.\\
+            map
+              (\(ResolvedSyntax.VarDecl _ v) -> v)
+              (ResolvedSyntax.funDefLocals f)
+        }

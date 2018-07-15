@@ -26,10 +26,10 @@ library
                      , ResolvedSyntax
                      , Syntax
                      , SyntaxResolver
-                     , SyntaxTrimmer
                      , TypeChecker
                      , Util
                      , Value
+                     , VarUsageResolver
   c-sources:           src/ForeignEval.c
                      , src/Util.c
   build-depends:       base >= 4.7 && < 5

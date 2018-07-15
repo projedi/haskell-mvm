@@ -11,11 +11,10 @@ import Parser (parseExpr)
 import PrettyPrint (prettyPrint)
 import Syntax (Program)
 import SyntaxResolver (resolve)
-import SyntaxTrimmer (trimAndSetCaptures)
 import TypeChecker (typeCheck)
 
 getExpr :: String -> Program
-getExpr = trimAndSetCaptures . typeCheck . resolve . parseExpr
+getExpr = typeCheck . resolve . parseExpr
 
 evaluateFile :: FilePath -> IO ()
 evaluateFile fname = do

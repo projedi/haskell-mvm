@@ -61,14 +61,13 @@ data FunctionDef = FunctionDef
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
   , funDefLocals :: [VarDecl]
-  , funDefCaptures :: [VarID] -- Filled by SyntaxTrimmer
+  , funDefCaptures :: [VarID]
   , funDefBody :: Block
   }
 
 data FunctionCall
   = NativeFunctionCall { nativeFunCallName :: FunID
                        , nativeFunCallRetType :: Maybe VarType
-                       , nativeFunCallCaptures :: [VarID] -- Filled by SyntaxTrimmer
                        , nativeFunCallArgs :: [Expr] }
   | ForeignFunctionCall { foreignFunCallName :: FunID
                         , foreignFunCallRetType :: Maybe VarType
