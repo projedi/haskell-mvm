@@ -25,9 +25,6 @@ resolve p =
     , ResolvedSyntax.programFunctions = nativeFuns
     , ResolvedSyntax.programForeignFunctions = foreignFuns
     , ResolvedSyntax.programConstants = consts finalEnv
-    , ResolvedSyntax.programLastFunID = lastFun finalEnv
-    , ResolvedSyntax.programLastVarID = lastVar finalEnv
-    , ResolvedSyntax.programLastConstID = lastConst finalEnv
     }
   where
     mainFunDecl =

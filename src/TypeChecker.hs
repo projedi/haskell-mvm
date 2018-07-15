@@ -24,9 +24,6 @@ typeCheck p =
     , Syntax.programLibraries = ResolvedSyntax.programLibraries p
     , Syntax.programForeignFunctions = envForeignFunctions finalEnv
     , Syntax.programConstants = envConsts finalEnv
-    , Syntax.programLastFunID = envLastFunID finalEnv
-    , Syntax.programLastVarID = envLastVarID finalEnv
-    , Syntax.programLastConstID = envLastConstID finalEnv
     }
   where
     startEnv =
@@ -34,9 +31,6 @@ typeCheck p =
         { envFuns = ResolvedSyntax.programFunctions p
         , envForeignFunctions = ResolvedSyntax.programForeignFunctions p
         , envConsts = ResolvedSyntax.programConstants p
-        , envLastFunID = ResolvedSyntax.programLastFunID p
-        , envLastVarID = ResolvedSyntax.programLastVarID p
-        , envLastConstID = ResolvedSyntax.programLastConstID p
         , envVars = IntMap.empty
         }
     (fs, finalEnv) = runTypeChecker (ResolvedSyntax.programFunctions p) startEnv
@@ -49,9 +43,6 @@ data Env = Env
   { envFuns :: IntMap ResolvedSyntax.FunctionDef
   , envForeignFunctions :: IntMap ResolvedSyntax.ForeignFunctionDecl
   , envConsts :: IntMap Value
-  , envLastFunID :: Syntax.FunID
-  , envLastVarID :: Syntax.VarID
-  , envLastConstID :: Syntax.ConstID
   , envVars :: IntMap Syntax.VarType
   }
 

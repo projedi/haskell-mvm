@@ -23,9 +23,6 @@ data Program = Program
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
   , programConstants :: IntMap Value
-  , programLastFunID :: FunID
-  , programLastVarID :: VarID
-  , programLastConstID :: ConstID
   }
 
 newtype VarID =
