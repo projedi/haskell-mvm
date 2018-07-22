@@ -29,8 +29,6 @@ library
                      , Util
                      , Value
                      , VarUsageResolver
-  c-sources:           src/ForeignEval.c
-                     , src/Util.c
   build-depends:       base >= 4.7 && < 5
                        -- for hlint
                      , apply-refact
