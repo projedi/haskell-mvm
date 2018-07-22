@@ -1,4 +1,4 @@
-#link "libm.so.6"
+#link "libm"
 
 foreign double sin(double x);
 

@@ -14,6 +14,7 @@ import qualified Foreign.LibFFI as FFI
 import Foreign.Ptr (FunPtr())
 import System.IO.Error (IOError, ioeGetErrorString)
 import qualified System.Posix.DynamicLinker as DL
+import qualified System.Info
 
 import TypedSyntax (VarType(..))
 import Value
@@ -24,10 +25,16 @@ newtype LibHandle =
 newtype ForeignFun =
   ForeignFun (FunPtr ())
 
+getLibName :: String -> String
+getLibName lib =
+  case System.Info.os of
+    "darwin" -> lib ++ ".dylib"
+    _ -> lib ++ ".so"
+
 dlopen :: String -> IO (Either String LibHandle)
 dlopen name =
   tryJust (Just . ioeGetErrorString) $
-  LibHandle <$> DL.dlopen name [DL.RTLD_LAZY]
+  LibHandle <$> DL.dlopen (getLibName name) [DL.RTLD_LAZY]
 
 dlclose :: LibHandle -> IO ()
 dlclose (LibHandle handle) = DL.dlclose handle
