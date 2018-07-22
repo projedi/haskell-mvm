@@ -23,6 +23,7 @@ data Program = Program
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
   , programConstants :: IntMap Value
+  , programVariables :: IntMap VarType
   }
 
 newtype VarID =
@@ -54,6 +55,7 @@ newtype Block = Block
 
 data Statement
   = StatementBlock Block
+  | StatementVarAlloc VarID
   | StatementFunctionCall FunctionCall
   | StatementWhile Expr
                    Block
@@ -74,7 +76,6 @@ data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
-  , funDefLocals :: [VarDecl]
   , funDefCaptures :: [VarID]
   , funDefBody :: Block
   }

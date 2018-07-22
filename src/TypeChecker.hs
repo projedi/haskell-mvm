@@ -4,7 +4,6 @@ module TypeChecker
   ( typeCheck
   ) where
 
-import Control.Monad
 import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Control.Monad.Reader as Reader
 import Control.Monad.State (State, runState)
@@ -24,6 +23,7 @@ typeCheck p =
     , TypedSyntax.programLibraries = ResolvedSyntax.programLibraries p
     , TypedSyntax.programForeignFunctions = envForeignFunctions finalEnv
     , TypedSyntax.programConstants = envConsts finalEnv
+    , TypedSyntax.programVariables = ResolvedSyntax.programVariables p
     }
   where
     startEnv =
@@ -31,52 +31,47 @@ typeCheck p =
         { envFuns = ResolvedSyntax.programFunctions p
         , envForeignFunctions = ResolvedSyntax.programForeignFunctions p
         , envConsts = ResolvedSyntax.programConstants p
-        , envVars = IntMap.empty
         }
-    (fs, finalEnv) = runTypeChecker (ResolvedSyntax.programFunctions p) startEnv
+    (fs, finalEnv) = runTypeChecker p startEnv
 
-newtype ConstEnv = ConstEnv
+data ConstEnv = ConstEnv
   { constEnvRetType :: Maybe TypedSyntax.VarType
+  , constEnvVars :: IntMap TypedSyntax.VarType
   }
 
 data Env = Env
   { envFuns :: IntMap ResolvedSyntax.FunctionDef
   , envForeignFunctions :: IntMap ResolvedSyntax.ForeignFunctionDecl
   , envConsts :: IntMap Value
-  , envVars :: IntMap TypedSyntax.VarType
   }
 
 type TypeChecker = ReaderT ConstEnv (State Env)
 
 runTypeChecker ::
-     IntMap ResolvedSyntax.FunctionDef
-  -> Env
-  -> (IntMap TypedSyntax.FunctionDef, Env)
-runTypeChecker fs = runState (traverse go fs)
+     ResolvedSyntax.Program -> Env -> (IntMap TypedSyntax.FunctionDef, Env)
+runTypeChecker p = runState (traverse go $ ResolvedSyntax.programFunctions p)
   where
-    constEnv f = ConstEnv {constEnvRetType = ResolvedSyntax.funDefRetType f}
+    constEnv f =
+      ConstEnv
+        { constEnvRetType = ResolvedSyntax.funDefRetType f
+        , constEnvVars = ResolvedSyntax.programVariables p
+        }
     go f =
       flip runReaderT (constEnv f) $ do
-        forM_ (ResolvedSyntax.funDefParams f) introduceVariable
-        forM_ (ResolvedSyntax.funDefLocals f) introduceVariable
         body <- typecheckBlock $ ResolvedSyntax.funDefBody f
         pure
           TypedSyntax.FunctionDef
             { TypedSyntax.funDefRetType = ResolvedSyntax.funDefRetType f
             , TypedSyntax.funDefName = ResolvedSyntax.funDefName f
             , TypedSyntax.funDefParams = ResolvedSyntax.funDefParams f
-            , TypedSyntax.funDefLocals = ResolvedSyntax.funDefLocals f
             , TypedSyntax.funDefCaptures = ResolvedSyntax.funDefCaptures f
             , TypedSyntax.funDefBody = body
             }
 
-introduceVariable :: ResolvedSyntax.VarDecl -> TypeChecker ()
-introduceVariable (ResolvedSyntax.VarDecl t (TypedSyntax.VarID vid)) =
-  State.modify $ \env -> env {envVars = IntMap.insert vid t (envVars env)}
-
 getVariableType ::
      ResolvedSyntax.VarID -> TypeChecker (Maybe TypedSyntax.VarType)
-getVariableType (TypedSyntax.VarID v) = State.gets (IntMap.lookup v . envVars)
+getVariableType (TypedSyntax.VarID v) =
+  Reader.asks (IntMap.lookup v . constEnvVars)
 
 typecheckBlock :: ResolvedSyntax.Block -> TypeChecker TypedSyntax.Block
 typecheckBlock block = do
@@ -90,6 +85,8 @@ typecheckStatement ::
      ResolvedSyntax.Statement -> TypeChecker TypedSyntax.Statement
 typecheckStatement (ResolvedSyntax.StatementBlock block) =
   TypedSyntax.StatementBlock <$> typecheckBlock block
+typecheckStatement (ResolvedSyntax.StatementVarAlloc v) =
+  pure $ TypedSyntax.StatementVarAlloc v
 typecheckStatement (ResolvedSyntax.StatementFunctionCall fcall) =
   TypedSyntax.StatementFunctionCall <$> typecheckFunctionCall fcall
 typecheckStatement (ResolvedSyntax.StatementWhile e block) =

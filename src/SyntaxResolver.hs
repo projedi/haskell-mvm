@@ -27,6 +27,7 @@ resolve p =
     , ResolvedSyntax.programFunctions = nativeFuns
     , ResolvedSyntax.programForeignFunctions = foreignFuns
     , ResolvedSyntax.programConstants = consts finalEnv
+    , ResolvedSyntax.programVariables = vars finalEnv
     }
   where
     mainFunDecl =
@@ -39,7 +40,7 @@ resolve p =
     asForeign (_, Just (ForeignFunction f)) = Just f
     asForeign _ = Nothing
     nativeFuns = IntMap.mapMaybe asNative $ funs finalEnv
-    asNative (_, Just (NativeFunction (NativeFunctionImpl f _ _))) = Just f
+    asNative (_, Just (NativeFunction (NativeFunctionImpl f _))) = Just f
     asNative _ = Nothing
 
 data Layer = Layer
@@ -70,8 +71,7 @@ newFunctionInLayer l@Layer {funEnv = lfuns} fname fid =
 
 data NativeFunctionImpl =
   NativeFunctionImpl ResolvedSyntax.FunctionDef
-                     [ResolvedSyntax.VarID]
-                     [ResolvedSyntax.FunID]
+                     ResolverLog
 
 data Function
   = NativeFunction NativeFunctionImpl
@@ -323,11 +323,11 @@ resolveStatement (PreSyntax.StatementWhile e stmt) = do
   b <- Trans.lift $ resolveBlock [stmt]
   addStmt $ ResolvedSyntax.StatementWhile e' b
 resolveStatement (PreSyntax.StatementVarDecl vdecl) = do
-  _ <- Trans.lift $ introduceVariable vdecl
-  pure ()
-resolveStatement (PreSyntax.StatementVarDef vdecl@(PreSyntax.VarDecl _ vname) e) = do
-  _ <- Trans.lift $ introduceVariable vdecl
-  v <- Trans.lift $ resolveVariable vname
+  v <- Trans.lift $ introduceVariable vdecl
+  addStmt $ ResolvedSyntax.StatementVarAlloc v
+resolveStatement (PreSyntax.StatementVarDef vdecl e) = do
+  v <- Trans.lift $ introduceVariable vdecl
+  addStmt $ ResolvedSyntax.StatementVarAlloc v
   e' <- Trans.lift $ resolveExpr e
   addStmt $ ResolvedSyntax.StatementAssign v e'
 resolveStatement (PreSyntax.StatementFunctionDecl fdecl) = do
@@ -382,12 +382,10 @@ resolveFunctionDef fdecl@(PreSyntax.FunctionDecl rettype _ params) stmts = do
         { ResolvedSyntax.funDefRetType = rettype
         , ResolvedSyntax.funDefName = f
         , ResolvedSyntax.funDefParams = params'
-        , ResolvedSyntax.funDefLocals = locals usages
         , ResolvedSyntax.funDefCaptures = [] -- Will be filled out later.
         , ResolvedSyntax.funDefBody = body
         }
-      (varAccess usages)
-      (funAccess usages)
+      usages
   where
     introduceParam p@(PreSyntax.VarDecl t _) =
       ResolvedSyntax.VarDecl t <$> introduceVariable p
@@ -437,7 +435,9 @@ resolveFor vname eFrom eTo s = do
       ResolvedSyntax.StatementBlock
         ResolvedSyntax.Block
           { ResolvedSyntax.blockStatements =
-              [ ResolvedSyntax.StatementAssign vCur eFrom'
+              [ ResolvedSyntax.StatementVarAlloc vCur
+              , ResolvedSyntax.StatementVarAlloc vTo
+              , ResolvedSyntax.StatementAssign vCur eFrom'
               , ResolvedSyntax.StatementAssign vTo eTo'
               , ResolvedSyntax.StatementWhile expr block'
               ]
@@ -516,14 +516,16 @@ resolveCaptures = do
   State.modify $ \env ->
     env {funs = IntMap.mapWithKey (modifyFun varUsages) $ funs env}
   where
-    asNative (_, Just (NativeFunction (NativeFunctionImpl f vs fs))) =
+    asNative (_, Just (NativeFunction (NativeFunctionImpl _ usages))) =
       Just $
       VarUsageResolver.UsageEntry
-        { VarUsageResolver.vars = map (\(ResolvedSyntax.VarID i) -> i) vs
+        { VarUsageResolver.vars =
+            map (\(ResolvedSyntax.VarID i) -> i) $ varAccess usages
         , VarUsageResolver.locals =
             map (\(ResolvedSyntax.VarDecl _ (ResolvedSyntax.VarID i)) -> i) $
-            ResolvedSyntax.funDefLocals f
-        , VarUsageResolver.funs = map (\(ResolvedSyntax.FunID i) -> i) fs
+            locals usages
+        , VarUsageResolver.funs =
+            map (\(ResolvedSyntax.FunID i) -> i) $ funAccess usages
         }
     asNative _ = Nothing
     modifyFun ::
@@ -531,24 +533,21 @@ resolveCaptures = do
       -> Int
       -> (PreSyntax.FunctionDecl, Maybe Function)
       -> (PreSyntax.FunctionDecl, Maybe Function)
-    modifyFun varUsages fid (fdecl, Just (NativeFunction (NativeFunctionImpl f vs fs))) =
+    modifyFun varUsages fid (fdecl, Just (NativeFunction (NativeFunctionImpl f usages))) =
       ( fdecl
       , Just
           (NativeFunction
              (NativeFunctionImpl
-                (updateCaptures f (varUsages IntMap.! fid))
-                vs
-                fs)))
+                (updateCaptures f (varUsages IntMap.! fid) (locals usages))
+                usages)))
     modifyFun _ _ f = f
     updateCaptures ::
          ResolvedSyntax.FunctionDef
       -> [ResolvedSyntax.VarID]
+      -> [ResolvedSyntax.VarDecl]
       -> ResolvedSyntax.FunctionDef
-    updateCaptures f usages =
+    updateCaptures f usages localVars =
       f
         { ResolvedSyntax.funDefCaptures =
-            usages List.\\
-            map
-              (\(ResolvedSyntax.VarDecl _ v) -> v)
-              (ResolvedSyntax.funDefLocals f)
+            usages List.\\ map (\(ResolvedSyntax.VarDecl _ v) -> v) localVars
         }

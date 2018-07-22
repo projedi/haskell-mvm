@@ -16,6 +16,7 @@ simplify p =
     , SimplifiedSyntax.programForeignFunctions =
         TypedSyntax.programForeignFunctions p
     , SimplifiedSyntax.programConstants = TypedSyntax.programConstants p
+    , SimplifiedSyntax.programVariables = TypedSyntax.programVariables p
     }
 
 simplifyFunctionDef :: TypedSyntax.FunctionDef -> SimplifiedSyntax.FunctionDef
@@ -24,7 +25,6 @@ simplifyFunctionDef fdef =
     { SimplifiedSyntax.funDefRetType = TypedSyntax.funDefRetType fdef
     , SimplifiedSyntax.funDefName = TypedSyntax.funDefName fdef
     , SimplifiedSyntax.funDefParams = TypedSyntax.funDefParams fdef
-    , SimplifiedSyntax.funDefLocals = TypedSyntax.funDefLocals fdef
     , SimplifiedSyntax.funDefCaptures = TypedSyntax.funDefCaptures fdef
     , SimplifiedSyntax.funDefBody = simplifyBlock $ TypedSyntax.funDefBody fdef
     }
@@ -39,6 +39,8 @@ simplifyBlock block =
 simplifyStatement :: TypedSyntax.Statement -> SimplifiedSyntax.Statement
 simplifyStatement (TypedSyntax.StatementBlock block) =
   SimplifiedSyntax.StatementBlock $ simplifyBlock block
+simplifyStatement (TypedSyntax.StatementVarAlloc v) =
+  SimplifiedSyntax.StatementVarAlloc v
 simplifyStatement (TypedSyntax.StatementFunctionCall fcall) =
   SimplifiedSyntax.StatementFunctionCall $ simplifyFunctionCall fcall
 simplifyStatement (TypedSyntax.StatementWhile expr block) =

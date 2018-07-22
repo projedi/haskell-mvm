@@ -29,6 +29,7 @@ eval p = do
       (programForeignFunctions p)
       (programFunctions p)
       (programConstants p)
+      (programVariables p)
   forM_ libhandles dlclose
 
 type LayerID = Int
@@ -67,6 +68,7 @@ data Env = Env
   , envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   , envFunctions :: IntMap FunctionDef
   , envConsts :: IntMap Value
+  , envVarTypes :: IntMap VarType
   }
 
 emptyEnv :: Env
@@ -76,6 +78,7 @@ emptyEnv =
     , envForeignFunctions = IntMap.empty
     , envFunctions = IntMap.empty
     , envConsts = IntMap.empty
+    , envVarTypes = IntMap.empty
     }
 
 modifyingLayer :: (Layer -> Maybe Layer) -> [Layer] -> Maybe [Layer]
@@ -149,14 +152,16 @@ startExecute ::
      IntMap ForeignFunctionDecl
   -> IntMap FunctionDef
   -> IntMap Value
+  -> IntMap VarType
   -> Execute ()
-startExecute foreignFuns nativeFuns consts = do
+startExecute foreignFuns nativeFuns consts vars = do
   funs <- mapM getForeignFun foreignFuns
   State.modify $ \env ->
     env
       { envForeignFunctions = funs
       , envFunctions = nativeFuns
       , envConsts = consts
+      , envVarTypes = vars
       }
   let Just mainFun = IntMap.lookup 0 nativeFuns
   _ <- nativeFunctionCall mainFun []
@@ -183,7 +188,6 @@ nativeFunctionCall fdef vals = do
   res <-
     withNewLayer $ do
       generateAssignments (funDefParams fdef) vals
-      forM_ (funDefLocals fdef) declareVariable
       executeBlockWithReturn (funDefBody fdef)
   case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
@@ -323,6 +327,9 @@ executeBlock block = withNewLayer $ forM_ (blockStatements block) execute
 
 execute :: Statement -> Execute ()
 execute (StatementBlock block) = executeBlock block
+execute (StatementVarAlloc (VarID v)) = do
+  Just vt <- State.gets (IntMap.lookup v . envVarTypes)
+  declareVariable (VarDecl vt (VarID v))
 execute (StatementFunctionCall fcall) = functionCall fcall >> pure ()
 execute s@(StatementWhile e block) = do
   res <- evaluateAsBool e

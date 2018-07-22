@@ -17,6 +17,7 @@ prettyPrint p =
     [ printLibs $ programLibraries p
     , printForeignFunctions $ programForeignFunctions p
     , printConstants $ programConstants p
+    , printVariables $ programVariables p
     , printFunctions $ programFunctions p
     ]
 
@@ -49,6 +50,14 @@ printFunctions funs =
 printConstants :: IntMap Value -> String
 printConstants vals =
   "Constants: " ++
+  IntMap.foldrWithKey
+    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ show val)
+    ""
+    vals
+
+printVariables :: IntMap VarType -> String
+printVariables vals =
+  "Variables: " ++
   IntMap.foldrWithKey
     (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ show val)
     ""
@@ -164,6 +173,8 @@ prettyPrintStatement n (StatementIfElse e s1 s2) =
   indent n ("if (" ++ prettyPrintExpr 0 e ++ ")\n") ++
   prettyPrintBlock n s1 ++ "\n" ++ indent n "else\n" ++ prettyPrintBlock n s2
 prettyPrintStatement n (StatementBlock stmts) = prettyPrintBlock n stmts
+prettyPrintStatement n (StatementVarAlloc v) =
+  indent n ("alloc " ++ show v ++ ";")
 
 prettyPrintBlock :: Int -> Block -> String
 prettyPrintBlock n block =
@@ -180,10 +191,7 @@ prettyPrintFunctionDef n fdef =
      paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef)))) ++
   " [" ++
   List.intercalate ", " (map prettyPrintSimple (funDefCaptures fdef)) ++
-  "]" ++
-  "\n" ++
-  unlines (map (indent (n + 1) . prettyPrintSimple) $ funDefLocals fdef) ++
-  prettyPrintBlock n (funDefBody fdef)
+  "]" ++ "\n" ++ prettyPrintBlock n (funDefBody fdef)
 
 printProgram :: Int -> [Statement] -> String
 printProgram n stmts =
