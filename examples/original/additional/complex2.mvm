@@ -4,6 +4,7 @@ int z;
 
 int foo(int x) {
     int r;
+    int baz();
     int bar(int a) {
         if (a <= 0) {
             return z;

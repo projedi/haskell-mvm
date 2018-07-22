@@ -299,22 +299,8 @@ withLayer m = do
 resolveBlock :: [PreSyntax.Statement] -> Resolver ResolvedSyntax.Block
 resolveBlock stmts =
   withLayer $ do
-    forM_ stmts scanStatement
     stmts' <- resolveStatements stmts
     pure ResolvedSyntax.Block {ResolvedSyntax.blockStatements = stmts'}
-
-scanStatement :: PreSyntax.Statement -> Resolver ()
-scanStatement (PreSyntax.StatementVarDecl vdecl) =
-  introduceVariable vdecl >> pure ()
-scanStatement (PreSyntax.StatementVarDef vdecl _) =
-  introduceVariable vdecl >> pure ()
-scanStatement (PreSyntax.StatementFunctionDecl fdecl) =
-  introduceNativeFunction fdecl >> pure ()
-scanStatement (PreSyntax.StatementFunctionDef fdecl _) =
-  introduceNativeFunction fdecl >> pure ()
-scanStatement (PreSyntax.StatementForeignFunctionDecl fdecl) =
-  resolveForeignFunctionDecl fdecl
-scanStatement _ = pure ()
 
 type StatementResolver = WriterT [ResolvedSyntax.Statement] Resolver
 
@@ -336,12 +322,17 @@ resolveStatement (PreSyntax.StatementWhile e stmt) = do
   e' <- Trans.lift $ resolveExpr e
   b <- Trans.lift $ resolveBlock [stmt]
   addStmt $ ResolvedSyntax.StatementWhile e' b
-resolveStatement (PreSyntax.StatementVarDecl _) = pure ()
-resolveStatement (PreSyntax.StatementVarDef (PreSyntax.VarDecl _ vname) e) = do
+resolveStatement (PreSyntax.StatementVarDecl vdecl) = do
+  _ <- Trans.lift $ introduceVariable vdecl
+  pure ()
+resolveStatement (PreSyntax.StatementVarDef vdecl@(PreSyntax.VarDecl _ vname) e) = do
+  _ <- Trans.lift $ introduceVariable vdecl
   v <- Trans.lift $ resolveVariable vname
   e' <- Trans.lift $ resolveExpr e
   addStmt $ ResolvedSyntax.StatementAssign v e'
-resolveStatement (PreSyntax.StatementFunctionDecl _) = pure ()
+resolveStatement (PreSyntax.StatementFunctionDecl fdecl) = do
+  _ <- Trans.lift $ introduceNativeFunction fdecl
+  pure ()
 resolveStatement (PreSyntax.StatementAssign vname e) = do
   v <- Trans.lift $ resolveVariable vname
   e' <- Trans.lift $ resolveExpr e
@@ -367,6 +358,7 @@ resolveStatement (PreSyntax.StatementFor vname e1 e2 s) = do
   stmt <- Trans.lift $ resolveFor vname e1 e2 s
   addStmt stmt
 resolveStatement (PreSyntax.StatementFunctionDef fdecl stmts) = do
+  _ <- Trans.lift $ introduceNativeFunction fdecl
   Trans.lift $ resolveFunctionDef fdecl stmts
   pure ()
 resolveStatement (PreSyntax.StatementReturn Nothing) =
@@ -374,7 +366,8 @@ resolveStatement (PreSyntax.StatementReturn Nothing) =
 resolveStatement (PreSyntax.StatementReturn (Just e)) = do
   e' <- Trans.lift $ resolveExpr e
   addStmt $ ResolvedSyntax.StatementReturn $ Just e'
-resolveStatement (PreSyntax.StatementForeignFunctionDecl _) = pure ()
+resolveStatement (PreSyntax.StatementForeignFunctionDecl fdecl) =
+  Trans.lift $ resolveForeignFunctionDecl fdecl
 
 resolveFunctionDef ::
      PreSyntax.FunctionDecl -> [PreSyntax.Statement] -> Resolver ()
