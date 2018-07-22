@@ -4,11 +4,6 @@ foreign double sin(double x);
 
 print(sin(3), "\n");
 
-double sqrt(double x);
-foreign double sqrt(double x);
-
-print(sqrt(3), "\n");
-
 {
   double sin(double x) {
     print("Fake", "\n");

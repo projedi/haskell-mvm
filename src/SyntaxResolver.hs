@@ -39,7 +39,7 @@ resolve p =
     asForeign (_, Just (ForeignFunction f)) = Just f
     asForeign _ = Nothing
     nativeFuns = IntMap.mapMaybe asNative $ funs finalEnv
-    asNative (_, Just (NativeFunction f _ _)) = Just f
+    asNative (_, Just (NativeFunction (NativeFunctionImpl f _ _))) = Just f
     asNative _ = Nothing
 
 data Layer = Layer
@@ -68,10 +68,13 @@ newFunctionInLayer l@Layer {funEnv = lfuns} fname fid =
     (Nothing, lfuns') -> Just $ l {funEnv = lfuns'}
     (Just _, _) -> Nothing
 
+data NativeFunctionImpl =
+  NativeFunctionImpl ResolvedSyntax.FunctionDef
+                     [ResolvedSyntax.VarID]
+                     [ResolvedSyntax.FunID]
+
 data Function
-  = NativeFunction ResolvedSyntax.FunctionDef
-                   [ResolvedSyntax.VarID]
-                   [ResolvedSyntax.FunID]
+  = NativeFunction NativeFunctionImpl
   | ForeignFunction ResolvedSyntax.ForeignFunctionDecl
 
 data Env = Env
@@ -113,50 +116,74 @@ introduceVariableInEnv env (PreSyntax.VarDecl vtype vname) =
       Just l' = newVariableInLayer l vname v
    in (v, env' {layers = l' : ls})
 
-checkExistingFunctionInEnv ::
+checkExistingNativeFunctionInEnv ::
      Env
   -> ResolvedSyntax.FunID
   -> PreSyntax.FunctionDecl
   -> (ResolvedSyntax.FunID, Env)
-checkExistingFunctionInEnv env (ResolvedSyntax.FunID fid) fdecl =
-  let Just (existingDecl, _) = IntMap.lookup fid $ funs env
-   in if declMatch existingDecl fdecl
-        then (ResolvedSyntax.FunID fid, env)
-        else error "Type mismatch"
+checkExistingNativeFunctionInEnv env (ResolvedSyntax.FunID fid) fdecl =
+  let Just (existingDecl, f) = IntMap.lookup fid $ funs env
+   in case f of
+        Just (ForeignFunction _) ->
+          error "Foreign functions cannot be forward declared"
+        _ ->
+          if declMatch existingDecl fdecl
+            then (ResolvedSyntax.FunID fid, env)
+            else error "Type mismatch"
   where
     declMatch (PreSyntax.FunctionDecl lrettype _ lparams) (PreSyntax.FunctionDecl rrettype _ rparams) =
       (lrettype == rrettype) && (getTypes lparams == getTypes rparams)
     getTypes = map (\(PreSyntax.VarDecl t _) -> t)
 
-newFunctionInEnv :: Env -> PreSyntax.FunctionDecl -> (ResolvedSyntax.FunID, Env)
-newFunctionInEnv env fdecl =
+newFunctionInEnv ::
+     Env
+  -> PreSyntax.FunctionDecl
+  -> (ResolvedSyntax.FunID -> Maybe Function)
+  -> (ResolvedSyntax.FunID, Env)
+newFunctionInEnv env fdecl mf =
   let (ResolvedSyntax.FunID f) = inc $ lastFun env
       (Nothing, funs') =
         IntMap.insertLookupWithKey
           (\_ val _ -> val)
           f
-          (fdecl, Nothing)
+          (fdecl, mf (ResolvedSyntax.FunID f))
           (funs env)
    in ( ResolvedSyntax.FunID f
       , env {lastFun = ResolvedSyntax.FunID f, funs = funs'})
   where
     inc (ResolvedSyntax.FunID lastFunID) = ResolvedSyntax.FunID (lastFunID + 1)
 
-introduceFunctionInEnv ::
+introduceNativeFunctionInEnv ::
      Env -> PreSyntax.FunctionDecl -> (ResolvedSyntax.FunID, Env)
-introduceFunctionInEnv env fdecl@(PreSyntax.FunctionDecl _ fname _) =
+introduceNativeFunctionInEnv env fdecl@(PreSyntax.FunctionDecl _ fname _) =
   case findFunctionInLayer (head $ layers env) fname of
-    Just fid -> checkExistingFunctionInEnv env fid fdecl
+    Just fid -> checkExistingNativeFunctionInEnv env fid fdecl
     Nothing ->
-      let (f, env'@Env {layers = l:ls}) = newFunctionInEnv env fdecl
+      let (f, env'@Env {layers = l:ls}) =
+            newFunctionInEnv env fdecl (const Nothing)
           Just l' = newFunctionInLayer l fname f
        in (f, env' {layers = l' : ls})
 
-markFunctionAsDefinedInEnv :: Env -> ResolvedSyntax.FunID -> Function -> Env
-markFunctionAsDefinedInEnv env (ResolvedSyntax.FunID fid) f =
+markNativeFunctionAsDefinedInEnv ::
+     Env -> ResolvedSyntax.FunID -> NativeFunctionImpl -> Env
+markNativeFunctionAsDefinedInEnv env (ResolvedSyntax.FunID fid) f =
   env {funs = go $ funs env}
   where
-    go = IntMap.alter (\(Just (fdecl, Nothing)) -> Just (fdecl, Just f)) fid
+    go =
+      IntMap.alter
+        (\(Just (fdecl, Nothing)) -> Just (fdecl, Just $ NativeFunction f))
+        fid
+
+introduceForeignFunctionInEnv ::
+     Env
+  -> PreSyntax.FunctionDecl
+  -> (ResolvedSyntax.FunID -> ResolvedSyntax.ForeignFunctionDecl)
+  -> Env
+introduceForeignFunctionInEnv env fdecl@(PreSyntax.FunctionDecl _ fname _) ffdecl =
+  let (f, env'@Env {layers = l:ls}) =
+        newFunctionInEnv env fdecl (Just . ForeignFunction . ffdecl)
+      Just l' = newFunctionInLayer l fname f
+   in env' {layers = l' : ls}
 
 findFunctionInEnv ::
      Env -> PreSyntax.FunctionName -> (ResolvedSyntax.FunID, Maybe Function)
@@ -227,16 +254,27 @@ introduceVariable vdecl@(PreSyntax.VarDecl vtype _) =
        let (v, envAfter) = introduceVariableInEnv envBefore vdecl
         in (v, vtype, envAfter))
 
-introduceFunction :: PreSyntax.FunctionDecl -> Resolver ResolvedSyntax.FunID
-introduceFunction fdecl = do
+introduceNativeFunction ::
+     PreSyntax.FunctionDecl -> Resolver ResolvedSyntax.FunID
+introduceNativeFunction fdecl = do
   env <- State.get
-  let (f, env') = introduceFunctionInEnv env fdecl
+  let (f, env') = introduceNativeFunctionInEnv env fdecl
   State.put env'
   pure f
 
-markFunctionAsDefined :: ResolvedSyntax.FunID -> Function -> Resolver ()
-markFunctionAsDefined fid f =
-  State.modify (\env -> markFunctionAsDefinedInEnv env fid f)
+introduceForeignFunction ::
+     PreSyntax.FunctionDecl
+  -> (ResolvedSyntax.FunID -> ResolvedSyntax.ForeignFunctionDecl)
+  -> Resolver ()
+introduceForeignFunction fdecl ffdecl = do
+  env <- State.get
+  let env' = introduceForeignFunctionInEnv env fdecl ffdecl
+  State.put env'
+
+markNativeFunctionAsDefined ::
+     ResolvedSyntax.FunID -> NativeFunctionImpl -> Resolver ()
+markNativeFunctionAsDefined fid f =
+  State.modify (\env -> markNativeFunctionAsDefinedInEnv env fid f)
 
 findFunction ::
      PreSyntax.FunctionName -> Resolver (ResolvedSyntax.FunID, Maybe Function)
@@ -271,9 +309,9 @@ scanStatement (PreSyntax.StatementVarDecl vdecl) =
 scanStatement (PreSyntax.StatementVarDef vdecl _) =
   introduceVariable vdecl >> pure ()
 scanStatement (PreSyntax.StatementFunctionDecl fdecl) =
-  introduceFunction fdecl >> pure ()
+  introduceNativeFunction fdecl >> pure ()
 scanStatement (PreSyntax.StatementFunctionDef fdecl _) =
-  introduceFunction fdecl >> pure ()
+  introduceNativeFunction fdecl >> pure ()
 scanStatement (PreSyntax.StatementForeignFunctionDecl fdecl) =
   resolveForeignFunctionDecl fdecl
 scanStatement _ = pure ()
@@ -341,12 +379,12 @@ resolveStatement (PreSyntax.StatementForeignFunctionDecl _) = pure ()
 resolveFunctionDef ::
      PreSyntax.FunctionDecl -> [PreSyntax.Statement] -> Resolver ()
 resolveFunctionDef fdecl@(PreSyntax.FunctionDecl rettype _ params) stmts = do
-  f <- introduceFunction fdecl
+  f <- introduceNativeFunction fdecl
   (params', (body, usages)) <-
     withLayer $
     (,) <$> mapM introduceParam params <*> Writer.listen (resolveBlock stmts)
-  markFunctionAsDefined f $
-    NativeFunction
+  markNativeFunctionAsDefined f $
+    NativeFunctionImpl
       ResolvedSyntax.FunctionDef
         { ResolvedSyntax.funDefRetType = rettype
         , ResolvedSyntax.funDefName = f
@@ -362,17 +400,15 @@ resolveFunctionDef fdecl@(PreSyntax.FunctionDecl rettype _ params) stmts = do
       ResolvedSyntax.VarDecl t <$> introduceVariable p
 
 resolveForeignFunctionDecl :: PreSyntax.FunctionDecl -> Resolver ()
-resolveForeignFunctionDecl fdecl@(PreSyntax.FunctionDecl rettype (PreSyntax.FunctionName name) params) = do
-  f <- introduceFunction fdecl
-  markFunctionAsDefined f $
-    ForeignFunction
-      ResolvedSyntax.ForeignFunctionDecl
-        { ResolvedSyntax.foreignFunDeclRetType = rettype
-        , ResolvedSyntax.foreignFunDeclName = f
-        , ResolvedSyntax.foreignFunDeclRealName = name
-        , ResolvedSyntax.foreignFunDeclParams =
-            map (\(PreSyntax.VarDecl vtype _) -> vtype) params
-        }
+resolveForeignFunctionDecl fdecl@(PreSyntax.FunctionDecl rettype (PreSyntax.FunctionName name) params) =
+  introduceForeignFunction fdecl $ \f ->
+    ResolvedSyntax.ForeignFunctionDecl
+      { ResolvedSyntax.foreignFunDeclRetType = rettype
+      , ResolvedSyntax.foreignFunDeclName = f
+      , ResolvedSyntax.foreignFunDeclRealName = name
+      , ResolvedSyntax.foreignFunDeclParams =
+          map (\(PreSyntax.VarDecl vtype _) -> vtype) params
+      }
 
 resolveFor ::
      PreSyntax.VarName
@@ -427,8 +463,10 @@ resolveFunctionCall (PreSyntax.FunctionCall fname args) = do
     Just NativeFunction {} -> do
       Writer.tell $ mempty {funAccess = [fid]}
       ResolvedSyntax.NativeFunctionCall fid <$> mapM resolveExpr args
-    Nothing -- Because of prescanning in the block, this is definetely not a foreign call.
-     -> ResolvedSyntax.NativeFunctionCall fid <$> mapM resolveExpr args
+    Nothing -- We do not allow forward declaring foreign functions, so this is definetely a native call.
+     -> do
+      Writer.tell $ mempty {funAccess = [fid]}
+      ResolvedSyntax.NativeFunctionCall fid <$> mapM resolveExpr args
 
 resolveExpr :: PreSyntax.Expr -> Resolver ResolvedSyntax.Expr
 resolveExpr (PreSyntax.ExprFunctionCall fcall) =
@@ -485,7 +523,7 @@ resolveCaptures = do
   State.modify $ \env ->
     env {funs = IntMap.mapWithKey (modifyFun varUsages) $ funs env}
   where
-    asNative (_, Just (NativeFunction f vs fs)) =
+    asNative (_, Just (NativeFunction (NativeFunctionImpl f vs fs))) =
       Just $
       VarUsageResolver.UsageEntry
         { VarUsageResolver.vars = map (\(ResolvedSyntax.VarID i) -> i) vs
@@ -500,9 +538,14 @@ resolveCaptures = do
       -> Int
       -> (PreSyntax.FunctionDecl, Maybe Function)
       -> (PreSyntax.FunctionDecl, Maybe Function)
-    modifyFun varUsages fid (fdecl, Just (NativeFunction f vs fs)) =
+    modifyFun varUsages fid (fdecl, Just (NativeFunction (NativeFunctionImpl f vs fs))) =
       ( fdecl
-      , Just (NativeFunction (updateCaptures f (varUsages IntMap.! fid)) vs fs))
+      , Just
+          (NativeFunction
+             (NativeFunctionImpl
+                (updateCaptures f (varUsages IntMap.! fid))
+                vs
+                fs)))
     modifyFun _ _ f = f
     updateCaptures ::
          ResolvedSyntax.FunctionDef

@@ -13,8 +13,8 @@ import Control.Exception (catch, tryJust)
 import qualified Foreign.LibFFI as FFI
 import Foreign.Ptr (FunPtr())
 import System.IO.Error (IOError, ioeGetErrorString)
-import qualified System.Posix.DynamicLinker as DL
 import qualified System.Info
+import qualified System.Posix.DynamicLinker as DL
 
 import TypedSyntax (VarType(..))
 import Value
