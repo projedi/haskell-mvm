@@ -114,6 +114,34 @@ addVariableToEnv _ _ _ = error "Env broke"
 readConstantFromEnv :: Env -> ConstID -> Maybe Value
 readConstantFromEnv env (ConstID cid) = IntMap.lookup cid (envConsts env)
 
+splitLayersInEnv :: Env -> LayerID -> ([Layer], Layer, [Layer])
+splitLayersInEnv Env {envLayers = ls} lid =
+  let (before, target:after) = List.splitAt lid $ List.reverse ls
+   in (List.reverse after, target, List.reverse before)
+
+dereferenceInEnv :: Env -> Value -> Maybe Value
+dereferenceInEnv env (ValuePtr _ [lid, vid]) =
+  let (_, target, _) = splitLayersInEnv env lid
+   in readVariableFromLayer target (VarID vid)
+dereferenceInEnv _ _ = error "Type mismatch"
+
+addressOfInEnv :: Env -> VarID -> Maybe Value
+addressOfInEnv Env {envLayers = layers} name@(VarID vid) = go layers
+  where
+    go [] = Nothing
+    go (l:ls) =
+      case readVariableFromLayer l name of
+        Nothing -> go ls
+        Just v -> Just $ ValuePtr (typeof v) [length ls, vid]
+
+writeToPtrInEnv :: Env -> Value -> Value -> Maybe Env
+writeToPtrInEnv env (ValuePtr _ [lid, vid]) val =
+  let (after, target, before) = splitLayersInEnv env lid
+   in case writeVariableToLayer target (VarID vid) val of
+        Nothing -> Nothing
+        Just target' -> Just $ env {envLayers = after ++ [target'] ++ before}
+writeToPtrInEnv _ _ _ = error "Type mismatch"
+
 type Execute a = ExceptT (Maybe Value) (StateT Env IO) a
 
 withNewLayer :: Execute a -> Execute a
@@ -136,12 +164,11 @@ withNewLayer m = do
 currentLayer :: Execute LayerID
 currentLayer = State.gets (length . envLayers)
 
-splitLayers :: LayerID -> Execute [Layer]
+splitLayers :: LayerID -> Execute ()
 splitLayers lid = do
-  env@Env {envLayers = ls} <- State.get
-  let (newenv, preserve) = List.splitAt lid $ List.reverse ls
-  State.put $ env {envLayers = List.reverse newenv}
-  pure $ List.reverse preserve
+  env <- State.get
+  let (_, _, newenv) = splitLayersInEnv env lid
+  State.put $ env {envLayers = newenv}
 
 runExecute :: Execute () -> IO ()
 runExecute m = do
@@ -276,11 +303,33 @@ readConstant name = do
   let Just val = readConstantFromEnv env name
   pure val
 
+addressOf :: VarID -> Execute Value
+addressOf name = do
+  env <- State.get
+  let Just val = addressOfInEnv env name
+  pure val
+
+dereference :: Value -> Execute Value
+dereference ptr = do
+  env <- State.get
+  let Just val = dereferenceInEnv env ptr
+  pure val
+
+writeToPtr :: Value -> Value -> Execute ()
+writeToPtr ptr val = do
+  env <- State.get
+  let Just env' = writeToPtrInEnv env ptr val
+  State.put env'
+
 evaluate :: Expr -> Execute Value
 evaluate (ExprFunctionCall fcall) = do
   Just val <- functionCall fcall
   pure val
 evaluate (ExprVar _ vname) = readVariable vname
+evaluate (ExprAddressOf _ vname) = addressOf vname
+evaluate (ExprDereference _ vname) = do
+  v <- readVariable vname
+  dereference v
 evaluate (ExprConst _ c) = readConstant c
 evaluate (ExprUnOp UnNeg e) = negate <$> evaluate e
 evaluate (ExprBinOp BinPlus el er) = (+) <$> evaluate el <*> evaluate er
@@ -339,6 +388,10 @@ execute s@(StatementWhile e block) = do
 execute (StatementAssign var e) = do
   res <- evaluate e
   writeVariable var res
+execute (StatementAssignToPtr var e) = do
+  res <- evaluate e
+  v <- readVariable var
+  writeToPtr v res
 execute (StatementIfElse e btrue bfalse) = do
   res <- evaluateAsBool e
   if res

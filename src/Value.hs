@@ -19,6 +19,8 @@ data Value
   = ValueInt Int
   | ValueFloat Double
   | ValueString (Either CString String)
+  | ValuePtr VarType
+             [Int] -- evaluator-defined data
   deriving (Show)
 
 instance Eq Value where
@@ -26,6 +28,7 @@ instance Eq Value where
   (ValueInt il) == (ValueFloat fr) = fromIntegral il == fr
   (ValueFloat fl) == (ValueInt ir) = fl == fromIntegral ir
   (ValueFloat fl) == (ValueFloat fr) = fl == fr
+  (ValuePtr tl pl) == (ValuePtr tr pr) = tl == tr && pl == pr
   _ == _ = error "Type mismatch"
 
 instance Ord Value where
@@ -120,6 +123,7 @@ showIO (ValueInt i) = pure $ show i
 showIO (ValueFloat f) = doubleToString f
 showIO (ValueString (Left cs)) = CString.peekCString cs
 showIO (ValueString (Right s)) = pure s
+showIO (ValuePtr _ p) = pure $ show p
 
 typeIs :: Value -> VarType -> Bool
 typeIs v vtype = typeof v == vtype
@@ -128,8 +132,10 @@ typeof :: Value -> VarType
 typeof (ValueInt _) = VarTypeInt
 typeof (ValueFloat _) = VarTypeFloat
 typeof (ValueString _) = VarTypeString
+typeof (ValuePtr t _) = VarTypePtr t
 
 defaultValueFromType :: VarType -> Value
 defaultValueFromType VarTypeInt = ValueInt 0
 defaultValueFromType VarTypeFloat = ValueFloat 0
 defaultValueFromType VarTypeString = ValueString $ Right ""
+defaultValueFromType (VarTypePtr t) = ValuePtr t []

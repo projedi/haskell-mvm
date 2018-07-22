@@ -112,6 +112,8 @@ prettyPrintUnOp UnIntToFloat = "(double)"
 prettyPrintExpr :: Int -> Expr -> String
 prettyPrintExpr _ (ExprFunctionCall fcall) = prettyPrintSimple fcall
 prettyPrintExpr _ (ExprVar _ varName) = prettyPrintSimple varName
+prettyPrintExpr _ (ExprDereference _ varName) = "*" ++ prettyPrintSimple varName
+prettyPrintExpr _ (ExprAddressOf _ varName) = "&" ++ prettyPrintSimple varName
 prettyPrintExpr _ (ExprConst _ c) = show c
 prettyPrintExpr n (ExprUnOp op e) =
   parenIfNeeded n (unOpPrec op) $
@@ -164,6 +166,10 @@ prettyPrintStatement n (StatementFunctionCall fcall) =
   indent n (prettyPrintSimple fcall ++ ";")
 prettyPrintStatement n (StatementAssign var expr) =
   indent n (prettyPrintSimple var ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
+prettyPrintStatement n (StatementAssignToPtr var expr) =
+  indent
+    n
+    ("*" ++ prettyPrintSimple var ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
 prettyPrintStatement n (StatementReturn Nothing) = indent n "return;"
 prettyPrintStatement n (StatementReturn (Just e)) =
   indent n ("return " ++ prettyPrintExpr 0 e ++ ";")
@@ -189,9 +195,7 @@ prettyPrintFunctionDef n fdef =
      " " ++
      prettyPrintSimple (funDefName fdef) ++
      paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef)))) ++
-  " [" ++
-  List.intercalate ", " (map prettyPrintSimple (funDefCaptures fdef)) ++
-  "]" ++ "\n" ++ prettyPrintBlock n (funDefBody fdef)
+  "\n" ++ prettyPrintBlock n (funDefBody fdef)
 
 printProgram :: Int -> [Statement] -> String
 printProgram n stmts =

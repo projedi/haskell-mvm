@@ -16,7 +16,8 @@ module SimplifiedSyntax
   , binOpTypeFromArgs
   , UnOp(..)
   , unOpTypeFromArg
-  , Expr(ExprFunctionCall, ExprVar, ExprConst, ExprBinOp, ExprUnOp)
+  , Expr(ExprFunctionCall, ExprVar, ExprDereference, ExprAddressOf,
+     ExprConst, ExprBinOp, ExprUnOp)
   , exprType
   , functionCallType
   ) where
@@ -53,6 +54,8 @@ data Statement
                    Block
   | StatementAssign VarID
                     Expr
+  | StatementAssignToPtr VarID
+                         Expr
   | StatementIfElse Expr
                     Block
                     Block
@@ -62,7 +65,6 @@ data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
-  , funDefCaptures :: [VarID]
   , funDefBody :: Block
   }
 
@@ -148,6 +150,8 @@ data Expr = Expr
 data ExprImpl
   = ExprFunctionCallImpl FunctionCall
   | ExprVarImpl VarID
+  | ExprDereferenceImpl VarID
+  | ExprAddressOfImpl VarID
   | ExprConstImpl ConstID
   | ExprBinOpImpl BinOp
                   Expr
@@ -167,6 +171,16 @@ pattern ExprVar :: VarType -> VarID -> Expr
 
 pattern ExprVar vType v =
         Expr{exprType = vType, exprImpl = ExprVarImpl v}
+
+pattern ExprDereference :: VarType -> VarID -> Expr
+
+pattern ExprDereference vType v =
+        Expr{exprType = vType, exprImpl = ExprDereferenceImpl v}
+
+pattern ExprAddressOf :: VarType -> VarID -> Expr
+
+pattern ExprAddressOf vType v =
+        Expr{exprType = vType, exprImpl = ExprAddressOfImpl v}
 
 pattern ExprConst :: VarType -> ConstID -> Expr
 
@@ -188,5 +202,5 @@ pattern ExprUnOp op e <- Expr{exprImpl = ExprUnOpImpl op e}
           = Expr{exprType = t, exprImpl = ExprUnOpImpl op e}
           where t = unOpTypeFromArg op $ exprType e
 
-{-# COMPLETE ExprFunctionCall, ExprVar, ExprConst, ExprBinOp,
-  ExprUnOp :: Expr #-}
+{-# COMPLETE ExprFunctionCall, ExprVar, ExprDereference,
+  ExprAddressOf, ExprConst, ExprBinOp, ExprUnOp :: Expr #-}

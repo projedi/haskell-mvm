@@ -51,6 +51,7 @@ withValue (ValueFloat f) fun = fun (FFI.argCDouble $ realToFrac f)
 withValue (ValueString (Right s)) fun = fun (FFI.argString s)
 -- It it's not, pass it directly.
 withValue (ValueString (Left cs)) fun = fun (FFI.argPtr cs)
+withValue (ValuePtr _ _) _ = error "Type mismatch"
 
 withValues :: [Value] -> ([FFI.Arg] -> IO a) -> IO a
 withValues [] f = f []
@@ -63,6 +64,7 @@ call' (Just VarTypeFloat) fun =
   Just . ValueFloat . realToFrac <$> fun FFI.retCDouble
 call' (Just VarTypeString) fun =
   Just . ValueString . Left <$> fun FFI.retCString
+call' (Just (VarTypePtr _)) _ = error "Type mismatch"
 
 call :: ForeignFun -> Maybe VarType -> [Value] -> IO (Maybe Value)
 call (ForeignFun fun) rettype vals =
