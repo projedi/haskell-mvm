@@ -13,3 +13,6 @@ for (i in 0..1) {
   print(i, "\n");
   print(-i, "\n");
 }
+for (i in 0..1) {
+  int i;
+}
