@@ -373,9 +373,9 @@ resolveFunctionDef ::
      PreSyntax.FunctionDecl -> [PreSyntax.Statement] -> Resolver ()
 resolveFunctionDef fdecl@(PreSyntax.FunctionDecl rettype _ params) stmts = do
   f <- introduceNativeFunction fdecl
-  (params', (body, usages)) <-
+  ((params', body), usages) <-
     withLayer $
-    (,) <$> mapM introduceParam params <*> Writer.listen (resolveBlock stmts)
+    Writer.listen $ (,) <$> mapM introduceParam params <*> resolveBlock stmts
   markNativeFunctionAsDefined f $
     NativeFunctionImpl
       ResolvedSyntax.FunctionDef
@@ -527,7 +527,13 @@ resolveCaptures = do
         , VarUsageResolver.funs =
             map (\(ResolvedSyntax.FunID i) -> i) $ funAccess usages
         }
-    asNative _ = Nothing
+    asNative _ =
+      Just $
+      VarUsageResolver.UsageEntry
+        { VarUsageResolver.vars = []
+        , VarUsageResolver.locals = []
+        , VarUsageResolver.funs = []
+        }
     modifyFun ::
          IntMap [ResolvedSyntax.VarID]
       -> Int
