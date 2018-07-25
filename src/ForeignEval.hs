@@ -45,7 +45,7 @@ findSymbol name =
     pure Nothing
 
 withValue :: Value -> (FFI.Arg -> IO a) -> IO a
-withValue (ValueInt i) fun = fun (FFI.argInt i)
+withValue (ValueInt i) fun = fun (FFI.argInt64 i)
 withValue (ValueFloat f) fun = fun (FFI.argCDouble $ realToFrac f)
 -- If it's from literal, make a copy.
 withValue (ValueString (Right s)) fun = fun (FFI.argString s)
@@ -59,7 +59,7 @@ withValues (v:vs) f = withValue v $ \a -> withValues vs $ \as -> f (a : as)
 
 call' :: Maybe VarType -> (forall a. FFI.RetType a -> IO a) -> IO (Maybe Value)
 call' Nothing fun = fun FFI.retVoid >> pure Nothing
-call' (Just VarTypeInt) fun = Just . ValueInt <$> fun FFI.retInt
+call' (Just VarTypeInt) fun = Just . ValueInt <$> fun FFI.retInt64
 call' (Just VarTypeFloat) fun =
   Just . ValueFloat . realToFrac <$> fun FFI.retCDouble
 call' (Just VarTypeString) fun =

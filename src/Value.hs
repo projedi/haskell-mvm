@@ -9,6 +9,7 @@ module Value
   ) where
 
 import Data.Bits
+import Data.Int (Int64)
 import Foreign.C.String (CString)
 import qualified Foreign.C.String as CString
 
@@ -16,7 +17,7 @@ import PreSyntax (VarType(..))
 import Util
 
 data Value
-  = ValueInt Int
+  = ValueInt Int64
   | ValueFloat Double
   | ValueString (Either CString String)
   | ValuePtr VarType

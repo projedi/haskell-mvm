@@ -10,6 +10,7 @@ import qualified Control.Monad.State as State
 import qualified Control.Monad.Trans as Trans
 import Data.Bits
 import Data.Foldable (asum)
+import Data.Int (Int64)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.List as List
@@ -360,7 +361,7 @@ evaluateAsBool e = do
   i <- evaluateAsInt e
   pure $ i /= 0
 
-evaluateAsInt :: Expr -> Execute Int
+evaluateAsInt :: Expr -> Execute Int64
 evaluateAsInt e = do
   ValueInt i <- evaluate e
   pure i

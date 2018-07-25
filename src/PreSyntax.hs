@@ -1,5 +1,7 @@
 module PreSyntax where
 
+import Data.Int (Int64)
+
 data Program = Program
   { programStatements :: [Statement]
   , programLibraries :: [String]
@@ -77,7 +79,7 @@ data FunctionCall =
 data Expr
   = ExprFunctionCall FunctionCall
   | ExprVar VarName
-  | ExprInt Int
+  | ExprInt Int64
   | ExprFloat Double
   | ExprString String
   | ExprNeg Expr

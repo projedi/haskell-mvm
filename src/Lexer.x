@@ -4,6 +4,8 @@ module Lexer
   ( Token(..)
   , scanTokens
   ) where
+
+import Data.Int (Int64)
 }
 
 %wrapper "posn"
@@ -116,7 +118,7 @@ data Token
   | TokenRParen AlexPosn
   | TokenLBrace AlexPosn
   | TokenRBrace AlexPosn
-  | TokenIntLiteral AlexPosn Int
+  | TokenIntLiteral AlexPosn Int64
   | TokenFloatLiteral AlexPosn Double
   | TokenStringLiteral AlexPosn String
   | TokenPlus AlexPosn

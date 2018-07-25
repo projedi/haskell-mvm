@@ -219,7 +219,7 @@ generatePrintfArgs args = do
     printfFormatString =
       ValueString $
       Right $ concatMap (formatStringArg . SimplifiedSyntax.exprType) args
-    formatStringArg SimplifiedSyntax.VarTypeInt = "%d"
+    formatStringArg SimplifiedSyntax.VarTypeInt = "%ld"
     formatStringArg SimplifiedSyntax.VarTypeFloat = "%g"
     formatStringArg SimplifiedSyntax.VarTypeString = "%s"
     formatStringArg (SimplifiedSyntax.VarTypePtr _) = error "Type error"
