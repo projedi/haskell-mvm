@@ -5,7 +5,7 @@ module SyntaxSimplifier
 import Control.Monad
 import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Control.Monad.Reader as Reader
-import Control.Monad.State (State, runState)
+import Control.Monad.State (State, evalState)
 import qualified Control.Monad.State as State
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -20,35 +20,65 @@ data Env = Env
   , lastFunID :: SimplifiedSyntax.FunID
   , lastVarID :: SimplifiedSyntax.VarID
   , lastConstID :: SimplifiedSyntax.ConstID
+  , printfFunID :: SimplifiedSyntax.FunID
   }
 
 type Simplifier = State Env
 
 simplify :: TypedSyntax.Program -> SimplifiedSyntax.Program
 simplify p =
-  SimplifiedSyntax.Program
-    { SimplifiedSyntax.programFunctions = fs
-    , SimplifiedSyntax.programLibraries = TypedSyntax.programLibraries p
-    , SimplifiedSyntax.programForeignFunctions = foreignFuns finalEnv
-    , SimplifiedSyntax.programConstants = TypedSyntax.programConstants p
-    , SimplifiedSyntax.programVariables = vars finalEnv
-    , SimplifiedSyntax.programLastFunID = lastFunID finalEnv
-    , SimplifiedSyntax.programLastVarID = lastVarID finalEnv
-    , SimplifiedSyntax.programLastConstID = lastConstID finalEnv
+  evalState (simplifyProgram p) $
+  Env
+    { vars = TypedSyntax.programVariables p
+    , funs = TypedSyntax.programFunctions p
+    , foreignFuns =
+        IntMap.map simplifyForeignFunctionDecl $
+        TypedSyntax.programForeignFunctions p
+    , lastFunID = TypedSyntax.programLastFunID p
+    , lastVarID = TypedSyntax.programLastVarID p
+    , lastConstID = TypedSyntax.programLastConstID p
+    , printfFunID = SimplifiedSyntax.FunID (-1)
     }
+
+simplifyProgram :: TypedSyntax.Program -> Simplifier SimplifiedSyntax.Program
+simplifyProgram p = do
+  introducePrintf
+  fs <- mapM simplifyFunctionDef =<< State.gets funs
+  finalEnv <- State.get
+  pure $
+    SimplifiedSyntax.Program
+      { SimplifiedSyntax.programFunctions = fs
+      , SimplifiedSyntax.programLibraries = TypedSyntax.programLibraries p
+      , SimplifiedSyntax.programForeignFunctions = foreignFuns finalEnv
+      , SimplifiedSyntax.programConstants = TypedSyntax.programConstants p
+      , SimplifiedSyntax.programVariables = vars finalEnv
+      , SimplifiedSyntax.programLastFunID = lastFunID finalEnv
+      , SimplifiedSyntax.programLastVarID = lastVarID finalEnv
+      , SimplifiedSyntax.programLastConstID = lastConstID finalEnv
+      }
+
+printfDecl :: SimplifiedSyntax.FunID -> SimplifiedSyntax.ForeignFunctionDecl
+printfDecl fid =
+  SimplifiedSyntax.ForeignFunctionDecl
+    { SimplifiedSyntax.foreignFunDeclRetType = Nothing
+    , SimplifiedSyntax.foreignFunDeclName = fid
+    , SimplifiedSyntax.foreignFunDeclRealName = "printf"
+    , SimplifiedSyntax.foreignFunDeclParams = [SimplifiedSyntax.VarTypeString]
+    , SimplifiedSyntax.foreignFunDeclHasVarArgs = True
+    }
+
+introducePrintf :: Simplifier ()
+introducePrintf = do
+  newFunID@(SimplifiedSyntax.FunID fid) <- State.gets (inc . lastFunID)
+  State.modify $ \env ->
+    env
+      { lastFunID = newFunID
+      , printfFunID = newFunID
+      , foreignFuns = IntMap.insert fid (printfDecl newFunID) $ foreignFuns env
+      }
   where
-    (fs, finalEnv) =
-      runState (mapM simplifyFunctionDef (TypedSyntax.programFunctions p)) $
-      Env
-        { vars = TypedSyntax.programVariables p
-        , funs = TypedSyntax.programFunctions p
-        , foreignFuns =
-            IntMap.map simplifyForeignFunctionDecl $
-            TypedSyntax.programForeignFunctions p
-        , lastFunID = TypedSyntax.programLastFunID p
-        , lastVarID = TypedSyntax.programLastVarID p
-        , lastConstID = TypedSyntax.programLastConstID p
-        }
+    inc :: SimplifiedSyntax.FunID -> SimplifiedSyntax.FunID
+    inc (SimplifiedSyntax.FunID vid) = SimplifiedSyntax.FunID (vid + 1)
 
 simplifyForeignFunctionDecl ::
      TypedSyntax.ForeignFunctionDecl -> SimplifiedSyntax.ForeignFunctionDecl
