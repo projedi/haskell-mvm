@@ -24,14 +24,7 @@ module SimplifiedSyntax
 
 import Data.IntMap (IntMap)
 
-import TypedSyntax
-  ( ConstID(..)
-  , ForeignFunctionDecl(..)
-  , FunID(..)
-  , VarDecl(..)
-  , VarID(..)
-  , VarType(..)
-  )
+import TypedSyntax (ConstID(..), FunID(..), VarDecl(..), VarID(..), VarType(..))
 import Value (Value)
 
 data Program = Program
@@ -69,6 +62,14 @@ data FunctionDef = FunctionDef
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
   , funDefBody :: Block
+  }
+
+data ForeignFunctionDecl = ForeignFunctionDecl
+  { foreignFunDeclRetType :: Maybe VarType
+  , foreignFunDeclName :: FunID
+  , foreignFunDeclRealName :: String
+  , foreignFunDeclParams :: [VarType]
+  , foreignFunDeclHasVarArgs :: Bool
   }
 
 data FunctionCall

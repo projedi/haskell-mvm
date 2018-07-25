@@ -42,11 +42,28 @@ simplify p =
       Env
         { vars = TypedSyntax.programVariables p
         , funs = TypedSyntax.programFunctions p
-        , foreignFuns = TypedSyntax.programForeignFunctions p
+        , foreignFuns =
+            IntMap.map simplifyForeignFunctionDecl $
+            TypedSyntax.programForeignFunctions p
         , lastFunID = TypedSyntax.programLastFunID p
         , lastVarID = TypedSyntax.programLastVarID p
         , lastConstID = TypedSyntax.programLastConstID p
         }
+
+simplifyForeignFunctionDecl ::
+     TypedSyntax.ForeignFunctionDecl -> SimplifiedSyntax.ForeignFunctionDecl
+simplifyForeignFunctionDecl ffdecl =
+  SimplifiedSyntax.ForeignFunctionDecl
+    { SimplifiedSyntax.foreignFunDeclRetType =
+        TypedSyntax.foreignFunDeclRetType ffdecl
+    , SimplifiedSyntax.foreignFunDeclName =
+        TypedSyntax.foreignFunDeclName ffdecl
+    , SimplifiedSyntax.foreignFunDeclRealName =
+        TypedSyntax.foreignFunDeclRealName ffdecl
+    , SimplifiedSyntax.foreignFunDeclParams =
+        TypedSyntax.foreignFunDeclParams ffdecl
+    , SimplifiedSyntax.foreignFunDeclHasVarArgs = False
+    }
 
 simplifyFunctionDef ::
      TypedSyntax.FunctionDef -> Simplifier SimplifiedSyntax.FunctionDef

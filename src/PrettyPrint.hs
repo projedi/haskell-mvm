@@ -36,7 +36,12 @@ printForeignFun :: ForeignFunctionDecl -> String
 printForeignFun fdecl =
   show (foreignFunDeclRetType fdecl) ++
   " " ++
-  foreignFunDeclRealName fdecl ++ " " ++ show (foreignFunDeclParams fdecl)
+  foreignFunDeclRealName fdecl ++
+  " " ++
+  show (foreignFunDeclParams fdecl) ++
+  (if foreignFunDeclHasVarArgs fdecl
+     then " + varargs"
+     else "")
 
 printFunctions :: IntMap FunctionDef -> String
 printFunctions funs =

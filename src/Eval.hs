@@ -225,15 +225,18 @@ nativeFunctionCall fdef vals = do
 foreignFunctionCall ::
      Maybe VarType
   -> [VarType]
+  -> Bool
   -> [Value]
   -> ForeignFun
   -> Execute (Maybe Value)
-foreignFunctionCall rettype params vals fun =
+foreignFunctionCall rettype params hasVarArgs vals fun =
   Trans.liftIO $ call fun rettype (assertVals params vals)
   where
     assertVals [] [] = []
     assertVals (vtype:ps) (v:vs)
       | typeIs v vtype = v : assertVals ps vs
+    assertVals [] vs@(_:_)
+      | hasVarArgs = vs
     assertVals _ _ = error "Type mismatch"
 
 functionCall :: FunctionCall -> Execute (Maybe Value)
@@ -249,6 +252,7 @@ functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
   foreignFunctionCall
     (foreignFunDeclRetType fdecl)
     (foreignFunDeclParams fdecl)
+    (foreignFunDeclHasVarArgs fdecl)
     vals
     f
 functionCall NativeFunctionCall { nativeFunCallName = (FunID fid)
