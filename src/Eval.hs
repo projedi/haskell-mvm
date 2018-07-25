@@ -204,12 +204,6 @@ declareVariable (VarDecl vtype vname) = do
   let Just env' = addVariableToEnv env vname vtype
   State.put env'
 
-printCall :: [Value] -> Execute ()
-printCall vals =
-  Trans.liftIO $ do
-    str <- concat <$> mapM showIO vals
-    putStr str
-
 nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)
 nativeFunctionCall fdef vals = do
   res <-
@@ -240,10 +234,6 @@ foreignFunctionCall rettype params hasVarArgs vals fun =
     assertVals _ _ = error "Type mismatch"
 
 functionCall :: FunctionCall -> Execute (Maybe Value)
-functionCall (PrintCall args) = do
-  vals <- evaluateArgs args
-  printCall vals
-  pure Nothing
 functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
                                  , foreignFunCallArgs = args
                                  } = do

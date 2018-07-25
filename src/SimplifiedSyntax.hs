@@ -79,12 +79,10 @@ data FunctionCall
   | ForeignFunctionCall { foreignFunCallName :: FunID
                         , foreignFunCallRetType :: Maybe VarType
                         , foreignFunCallArgs :: [Expr] }
-  | PrintCall [Expr]
 
 functionCallType :: FunctionCall -> Maybe VarType
 functionCallType NativeFunctionCall {nativeFunCallRetType = rettype} = rettype
 functionCallType ForeignFunctionCall {foreignFunCallRetType = rettype} = rettype
-functionCallType (PrintCall _) = Nothing
 
 data BinOp
   = BinPlus

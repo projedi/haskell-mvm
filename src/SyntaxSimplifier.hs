@@ -12,11 +12,13 @@ import qualified Data.IntMap as IntMap
 
 import qualified SimplifiedSyntax
 import qualified TypedSyntax
+import Value (Value(..))
 
 data Env = Env
   { vars :: IntMap SimplifiedSyntax.VarType
   , funs :: IntMap TypedSyntax.FunctionDef
   , foreignFuns :: IntMap SimplifiedSyntax.ForeignFunctionDecl
+  , consts :: IntMap Value
   , lastFunID :: SimplifiedSyntax.FunID
   , lastVarID :: SimplifiedSyntax.VarID
   , lastConstID :: SimplifiedSyntax.ConstID
@@ -34,6 +36,7 @@ simplify p =
     , foreignFuns =
         IntMap.map simplifyForeignFunctionDecl $
         TypedSyntax.programForeignFunctions p
+    , consts = TypedSyntax.programConstants p
     , lastFunID = TypedSyntax.programLastFunID p
     , lastVarID = TypedSyntax.programLastVarID p
     , lastConstID = TypedSyntax.programLastConstID p
@@ -50,7 +53,7 @@ simplifyProgram p = do
       { SimplifiedSyntax.programFunctions = fs
       , SimplifiedSyntax.programLibraries = TypedSyntax.programLibraries p
       , SimplifiedSyntax.programForeignFunctions = foreignFuns finalEnv
-      , SimplifiedSyntax.programConstants = TypedSyntax.programConstants p
+      , SimplifiedSyntax.programConstants = consts finalEnv
       , SimplifiedSyntax.programVariables = vars finalEnv
       , SimplifiedSyntax.programLastFunID = lastFunID finalEnv
       , SimplifiedSyntax.programLastVarID = lastVarID finalEnv
@@ -198,6 +201,29 @@ simplifyStatement (TypedSyntax.StatementReturn Nothing) =
 simplifyStatement (TypedSyntax.StatementReturn (Just expr)) =
   SimplifiedSyntax.StatementReturn . Just <$> simplifyExpr expr
 
+generatePrintfArgs ::
+     [SimplifiedSyntax.Expr] -> FunctionBodySimplifier [SimplifiedSyntax.Expr]
+generatePrintfArgs args = do
+  newConstID@(SimplifiedSyntax.ConstID cid) <- State.gets (inc . lastConstID)
+  State.modify $ \env ->
+    env
+      { lastConstID = newConstID
+      , consts = IntMap.insert cid printfFormatString $ consts env
+      }
+  pure $
+    (SimplifiedSyntax.ExprConst SimplifiedSyntax.VarTypeString newConstID) :
+    args
+  where
+    inc :: SimplifiedSyntax.ConstID -> SimplifiedSyntax.ConstID
+    inc (SimplifiedSyntax.ConstID cid) = SimplifiedSyntax.ConstID (cid + 1)
+    printfFormatString =
+      ValueString $
+      Right $ concatMap (formatStringArg . SimplifiedSyntax.exprType) args
+    formatStringArg SimplifiedSyntax.VarTypeInt = "%d"
+    formatStringArg SimplifiedSyntax.VarTypeFloat = "%g"
+    formatStringArg SimplifiedSyntax.VarTypeString = "%s"
+    formatStringArg (SimplifiedSyntax.VarTypePtr _) = error "Type error"
+
 simplifyFunctionCall ::
      TypedSyntax.FunctionCall
   -> FunctionBodySimplifier SimplifiedSyntax.FunctionCall
@@ -228,8 +254,15 @@ simplifyFunctionCall fcall@TypedSyntax.ForeignFunctionCall {} = do
           TypedSyntax.foreignFunCallRetType fcall
       , SimplifiedSyntax.foreignFunCallArgs = args
       }
-simplifyFunctionCall (TypedSyntax.PrintCall es) =
-  SimplifiedSyntax.PrintCall <$> mapM simplifyExpr es
+simplifyFunctionCall (TypedSyntax.PrintCall es) = do
+  args <- generatePrintfArgs =<< mapM simplifyExpr es
+  printfName <- State.gets printfFunID
+  pure $
+    SimplifiedSyntax.ForeignFunctionCall
+      { SimplifiedSyntax.foreignFunCallName = printfName
+      , SimplifiedSyntax.foreignFunCallRetType = Nothing
+      , SimplifiedSyntax.foreignFunCallArgs = args
+      }
 
 simplifyExpr :: TypedSyntax.Expr -> FunctionBodySimplifier SimplifiedSyntax.Expr
 simplifyExpr (TypedSyntax.ExprFunctionCall fcall) =

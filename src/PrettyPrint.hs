@@ -148,8 +148,6 @@ instance PrettyPrintSimple FunctionCall where
                                         } =
     prettyPrintSimple funname ++
     paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
-  prettyPrintSimple (PrintCall args) =
-    "print" ++ paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
 
 instance PrettyPrintSimple VarDecl where
   prettyPrintSimple (VarDecl vtype name) =
