@@ -40,6 +40,9 @@ data Program = Program
   , programForeignFunctions :: IntMap ForeignFunctionDecl
   , programConstants :: IntMap Value
   , programVariables :: IntMap VarType
+  , programLastFunID :: FunID
+  , programLastVarID :: VarID
+  , programLastConstID :: ConstID
   }
 
 newtype Block = Block

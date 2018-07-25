@@ -24,6 +24,9 @@ typeCheck p =
     , TypedSyntax.programForeignFunctions = envForeignFunctions finalEnv
     , TypedSyntax.programConstants = envConsts finalEnv
     , TypedSyntax.programVariables = ResolvedSyntax.programVariables p
+    , TypedSyntax.programLastFunID = ResolvedSyntax.programLastFunID p
+    , TypedSyntax.programLastVarID = ResolvedSyntax.programLastVarID p
+    , TypedSyntax.programLastConstID = ResolvedSyntax.programLastConstID p
     }
   where
     startEnv =

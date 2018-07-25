@@ -16,6 +16,10 @@ import qualified TypedSyntax
 data Env = Env
   { vars :: IntMap SimplifiedSyntax.VarType
   , funs :: IntMap TypedSyntax.FunctionDef
+  , foreignFuns :: IntMap SimplifiedSyntax.ForeignFunctionDecl
+  , lastFunID :: SimplifiedSyntax.FunID
+  , lastVarID :: SimplifiedSyntax.VarID
+  , lastConstID :: SimplifiedSyntax.ConstID
   }
 
 type Simplifier = State Env
@@ -25,10 +29,12 @@ simplify p =
   SimplifiedSyntax.Program
     { SimplifiedSyntax.programFunctions = fs
     , SimplifiedSyntax.programLibraries = TypedSyntax.programLibraries p
-    , SimplifiedSyntax.programForeignFunctions =
-        TypedSyntax.programForeignFunctions p
+    , SimplifiedSyntax.programForeignFunctions = foreignFuns finalEnv
     , SimplifiedSyntax.programConstants = TypedSyntax.programConstants p
     , SimplifiedSyntax.programVariables = vars finalEnv
+    , SimplifiedSyntax.programLastFunID = lastFunID finalEnv
+    , SimplifiedSyntax.programLastVarID = lastVarID finalEnv
+    , SimplifiedSyntax.programLastConstID = lastConstID finalEnv
     }
   where
     (fs, finalEnv) =
@@ -36,15 +42,18 @@ simplify p =
       Env
         { vars = TypedSyntax.programVariables p
         , funs = TypedSyntax.programFunctions p
+        , foreignFuns = TypedSyntax.programForeignFunctions p
+        , lastFunID = TypedSyntax.programLastFunID p
+        , lastVarID = TypedSyntax.programLastVarID p
+        , lastConstID = TypedSyntax.programLastConstID p
         }
 
 simplifyFunctionDef ::
      TypedSyntax.FunctionDef -> Simplifier SimplifiedSyntax.FunctionDef
 simplifyFunctionDef fdef = do
   vs <- State.gets vars
-  let lastVarID = SimplifiedSyntax.VarID $ length $ IntMap.elems vs
-      resultingCaptures = convertedCaptures vs lastVarID
-      newVs = newVariables vs $ map fst resultingCaptures
+  resultingCaptures <- convertCaptures (originalCaptures vs)
+  let newVs = newVariables vs $ map fst resultingCaptures
       extraParams = map fst resultingCaptures
       resultingMapping =
         IntMap.fromList $
@@ -65,34 +74,21 @@ simplifyFunctionDef fdef = do
       , SimplifiedSyntax.funDefBody = body
       }
   where
-    originalCaptures :: [SimplifiedSyntax.VarID]
-    originalCaptures = TypedSyntax.funDefCaptures fdef
-    originalCapturesWithTypes ::
+    originalCaptures ::
          IntMap SimplifiedSyntax.VarType
       -> [(SimplifiedSyntax.VarType, SimplifiedSyntax.VarID)]
-    originalCapturesWithTypes vs =
+    originalCaptures vs =
       map
         (\(SimplifiedSyntax.VarID vid) ->
            (vs IntMap.! vid, SimplifiedSyntax.VarID vid))
-        originalCaptures
-    convertCaptures ::
-         [(SimplifiedSyntax.VarType, SimplifiedSyntax.VarID)]
-      -> SimplifiedSyntax.VarID
-      -> ( SimplifiedSyntax.VarID
-         , [(SimplifiedSyntax.VarDecl, SimplifiedSyntax.VarID)])
-    convertCaptures [] lastVarID = (lastVarID, [])
-    convertCaptures ((vt, vid):captures) lastVarID =
-      let newVarID = inc lastVarID
-          (resultingVarID, captures') = convertCaptures captures newVarID
-       in ( resultingVarID
-          , ( SimplifiedSyntax.VarDecl (SimplifiedSyntax.VarTypePtr vt) newVarID
-            , vid) :
-            captures')
-    convertedCaptures ::
-         IntMap SimplifiedSyntax.VarType
-      -> SimplifiedSyntax.VarID
-      -> [(SimplifiedSyntax.VarDecl, SimplifiedSyntax.VarID)]
-    convertedCaptures vs = snd . convertCaptures (originalCapturesWithTypes vs)
+        (TypedSyntax.funDefCaptures fdef)
+    convertCaptures =
+      mapM $ \(vt, vid) -> do
+        newVarID <- State.gets (inc . lastVarID)
+        State.modify $ \env -> env {lastVarID = newVarID}
+        pure
+          ( SimplifiedSyntax.VarDecl (SimplifiedSyntax.VarTypePtr vt) newVarID
+          , vid)
     newVariables ::
          IntMap SimplifiedSyntax.VarType
       -> [SimplifiedSyntax.VarDecl]
