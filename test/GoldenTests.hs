@@ -104,26 +104,42 @@ tests = testGroup "Golden" [passTests, failTests, intensiveTests, graphicsTests]
 
 passTests :: TestTree
 passTests =
-  testGroup "Pass" [testsWithParams "Dumb" 1 "expected" ["--dumb"] names]
+  testGroup
+    "Pass"
+    [ testsWithParams "Dumb" 1 "expected" ["--dumb"] names
+    , testsWithParams "ASM" 1 "expected" ["--asm"] names
+    ]
   where
     names = testList ++ originalTestList
 
 failTests :: TestTree
 failTests =
   expectFail $
-  testGroup "Fail" [testsWithParams "Dumb" 30 "expected" ["--dumb"] names]
+  testGroup
+    "Fail"
+    [ testsWithParams "Dumb" 1 "expected" ["--dumb"] names
+    , testsWithParams "ASM" 1 "expected" ["--asm"] names
+    ]
   where
     names = failTestList ++ originalFailTestList
 
 intensiveTests :: TestTree
 intensiveTests =
-  testGroup "Intensive" [testsWithParams "Dumb" 30 "expected" ["--dumb"] names]
+  testGroup
+    "Intensive"
+    [ testsWithParams "Dumb" 30 "expected" ["--dumb"] names
+    , testsWithParams "ASM" 30 "expected" ["--asm"] names
+    ]
   where
     names = intensiveTestList ++ originalIntensiveTestList
 
 graphicsTests :: TestTree
 graphicsTests =
-  testGroup "Graphics" [testsWithParams "Dumb" 30 "ppm" ["--dumb"] names]
+  testGroup
+    "Graphics"
+    [ testsWithParams "Dumb" 30 "ppm" ["--dumb"] names
+    , testsWithParams "ASM" 30 "ppm" ["--asm"] names
+    ]
   where
     names = graphicsTestList ++ originalGraphicsTestList
 

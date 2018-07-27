@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module PrettyPrint
+module PrettyPrintSimplified
   ( prettyPrint
   ) where
 
@@ -8,7 +8,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
-import LinearSyntax
+import SimplifiedSyntax
 import Value (Value)
 
 prettyPrint :: Program -> String

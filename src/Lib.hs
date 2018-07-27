@@ -5,22 +5,33 @@ module Lib
 import Control.Monad (forM_)
 import System.Environment (getArgs)
 
-import Eval (eval)
+import qualified Eval
+import qualified EvalSimplified
+import qualified LinearSyntax
 import Parser (parseExpr)
-import PrettyPrint (prettyPrint)
-import SimplifiedSyntax (Program)
+import qualified PrettyPrint
+import qualified PrettyPrintSimplified
+import qualified SimplifiedSyntax
+import SyntaxLinearizer (linearize)
 import SyntaxResolver (resolve)
 import SyntaxSimplifier (simplify)
 import TypeChecker (typeCheck)
 
-getExpr :: String -> Program
+getExpr :: String -> SimplifiedSyntax.Program
 getExpr = simplify . typeCheck . resolve . parseExpr
+
+getASM :: SimplifiedSyntax.Program -> LinearSyntax.Program
+getASM = linearize
+
+evaluateFileDumb :: FilePath -> IO ()
+evaluateFileDumb fname = do
+  contents <- readFile fname
+  EvalSimplified.eval $ getExpr contents
 
 evaluateFile :: FilePath -> IO ()
 evaluateFile fname = do
   contents <- readFile fname
-  let expr = getExpr contents
-  eval expr
+  Eval.eval $ getASM $ getExpr contents
 
 dump :: FilePath -> IO ()
 dump fname = do
@@ -30,12 +41,16 @@ dump fname = do
   putStrLn contents
   let expr = getExpr contents
   putStrLn "======= CODE ======="
-  putStrLn $ prettyPrint expr
+  putStrLn $ PrettyPrintSimplified.prettyPrint expr
+  putStrLn "======= ASM  ======="
+  let asm = getASM expr
+  putStrLn $ PrettyPrint.prettyPrint asm
 
 getOperation :: [String] -> (FilePath -> IO (), [String])
 getOperation [] = (const $ pure (), [])
-getOperation ("--dumb":args) = (evaluateFile, args)
+getOperation ("--dumb":args) = (evaluateFileDumb, args)
 getOperation ("--dump":args) = (dump, args)
+getOperation ("--asm":args) = (evaluateFile, args)
 getOperation args = (evaluateFile, args)
 
 someFunc :: IO ()
