@@ -217,7 +217,7 @@ nativeFunctionCall fdef vals = do
     withNewLayer $ do
       generateAssignments (funDefParams fdef) vals
       mapM_ generateLocal (funDefLocals fdef)
-      executeBlockWithReturn (funDefBody fdef)
+      executeFunctionBody (funDefBody fdef)
   case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
     (Just val, Just valtype)
@@ -280,14 +280,35 @@ generateLocal (VarID v) = do
 evaluateArgs :: [Expr] -> Execute [Value]
 evaluateArgs = mapM evaluate
 
-executeBlockWithReturn :: Block -> Execute (Maybe Value)
-executeBlockWithReturn block = do
+executeFunctionBody :: [Statement] -> Execute (Maybe Value)
+executeFunctionBody body = do
   lid <- currentLayer
-  (executeBlock block >> pure Nothing) `Except.catchError` restoreFromReturn lid
+  (executeBlock body >> pure Nothing) `Except.catchError` restoreFromReturn lid
   where
     restoreFromReturn lid val = do
       _ <- splitLayers lid
       pure val
+
+executeBlock :: [Statement] -> Execute ()
+executeBlock [] = pure ()
+executeBlock ss =
+  withNewLayer $ do
+    prevIP <- State.gets envInstructionPointer
+    State.modify $ \env -> env {envInstructionPointer = 0}
+    let instructions = Array.listArray (0, length ss - 1) ss
+    startExecution instructions `finallyError`
+      State.modify (\env -> env {envInstructionPointer = prevIP})
+  where
+    startExecution instructions =
+      runReaderT executeStatement $
+      ConstEnv
+        { constEnvInstructions = instructions
+        , constEnvLabelMap = buildLabelMap $ Array.assocs instructions
+        }
+    buildLabelMap [] = IntMap.empty
+    buildLabelMap ((i, StatementLabel (LabelID lid)):is) =
+      IntMap.insert lid i $ buildLabelMap is
+    buildLabelMap (_:is) = buildLabelMap is
 
 functionReturn :: Maybe Value -> Execute ()
 functionReturn = Except.throwError
@@ -384,27 +405,6 @@ finallyError action finallyAction = do
   finallyAction
   pure res
 
-executeBlock :: Block -> Execute ()
-executeBlock Block {blockStatements = []} = pure ()
-executeBlock Block {blockStatements = ss} =
-  withNewLayer $ do
-    prevIP <- State.gets envInstructionPointer
-    State.modify $ \env -> env {envInstructionPointer = 0}
-    let instructions = Array.listArray (0, length ss - 1) ss
-    startExecution instructions `finallyError`
-      State.modify (\env -> env {envInstructionPointer = prevIP})
-  where
-    startExecution instructions =
-      runReaderT executeStatement $
-      ConstEnv
-        { constEnvInstructions = instructions
-        , constEnvLabelMap = buildLabelMap $ Array.assocs instructions
-        }
-    buildLabelMap [] = IntMap.empty
-    buildLabelMap ((i, StatementLabel (LabelID lid)):is) =
-      IntMap.insert lid i $ buildLabelMap is
-    buildLabelMap (_:is) = buildLabelMap is
-
 data ConstEnv = ConstEnv
   { constEnvInstructions :: Array Int Statement
   , constEnvLabelMap :: IntMap Int
@@ -429,7 +429,6 @@ executeStatement = do
     executeStatement
 
 execute :: Statement -> ExecuteStatement ()
-execute (StatementBlock block) = Trans.lift $ executeBlock block
 execute (StatementFunctionCall fcall) =
   Trans.lift (functionCall fcall) >> pure ()
 execute (StatementAssign var e) = do
