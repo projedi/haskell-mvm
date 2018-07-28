@@ -17,13 +17,17 @@ library
   hs-source-dirs:      src
   exposed-modules:     Lib
                      , Eval
+                     , EvalSimplified
                      , ForeignEval
                      , Lexer
+                     , LinearSyntax
                      , Parser
                      , PreSyntax
                      , PrettyPrint
+                     , PrettyPrintSimplified
                      , ResolvedSyntax
                      , SimplifiedSyntax
+                     , SyntaxLinearizer
                      , SyntaxResolver
                      , SyntaxSimplifier
                      , TypeChecker

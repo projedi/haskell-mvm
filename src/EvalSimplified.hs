@@ -1,17 +1,13 @@
-module Eval
+module EvalSimplified
   ( eval
   ) where
 
-import Control.Monad (forM, forM_, unless, when)
+import Control.Monad (forM, forM_, when)
 import Control.Monad.Except (ExceptT, runExceptT)
 import qualified Control.Monad.Except as Except
-import Control.Monad.Reader (ReaderT, runReaderT)
-import qualified Control.Monad.Reader as Reader
 import Control.Monad.State (StateT, runStateT)
 import qualified Control.Monad.State as State
 import qualified Control.Monad.Trans as Trans
-import Data.Array (Array)
-import qualified Data.Array as Array
 import Data.Bits
 import Data.Foldable (asum)
 import Data.Int (Int64)
@@ -20,7 +16,7 @@ import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
 import ForeignEval
-import LinearSyntax
+import SimplifiedSyntax
 import Value
 
 eval :: Program -> IO ()
@@ -74,7 +70,6 @@ data Env = Env
   , envFunctions :: IntMap FunctionDef
   , envConsts :: IntMap Value
   , envVarTypes :: IntMap VarType
-  , envInstructionPointer :: Int
   }
 
 emptyEnv :: Env
@@ -85,7 +80,6 @@ emptyEnv =
     , envFunctions = IntMap.empty
     , envConsts = IntMap.empty
     , envVarTypes = IntMap.empty
-    , envInstructionPointer = 0
     }
 
 modifyingLayer :: (Layer -> Maybe Layer) -> [Layer] -> Maybe [Layer]
@@ -149,7 +143,7 @@ writeToPtrInEnv env (ValuePtr _ [lid, vid]) val =
         Just target' -> Just $ env {envLayers = after ++ [target'] ++ before}
 writeToPtrInEnv _ _ _ = error "Type mismatch"
 
-type Execute = ExceptT (Maybe Value) (StateT Env IO)
+type Execute a = ExceptT (Maybe Value) (StateT Env IO) a
 
 withNewLayer :: Execute a -> Execute a
 withNewLayer m = do
@@ -372,76 +366,33 @@ evaluateAsInt e = do
   ValueInt i <- evaluate e
   pure i
 
-finallyError :: (Except.MonadError e m) => m a -> m () -> m a
-finallyError action finallyAction = do
-  res <- action `Except.catchError` \e -> finallyAction >> Except.throwError e
-  finallyAction
-  pure res
-
 executeBlock :: Block -> Execute ()
-executeBlock Block {blockStatements = []} = pure ()
-executeBlock Block {blockStatements = ss} =
-  withNewLayer $ do
-    prevIP <- State.gets envInstructionPointer
-    State.modify $ \env -> env {envInstructionPointer = 0}
-    let instructions = Array.listArray (0, length ss - 1) ss
-    startExecution instructions `finallyError`
-      State.modify (\env -> env {envInstructionPointer = prevIP})
-  where
-    startExecution instructions =
-      runReaderT executeStatement $
-      ConstEnv
-        { constEnvInstructions = instructions
-        , constEnvLabelMap = buildLabelMap $ Array.assocs instructions
-        }
-    buildLabelMap [] = IntMap.empty
-    buildLabelMap ((i, StatementLabel (LabelID lid)):is) =
-      IntMap.insert lid i $ buildLabelMap is
-    buildLabelMap (_:is) = buildLabelMap is
+executeBlock block = withNewLayer $ forM_ (blockStatements block) execute
 
-data ConstEnv = ConstEnv
-  { constEnvInstructions :: Array Int Statement
-  , constEnvLabelMap :: IntMap Int
-  }
-
-type ExecuteStatement = ReaderT ConstEnv Execute
-
-jump :: LabelID -> ExecuteStatement ()
-jump (LabelID lid) = do
-  ip <- Reader.asks ((IntMap.! lid) . constEnvLabelMap)
-  State.modify $ \env -> env {envInstructionPointer = ip - 1}
-
-executeStatement :: ExecuteStatement ()
-executeStatement = do
-  ipBefore <- State.gets envInstructionPointer
-  arr <- Reader.asks constEnvInstructions
-  execute (arr Array.! ipBefore)
-  ipAfter <- State.gets envInstructionPointer
-  let nextIP = ipAfter + 1
-  when (nextIP <= snd (Array.bounds arr)) $ do
-    State.modify $ \env -> env {envInstructionPointer = nextIP}
-    executeStatement
-
-execute :: Statement -> ExecuteStatement ()
-execute (StatementBlock block) = Trans.lift $ executeBlock block
+execute :: Statement -> Execute ()
+execute (StatementBlock block) = executeBlock block
 execute (StatementVarAlloc (VarID v)) = do
   Just vt <- State.gets (IntMap.lookup v . envVarTypes)
-  Trans.lift $ declareVariable (VarDecl vt (VarID v))
-execute (StatementFunctionCall fcall) =
-  Trans.lift (functionCall fcall) >> pure ()
+  declareVariable (VarDecl vt (VarID v))
+execute (StatementFunctionCall fcall) = functionCall fcall >> pure ()
+execute s@(StatementWhile e block) = do
+  res <- evaluateAsBool e
+  when res $ do
+    executeBlock block
+    execute s
 execute (StatementAssign var e) = do
-  res <- Trans.lift $ evaluate e
-  Trans.lift $ writeVariable var res
+  res <- evaluate e
+  writeVariable var res
 execute (StatementAssignToPtr var e) = do
-  res <- Trans.lift $ evaluate e
-  v <- Trans.lift $ readVariable var
-  Trans.lift $ writeToPtr v res
-execute (StatementReturn Nothing) = Trans.lift $ functionReturn Nothing
+  res <- evaluate e
+  v <- readVariable var
+  writeToPtr v res
+execute (StatementIfElse e btrue bfalse) = do
+  res <- evaluateAsBool e
+  if res
+    then executeBlock btrue
+    else executeBlock bfalse
+execute (StatementReturn Nothing) = functionReturn Nothing
 execute (StatementReturn (Just e)) = do
-  res <- Trans.lift $ evaluate e
-  Trans.lift $ functionReturn (Just res)
-execute (StatementLabel _) = pure ()
-execute (StatementJump l) = jump l
-execute (StatementJumpIfZero e l) = do
-  res <- Trans.lift $ evaluateAsBool e
-  unless res $ jump l
+  res <- evaluate e
+  functionReturn (Just res)

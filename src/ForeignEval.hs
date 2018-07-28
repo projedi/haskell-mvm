@@ -26,10 +26,12 @@ newtype ForeignFun =
   ForeignFun (FunPtr ())
 
 getLibName :: String -> String
-getLibName lib =
+getLibName "libm" =
   case System.Info.os of
-    "darwin" -> lib ++ ".dylib"
-    _ -> lib ++ ".so"
+    "darwin" -> "libm.dylib"
+    _ -> "libm.so.6"
+getLibName lib =
+  error $ "Cannot find " ++ lib ++ ": proper lib search is not yet implemented"
 
 dlopen :: String -> IO (Either String LibHandle)
 dlopen name =
