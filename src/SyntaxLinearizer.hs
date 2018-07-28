@@ -22,14 +22,16 @@ linearize p =
     , LinearSyntax.programLastFunID = SimplifiedSyntax.programLastFunID p
     , LinearSyntax.programLastVarID = SimplifiedSyntax.programLastVarID p
     , LinearSyntax.programLastConstID = SimplifiedSyntax.programLastConstID p
+    , LinearSyntax.programLastLabelID = lastLabelID finalEnv
     }
   where
-    (fs, _) =
+    (fs, finalEnv) =
       runState (mapM linearizeFunctionDef $ SimplifiedSyntax.programFunctions p) $
-      Env
+      Env {lastLabelID = LinearSyntax.LabelID 0}
 
-data Env =
-  Env
+data Env = Env
+  { lastLabelID :: LinearSyntax.LabelID
+  }
 
 type Linearizer = State Env
 

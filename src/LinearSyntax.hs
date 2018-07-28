@@ -5,6 +5,7 @@ module LinearSyntax
   , VarID(..)
   , FunID(..)
   , ConstID(..)
+  , LabelID(..)
   , VarType(..)
   , VarDecl(..)
   , Block(..)
@@ -38,6 +39,12 @@ import SimplifiedSyntax
   )
 import Value (Value)
 
+newtype LabelID =
+  LabelID Int
+
+instance Show LabelID where
+  show (LabelID l) = "label_" ++ show l
+
 data Program = Program
   { programFunctions :: IntMap FunctionDef
   , programLibraries :: [String]
@@ -47,6 +54,7 @@ data Program = Program
   , programLastFunID :: FunID
   , programLastVarID :: VarID
   , programLastConstID :: ConstID
+  , programLastLabelID :: LabelID
   }
 
 newtype Block = Block
