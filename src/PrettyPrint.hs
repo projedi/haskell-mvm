@@ -179,8 +179,6 @@ prettyPrintStatement n (StatementAssignToPtr var expr) =
 prettyPrintStatement n (StatementReturn Nothing) = indent n "return;"
 prettyPrintStatement n (StatementReturn (Just e)) =
   indent n ("return " ++ prettyPrintExpr 0 e ++ ";")
-prettyPrintStatement n (StatementWhile e s) =
-  indent n ("while (" ++ prettyPrintExpr 0 e ++ ")") ++ prettyPrintBlock n s
 prettyPrintStatement n (StatementBlock stmts) = prettyPrintBlock n stmts
 prettyPrintStatement n (StatementVarAlloc v) =
   indent n ("alloc " ++ show v ++ ";")

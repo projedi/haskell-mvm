@@ -385,14 +385,15 @@ executeBlock Block {blockStatements = ss} =
     prevIP <- State.gets envInstructionPointer
     State.modify $ \env -> env {envInstructionPointer = 0}
     let instructions = Array.listArray (0, length ss - 1) ss
-    startExecution instructions `finallyError` State.modify (\env -> env {envInstructionPointer = prevIP})
+    startExecution instructions `finallyError`
+      State.modify (\env -> env {envInstructionPointer = prevIP})
   where
-    startExecution instructions = runReaderT executeStatement $
+    startExecution instructions =
+      runReaderT executeStatement $
       ConstEnv
         { constEnvInstructions = instructions
         , constEnvLabelMap = buildLabelMap $ Array.assocs instructions
         }
-
     buildLabelMap [] = IntMap.empty
     buildLabelMap ((i, StatementLabel (LabelID lid)):is) =
       IntMap.insert lid i $ buildLabelMap is
@@ -428,11 +429,6 @@ execute (StatementVarAlloc (VarID v)) = do
   Trans.lift $ declareVariable (VarDecl vt (VarID v))
 execute (StatementFunctionCall fcall) =
   Trans.lift (functionCall fcall) >> pure ()
-execute s@(StatementWhile e block) = do
-  res <- Trans.lift $ evaluateAsBool e
-  when res $ do
-    Trans.lift $ executeBlock block
-    execute s
 execute (StatementAssign var e) = do
   res <- Trans.lift $ evaluate e
   Trans.lift $ writeVariable var res

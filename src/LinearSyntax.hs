@@ -65,8 +65,6 @@ data Statement
   = StatementBlock Block
   | StatementVarAlloc VarID
   | StatementFunctionCall FunctionCall
-  | StatementWhile Expr
-                   Block
   | StatementAssign VarID
                     Expr
   | StatementAssignToPtr VarID

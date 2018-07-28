@@ -77,9 +77,15 @@ linearizeStatement (SimplifiedSyntax.StatementFunctionCall fcall) = do
   fcall' <- linearizeFunctionCall fcall
   addStatement $ LinearSyntax.StatementFunctionCall fcall'
 linearizeStatement (SimplifiedSyntax.StatementWhile e b) = do
+  loopBegin <- newLabel
+  loopEnd <- newLabel
+  addStatement $ LinearSyntax.StatementLabel loopBegin
   e' <- linearizeExpr e
+  addStatement $ LinearSyntax.StatementJumpIfZero e' loopEnd
   b' <- Trans.lift $ linearizeBlock b
-  addStatement $ LinearSyntax.StatementWhile e' b'
+  addStatement $ LinearSyntax.StatementBlock b'
+  addStatement $ LinearSyntax.StatementJump loopBegin
+  addStatement $ LinearSyntax.StatementLabel loopEnd
 linearizeStatement (SimplifiedSyntax.StatementAssign v e) = do
   e' <- linearizeExpr e
   addStatement $ LinearSyntax.StatementAssign v e'
