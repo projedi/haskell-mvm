@@ -344,7 +344,7 @@ evaluate (ExprDereference _ vname) = do
   v <- readVariable vname
   dereference v
 evaluate (ExprConst _ c) = readConstant c
-evaluate (ExprUnOp UnNeg e) = negate <$> evaluate e
+evaluate (ExprUnOp UnNeg v) = negate <$> readVariable (varName v)
 evaluate (ExprBinOp BinPlus el er) = (+) <$> evaluate el <*> evaluate er
 evaluate (ExprBinOp BinMinus el er) = (-) <$> evaluate el <*> evaluate er
 evaluate (ExprBinOp BinTimes el er) = (*) <$> evaluate el <*> evaluate er
@@ -353,8 +353,8 @@ evaluate (ExprBinOp BinMod el er) = rem <$> evaluate el <*> evaluate er
 evaluate (ExprBinOp BinBitAnd el er) = (.&.) <$> evaluate el <*> evaluate er
 evaluate (ExprBinOp BinBitOr el er) = (.|.) <$> evaluate el <*> evaluate er
 evaluate (ExprBinOp BinBitXor el er) = xor <$> evaluate el <*> evaluate er
-evaluate (ExprUnOp UnNot e) = do
-  val <- evaluate e
+evaluate (ExprUnOp UnNot v) = do
+  val <- readVariable (varName v)
   case val of
     ValueInt 0 -> pure $ ValueInt 1
     ValueInt _ -> pure $ ValueInt 0
@@ -369,7 +369,7 @@ evaluate (ExprBinOp BinEq el er) =
   (fromBool .) . (==) <$> evaluate el <*> evaluate er
 evaluate (ExprBinOp BinLt el er) =
   (fromBool .) . (<) <$> evaluate el <*> evaluate er
-evaluate (ExprUnOp UnIntToFloat e) = go <$> evaluate e
+evaluate (ExprUnOp UnIntToFloat v) = go <$> readVariable (varName v)
   where
     go (ValueInt i) = ValueFloat $ fromIntegral i
     go _ = error "Type mismatch"

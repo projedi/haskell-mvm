@@ -176,5 +176,7 @@ linearizeExpr (SimplifiedSyntax.ExprConst t c) =
   pure $ LinearSyntax.ExprConst t c
 linearizeExpr (SimplifiedSyntax.ExprBinOp op lhs rhs) =
   LinearSyntax.ExprBinOp op <$> linearizeExpr lhs <*> linearizeExpr rhs
-linearizeExpr (SimplifiedSyntax.ExprUnOp op e) =
-  LinearSyntax.ExprUnOp op <$> linearizeExpr e
+linearizeExpr (SimplifiedSyntax.ExprUnOp op e) = do
+  e' <- linearizeExpr e
+  v <- extractExprToNewVar e'
+  pure $ LinearSyntax.ExprUnOp op v

@@ -120,9 +120,8 @@ prettyPrintExpr _ (ExprVar _ varname) = prettyPrintSimple varname
 prettyPrintExpr _ (ExprDereference _ varname) = "*" ++ prettyPrintSimple varname
 prettyPrintExpr _ (ExprAddressOf _ varname) = "&" ++ prettyPrintSimple varname
 prettyPrintExpr _ (ExprConst _ c) = show c
-prettyPrintExpr n (ExprUnOp op e) =
-  parenIfNeeded n (unOpPrec op) $
-  prettyPrintUnOp op ++ prettyPrintExpr (unOpPrec op) e
+prettyPrintExpr n (ExprUnOp op v) =
+  parenIfNeeded n (unOpPrec op) $ prettyPrintUnOp op ++ prettyPrintSimple v
 prettyPrintExpr n (ExprBinOp op el er) =
   parenIfNeeded n (binOpPrec op) $
   prettyPrintExpr (binOpPrec op) el ++

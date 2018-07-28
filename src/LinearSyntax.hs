@@ -109,7 +109,7 @@ data ExprImpl
                   Expr
                   Expr
   | ExprUnOpImpl UnOp
-                 Expr
+                 Var
 
 pattern ExprFunctionCall :: FunctionCall -> Expr
 
@@ -147,12 +147,12 @@ pattern ExprBinOp op lhs rhs <-
           = Expr{exprType = t, exprImpl = ExprBinOpImpl op lhs rhs}
           where t = binOpTypeFromArgs op (exprType lhs) (exprType rhs)
 
-pattern ExprUnOp :: UnOp -> Expr -> Expr
+pattern ExprUnOp :: UnOp -> Var -> Expr
 
-pattern ExprUnOp op e <- Expr{exprImpl = ExprUnOpImpl op e}
-  where ExprUnOp op e
-          = Expr{exprType = t, exprImpl = ExprUnOpImpl op e}
-          where t = unOpTypeFromArg op $ exprType e
+pattern ExprUnOp op v <- Expr{exprImpl = ExprUnOpImpl op v}
+  where ExprUnOp op v
+          = Expr{exprType = t, exprImpl = ExprUnOpImpl op v}
+          where t = unOpTypeFromArg op $ varType v
 
 {-# COMPLETE ExprFunctionCall, ExprVar, ExprDereference,
   ExprAddressOf, ExprConst, ExprBinOp, ExprUnOp :: Expr #-}
