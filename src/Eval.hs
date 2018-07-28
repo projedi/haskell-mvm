@@ -412,8 +412,8 @@ execute (StatementAssignToPtr ptr var) = do
   v <- Trans.lift $ readVariable ptr
   Trans.lift $ writeToPtr v res
 execute (StatementReturn Nothing) = Trans.lift $ functionReturn Nothing
-execute (StatementReturn (Just e)) = do
-  res <- Trans.lift $ evaluate e
+execute (StatementReturn (Just v)) = do
+  res <- Trans.lift $ readVariable $ varName v
   Trans.lift $ functionReturn (Just res)
 execute (StatementLabel _) = pure ()
 execute (StatementJump l) = jump l

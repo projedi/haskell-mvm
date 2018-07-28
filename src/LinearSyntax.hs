@@ -63,7 +63,7 @@ data Statement
                     Expr
   | StatementAssignToPtr VarID
                          Var
-  | StatementReturn (Maybe Expr)
+  | StatementReturn (Maybe Var)
   | StatementLabel LabelID
   | StatementJump LabelID
   | StatementJumpIfZero Var

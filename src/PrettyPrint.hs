@@ -180,8 +180,8 @@ prettyPrintStatement n (StatementAssignToPtr ptr var) =
     n
     ("*" ++ prettyPrintSimple ptr ++ " = " ++ prettyPrintSimple var ++ ";")
 prettyPrintStatement n (StatementReturn Nothing) = indent n "return;"
-prettyPrintStatement n (StatementReturn (Just e)) =
-  indent n ("return " ++ prettyPrintExpr 0 e ++ ";")
+prettyPrintStatement n (StatementReturn (Just v)) =
+  indent n ("return " ++ prettyPrintSimple v ++ ";")
 prettyPrintStatement n (StatementLabel l) = indent n (show l ++ ": nop;")
 prettyPrintStatement n (StatementJump l) = indent n ("jmp " ++ show l ++ ";")
 prettyPrintStatement n (StatementJumpIfZero v l) =

@@ -115,7 +115,8 @@ linearizeStatement (SimplifiedSyntax.StatementReturn Nothing) =
   addStatement $ LinearSyntax.StatementReturn Nothing
 linearizeStatement (SimplifiedSyntax.StatementReturn (Just e)) = do
   e' <- linearizeExpr e
-  addStatement $ LinearSyntax.StatementReturn (Just e')
+  v <- extractExprToNewVar e'
+  addStatement $ LinearSyntax.StatementReturn (Just v)
 
 linearizeFunctionCall ::
      SimplifiedSyntax.FunctionCall
