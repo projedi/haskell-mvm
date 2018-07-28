@@ -275,17 +275,15 @@ evaluateArgs :: [Expr] -> Execute [Value]
 evaluateArgs = mapM evaluate
 
 executeFunctionBody :: [Statement] -> Execute (Maybe Value)
-executeFunctionBody body = do
-  (executeBlock body >> pure Nothing) `Except.catchError` pure
-
-executeBlock :: [Statement] -> Execute ()
-executeBlock [] = pure ()
-executeBlock ss = do
+executeFunctionBody [] = pure Nothing
+executeFunctionBody ss = do
   prevIP <- State.gets envInstructionPointer
   State.modify $ \env -> env {envInstructionPointer = 0}
   let instructions = Array.listArray (0, length ss - 1) ss
-  startExecution instructions `finallyError`
-    State.modify (\env -> env {envInstructionPointer = prevIP})
+  retValue <-
+    (startExecution instructions >> pure Nothing) `Except.catchError` pure
+  State.modify (\env -> env {envInstructionPointer = prevIP})
+  pure retValue
   where
     startExecution instructions =
       runReaderT executeStatement $
@@ -386,12 +384,6 @@ evaluateAsInt :: Expr -> Execute Int64
 evaluateAsInt e = do
   ValueInt i <- evaluate e
   pure i
-
-finallyError :: (Except.MonadError e m) => m a -> m () -> m a
-finallyError action finallyAction = do
-  res <- action `Except.catchError` \e -> finallyAction >> Except.throwError e
-  finallyAction
-  pure res
 
 data ConstEnv = ConstEnv
   { constEnvInstructions :: Array Int Statement
