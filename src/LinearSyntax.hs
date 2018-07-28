@@ -106,8 +106,8 @@ data ExprImpl
   | ExprAddressOfImpl VarID
   | ExprConstImpl ConstID
   | ExprBinOpImpl BinOp
-                  Expr
-                  Expr
+                  Var
+                  Var
   | ExprUnOpImpl UnOp
                  Var
 
@@ -139,13 +139,13 @@ pattern ExprConst :: VarType -> ConstID -> Expr
 pattern ExprConst vType cid =
         Expr{exprType = vType, exprImpl = ExprConstImpl cid}
 
-pattern ExprBinOp :: BinOp -> Expr -> Expr -> Expr
+pattern ExprBinOp :: BinOp -> Var -> Var -> Expr
 
 pattern ExprBinOp op lhs rhs <-
         Expr{exprImpl = ExprBinOpImpl op lhs rhs}
   where ExprBinOp op lhs rhs
           = Expr{exprType = t, exprImpl = ExprBinOpImpl op lhs rhs}
-          where t = binOpTypeFromArgs op (exprType lhs) (exprType rhs)
+          where t = binOpTypeFromArgs op (varType lhs) (varType rhs)
 
 pattern ExprUnOp :: UnOp -> Var -> Expr
 

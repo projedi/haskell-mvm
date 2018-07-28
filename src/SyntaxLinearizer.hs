@@ -174,8 +174,12 @@ linearizeExpr (SimplifiedSyntax.ExprAddressOf t v) =
   pure $ LinearSyntax.ExprAddressOf t v
 linearizeExpr (SimplifiedSyntax.ExprConst t c) =
   pure $ LinearSyntax.ExprConst t c
-linearizeExpr (SimplifiedSyntax.ExprBinOp op lhs rhs) =
-  LinearSyntax.ExprBinOp op <$> linearizeExpr lhs <*> linearizeExpr rhs
+linearizeExpr (SimplifiedSyntax.ExprBinOp op lhs rhs) = do
+  lhs' <- linearizeExpr lhs
+  lhsV <- extractExprToNewVar lhs'
+  rhs' <- linearizeExpr rhs
+  rhsV <- extractExprToNewVar rhs'
+  pure $ LinearSyntax.ExprBinOp op lhsV rhsV
 linearizeExpr (SimplifiedSyntax.ExprUnOp op e) = do
   e' <- linearizeExpr e
   v <- extractExprToNewVar e'

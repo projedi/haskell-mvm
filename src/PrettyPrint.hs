@@ -124,8 +124,8 @@ prettyPrintExpr n (ExprUnOp op v) =
   parenIfNeeded n (unOpPrec op) $ prettyPrintUnOp op ++ prettyPrintSimple v
 prettyPrintExpr n (ExprBinOp op el er) =
   parenIfNeeded n (binOpPrec op) $
-  prettyPrintExpr (binOpPrec op) el ++
-  " " ++ prettyPrintBinOp op ++ " " ++ prettyPrintExpr (binOpPrec op) er
+  prettyPrintSimple el ++
+  " " ++ prettyPrintBinOp op ++ " " ++ prettyPrintSimple er
 
 class PrettyPrintSimple a where
   prettyPrintSimple :: a -> String
