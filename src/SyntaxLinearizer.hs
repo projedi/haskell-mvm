@@ -98,7 +98,8 @@ linearizeStatement (SimplifiedSyntax.StatementAssign v e) = do
   addStatement $ LinearSyntax.StatementAssign v e'
 linearizeStatement (SimplifiedSyntax.StatementAssignToPtr v e) = do
   e' <- linearizeExpr e
-  addStatement $ LinearSyntax.StatementAssignToPtr v e'
+  v' <- extractExprToNewVar e'
+  addStatement $ LinearSyntax.StatementAssignToPtr v v'
 linearizeStatement (SimplifiedSyntax.StatementIfElse e tb fb) = do
   e' <- linearizeExpr e
   v <- extractExprToNewVar e'

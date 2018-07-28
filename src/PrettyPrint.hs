@@ -175,10 +175,10 @@ prettyPrintStatement n (StatementFunctionCall fcall) =
   indent n (prettyPrintSimple fcall ++ ";")
 prettyPrintStatement n (StatementAssign var expr) =
   indent n (prettyPrintSimple var ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
-prettyPrintStatement n (StatementAssignToPtr var expr) =
+prettyPrintStatement n (StatementAssignToPtr ptr var) =
   indent
     n
-    ("*" ++ prettyPrintSimple var ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
+    ("*" ++ prettyPrintSimple ptr ++ " = " ++ prettyPrintSimple var ++ ";")
 prettyPrintStatement n (StatementReturn Nothing) = indent n "return;"
 prettyPrintStatement n (StatementReturn (Just e)) =
   indent n ("return " ++ prettyPrintExpr 0 e ++ ";")

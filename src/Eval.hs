@@ -407,9 +407,9 @@ execute (StatementFunctionCall fcall) =
 execute (StatementAssign var e) = do
   res <- Trans.lift $ evaluate e
   Trans.lift $ writeVariable var res
-execute (StatementAssignToPtr var e) = do
-  res <- Trans.lift $ evaluate e
-  v <- Trans.lift $ readVariable var
+execute (StatementAssignToPtr ptr var) = do
+  res <- Trans.lift $ readVariable $ varName var
+  v <- Trans.lift $ readVariable ptr
   Trans.lift $ writeToPtr v res
 execute (StatementReturn Nothing) = Trans.lift $ functionReturn Nothing
 execute (StatementReturn (Just e)) = do
