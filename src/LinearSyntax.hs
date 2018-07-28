@@ -80,10 +80,10 @@ data FunctionDef = FunctionDef
 data FunctionCall
   = NativeFunctionCall { nativeFunCallName :: FunID
                        , nativeFunCallRetType :: Maybe VarType
-                       , nativeFunCallArgs :: [Expr] }
+                       , nativeFunCallArgs :: [Var] }
   | ForeignFunctionCall { foreignFunCallName :: FunID
                         , foreignFunCallRetType :: Maybe VarType
-                        , foreignFunCallArgs :: [Expr] }
+                        , foreignFunCallArgs :: [Var] }
 
 functionCallType :: FunctionCall -> Maybe VarType
 functionCallType NativeFunctionCall {nativeFunCallRetType = rettype} = rettype
@@ -106,10 +106,10 @@ data ExprImpl
   | ExprAddressOfImpl VarID
   | ExprConstImpl ConstID
   | ExprBinOpImpl BinOp
-                  Expr
-                  Expr
+                  Var
+                  Var
   | ExprUnOpImpl UnOp
-                 Expr
+                 Var
 
 pattern ExprFunctionCall :: FunctionCall -> Expr
 
@@ -139,20 +139,20 @@ pattern ExprConst :: VarType -> ConstID -> Expr
 pattern ExprConst vType cid =
         Expr{exprType = vType, exprImpl = ExprConstImpl cid}
 
-pattern ExprBinOp :: BinOp -> Expr -> Expr -> Expr
+pattern ExprBinOp :: BinOp -> Var -> Var -> Expr
 
 pattern ExprBinOp op lhs rhs <-
         Expr{exprImpl = ExprBinOpImpl op lhs rhs}
   where ExprBinOp op lhs rhs
           = Expr{exprType = t, exprImpl = ExprBinOpImpl op lhs rhs}
-          where t = binOpTypeFromArgs op (exprType lhs) (exprType rhs)
+          where t = binOpTypeFromArgs op (varType lhs) (varType rhs)
 
-pattern ExprUnOp :: UnOp -> Expr -> Expr
+pattern ExprUnOp :: UnOp -> Var -> Expr
 
-pattern ExprUnOp op e <- Expr{exprImpl = ExprUnOpImpl op e}
-  where ExprUnOp op e
-          = Expr{exprType = t, exprImpl = ExprUnOpImpl op e}
-          where t = unOpTypeFromArg op $ exprType e
+pattern ExprUnOp op v <- Expr{exprImpl = ExprUnOpImpl op v}
+  where ExprUnOp op v
+          = Expr{exprType = t, exprImpl = ExprUnOpImpl op v}
+          where t = unOpTypeFromArg op $ varType v
 
 {-# COMPLETE ExprFunctionCall, ExprVar, ExprDereference,
   ExprAddressOf, ExprConst, ExprBinOp, ExprUnOp :: Expr #-}

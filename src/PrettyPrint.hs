@@ -47,8 +47,7 @@ printFunctions :: IntMap FunctionDef -> String
 printFunctions funs =
   "Functions: " ++
   IntMap.foldrWithKey
-    (\key val rest ->
-       rest ++ "\n" ++ show key ++ ": " ++ prettyPrintFunctionDef val)
+    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ prettyPrintSimple val)
     ""
     funs
 
@@ -71,63 +70,6 @@ printVariables vals =
 paren :: String -> String
 paren str = "(" ++ str ++ ")"
 
-parenIfNeeded :: Int -> Int -> String -> String
-parenIfNeeded prevIndent currentIndent str
-  | prevIndent > currentIndent = paren str
-  | otherwise = str
-
-binOpPrec :: BinOp -> Int
-binOpPrec BinPlus = 7
-binOpPrec BinMinus = 7
-binOpPrec BinTimes = 8
-binOpPrec BinDiv = 8
-binOpPrec BinMod = 8
-binOpPrec BinBitAnd = 4
-binOpPrec BinBitOr = 2
-binOpPrec BinBitXor = 3
-binOpPrec BinAnd = 1
-binOpPrec BinOr = 0
-binOpPrec BinEq = 5
-binOpPrec BinLt = 6
-
-prettyPrintBinOp :: BinOp -> String
-prettyPrintBinOp BinPlus = "+"
-prettyPrintBinOp BinMinus = "-"
-prettyPrintBinOp BinTimes = "*"
-prettyPrintBinOp BinDiv = "/"
-prettyPrintBinOp BinMod = "%"
-prettyPrintBinOp BinBitAnd = "&"
-prettyPrintBinOp BinBitOr = "|"
-prettyPrintBinOp BinBitXor = "^"
-prettyPrintBinOp BinAnd = "&&"
-prettyPrintBinOp BinOr = "||"
-prettyPrintBinOp BinEq = "=="
-prettyPrintBinOp BinLt = "<"
-
-unOpPrec :: UnOp -> Int
-unOpPrec UnNeg = 9
-unOpPrec UnNot = 9
-unOpPrec UnIntToFloat = 9
-
-prettyPrintUnOp :: UnOp -> String
-prettyPrintUnOp UnNeg = "-"
-prettyPrintUnOp UnNot = "!"
-prettyPrintUnOp UnIntToFloat = "(double)"
-
-prettyPrintExpr :: Int -> Expr -> String
-prettyPrintExpr _ (ExprFunctionCall fcall) = prettyPrintSimple fcall
-prettyPrintExpr _ (ExprVar _ varname) = prettyPrintSimple varname
-prettyPrintExpr _ (ExprDereference _ varname) = "*" ++ prettyPrintSimple varname
-prettyPrintExpr _ (ExprAddressOf _ varname) = "&" ++ prettyPrintSimple varname
-prettyPrintExpr _ (ExprConst _ c) = show c
-prettyPrintExpr n (ExprUnOp op e) =
-  parenIfNeeded n (unOpPrec op) $
-  prettyPrintUnOp op ++ prettyPrintExpr (unOpPrec op) e
-prettyPrintExpr n (ExprBinOp op el er) =
-  parenIfNeeded n (binOpPrec op) $
-  prettyPrintExpr (binOpPrec op) el ++
-  " " ++ prettyPrintBinOp op ++ " " ++ prettyPrintExpr (binOpPrec op) er
-
 class PrettyPrintSimple a where
   prettyPrintSimple :: a -> String
 
@@ -148,12 +90,12 @@ instance PrettyPrintSimple FunctionCall where
                                        , nativeFunCallArgs = args
                                        } =
     prettyPrintSimple funname ++
-    paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
+    paren (List.intercalate ", " (map prettyPrintSimple args))
   prettyPrintSimple ForeignFunctionCall { foreignFunCallName = funname
                                         , foreignFunCallArgs = args
                                         } =
     prettyPrintSimple funname ++
-    paren (List.intercalate ", " (map (prettyPrintExpr 0) args))
+    paren (List.intercalate ", " (map prettyPrintSimple args))
 
 instance PrettyPrintSimple VarDecl where
   prettyPrintSimple (VarDecl vtype name) =
@@ -166,42 +108,66 @@ instance PrettyPrintSimple (Maybe VarType) where
   prettyPrintSimple (Just vtype) = prettyPrintSimple vtype
   prettyPrintSimple Nothing = "void"
 
-indent :: Int -> String -> String
-indent 0 str = str
-indent n str = "  " ++ indent (n - 1) str
+instance PrettyPrintSimple BinOp where
+  prettyPrintSimple BinPlus = "+"
+  prettyPrintSimple BinMinus = "-"
+  prettyPrintSimple BinTimes = "*"
+  prettyPrintSimple BinDiv = "/"
+  prettyPrintSimple BinMod = "%"
+  prettyPrintSimple BinBitAnd = "&"
+  prettyPrintSimple BinBitOr = "|"
+  prettyPrintSimple BinBitXor = "^"
+  prettyPrintSimple BinAnd = "&&"
+  prettyPrintSimple BinOr = "||"
+  prettyPrintSimple BinEq = "=="
+  prettyPrintSimple BinLt = "<"
 
-prettyPrintStatement :: Int -> Statement -> String
-prettyPrintStatement n (StatementFunctionCall fcall) =
-  indent n (prettyPrintSimple fcall ++ ";")
-prettyPrintStatement n (StatementAssign var expr) =
-  indent n (prettyPrintSimple var ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
-prettyPrintStatement n (StatementAssignToPtr ptr var) =
-  indent
-    n
-    ("*" ++ prettyPrintSimple ptr ++ " = " ++ prettyPrintSimple var ++ ";")
-prettyPrintStatement n (StatementReturn Nothing) = indent n "return;"
-prettyPrintStatement n (StatementReturn (Just v)) =
-  indent n ("return " ++ prettyPrintSimple v ++ ";")
-prettyPrintStatement n (StatementLabel l) = indent n (show l ++ ": nop;")
-prettyPrintStatement n (StatementJump l) = indent n ("jmp " ++ show l ++ ";")
-prettyPrintStatement n (StatementJumpIfZero v l) =
-  indent n ("jz (" ++ prettyPrintSimple v ++ ") " ++ show l ++ ";")
+instance PrettyPrintSimple UnOp where
+  prettyPrintSimple UnNeg = "-"
+  prettyPrintSimple UnNot = "!"
+  prettyPrintSimple UnIntToFloat = "(double)"
 
-prettyPrintBody :: [Statement] -> String
-prettyPrintBody body = "{\n" ++ printProgram 1 body ++ "\n}"
+instance PrettyPrintSimple Expr where
+  prettyPrintSimple (ExprFunctionCall fcall) = prettyPrintSimple fcall
+  prettyPrintSimple (ExprVar _ varname) = prettyPrintSimple varname
+  prettyPrintSimple (ExprDereference _ varname) =
+    "*" ++ prettyPrintSimple varname
+  prettyPrintSimple (ExprAddressOf _ varname) = "&" ++ prettyPrintSimple varname
+  prettyPrintSimple (ExprConst _ c) = show c
+  prettyPrintSimple (ExprUnOp op v) =
+    prettyPrintSimple op ++ prettyPrintSimple v
+  prettyPrintSimple (ExprBinOp op el er) =
+    prettyPrintSimple el ++
+    " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er
 
-prettyPrintFunctionDef :: FunctionDef -> String
-prettyPrintFunctionDef fdef =
-  prettyPrintSimple (funDefRetType fdef) ++
-  " " ++
-  prettyPrintSimple (funDefName fdef) ++
-  paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef))) ++
-  "\n" ++
-  List.intercalate
-    "\n"
-    (map (\v -> "local " ++ prettyPrintSimple v) (funDefLocals fdef)) ++
-  "\n" ++ prettyPrintBody (funDefBody fdef)
+instance PrettyPrintSimple Statement where
+  prettyPrintSimple (StatementFunctionCall fcall) =
+    prettyPrintSimple fcall ++ ";"
+  prettyPrintSimple (StatementAssign var expr) =
+    prettyPrintSimple var ++ " = " ++ prettyPrintSimple expr ++ ";"
+  prettyPrintSimple (StatementAssignToPtr ptr var) =
+    "*" ++ prettyPrintSimple ptr ++ " = " ++ prettyPrintSimple var ++ ";"
+  prettyPrintSimple (StatementReturn Nothing) = "return;"
+  prettyPrintSimple (StatementReturn (Just v)) =
+    "return " ++ prettyPrintSimple v ++ ";"
+  prettyPrintSimple (StatementLabel l) = show l ++ ": nop;"
+  prettyPrintSimple (StatementJump l) = "jmp " ++ show l ++ ";"
+  prettyPrintSimple (StatementJumpIfZero v l) =
+    "jz (" ++ prettyPrintSimple v ++ ") " ++ show l ++ ";"
 
-printProgram :: Int -> [Statement] -> String
-printProgram n stmts =
-  List.intercalate "\n" (map (prettyPrintStatement n) stmts)
+instance PrettyPrintSimple FunctionDef where
+  prettyPrintSimple fdef =
+    prettyPrintSimple (funDefRetType fdef) ++
+    " " ++
+    prettyPrintSimple (funDefName fdef) ++
+    paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef))) ++
+    "\n" ++
+    List.intercalate
+      "\n"
+      (map (\v -> "local " ++ prettyPrintSimple v) (funDefLocals fdef)) ++
+    "\n{\n" ++
+    List.intercalate "\n" (map (indent . prettyPrintSimple) (funDefBody fdef)) ++
+    "\n}"
+    where
+      indent :: String -> String
+      indent = ("  " ++)

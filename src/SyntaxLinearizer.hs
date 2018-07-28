@@ -87,22 +87,19 @@ linearizeStatement (SimplifiedSyntax.StatementWhile e b) = do
   loopBegin <- newLabel
   loopEnd <- newLabel
   addStatement $ LinearSyntax.StatementLabel loopBegin
-  e' <- linearizeExpr e
-  v <- extractExprToNewVar e'
+  v <- linearizeExpr e
   addStatement $ LinearSyntax.StatementJumpIfZero v loopEnd
   linearizeBlock b
   addStatement $ LinearSyntax.StatementJump loopBegin
   addStatement $ LinearSyntax.StatementLabel loopEnd
 linearizeStatement (SimplifiedSyntax.StatementAssign v e) = do
-  e' <- linearizeExpr e
+  e' <- linearizeExprImpl e
   addStatement $ LinearSyntax.StatementAssign v e'
-linearizeStatement (SimplifiedSyntax.StatementAssignToPtr v e) = do
-  e' <- linearizeExpr e
-  v' <- extractExprToNewVar e'
-  addStatement $ LinearSyntax.StatementAssignToPtr v v'
+linearizeStatement (SimplifiedSyntax.StatementAssignToPtr p e) = do
+  v <- linearizeExpr e
+  addStatement $ LinearSyntax.StatementAssignToPtr p v
 linearizeStatement (SimplifiedSyntax.StatementIfElse e tb fb) = do
-  e' <- linearizeExpr e
-  v <- extractExprToNewVar e'
+  v <- linearizeExpr e
   elseLabel <- newLabel
   endLabel <- newLabel
   addStatement $ LinearSyntax.StatementJumpIfZero v elseLabel
@@ -114,8 +111,7 @@ linearizeStatement (SimplifiedSyntax.StatementIfElse e tb fb) = do
 linearizeStatement (SimplifiedSyntax.StatementReturn Nothing) =
   addStatement $ LinearSyntax.StatementReturn Nothing
 linearizeStatement (SimplifiedSyntax.StatementReturn (Just e)) = do
-  e' <- linearizeExpr e
-  v <- extractExprToNewVar e'
+  v <- linearizeExpr e
   addStatement $ LinearSyntax.StatementReturn (Just v)
 
 linearizeFunctionCall ::
@@ -158,23 +154,29 @@ introduceVariable vtype = do
   where
     inc (LinearSyntax.VarID v) = LinearSyntax.VarID (v + 1)
 
-extractExprToNewVar :: LinearSyntax.Expr -> StatementLinearizer LinearSyntax.Var
-extractExprToNewVar e = do
-  v <- introduceVariable (LinearSyntax.exprType e)
-  addStatement $ LinearSyntax.StatementAssign (LinearSyntax.varName v) e
-  pure v
-
-linearizeExpr :: SimplifiedSyntax.Expr -> StatementLinearizer LinearSyntax.Expr
-linearizeExpr (SimplifiedSyntax.ExprFunctionCall fcall) =
+linearizeExprImpl ::
+     SimplifiedSyntax.Expr -> StatementLinearizer LinearSyntax.Expr
+linearizeExprImpl (SimplifiedSyntax.ExprFunctionCall fcall) =
   LinearSyntax.ExprFunctionCall <$> linearizeFunctionCall fcall
-linearizeExpr (SimplifiedSyntax.ExprVar t v) = pure $ LinearSyntax.ExprVar t v
-linearizeExpr (SimplifiedSyntax.ExprDereference t v) =
+linearizeExprImpl (SimplifiedSyntax.ExprVar t v) =
+  pure $ LinearSyntax.ExprVar t v
+linearizeExprImpl (SimplifiedSyntax.ExprDereference t v) =
   pure $ LinearSyntax.ExprDereference t v
-linearizeExpr (SimplifiedSyntax.ExprAddressOf t v) =
+linearizeExprImpl (SimplifiedSyntax.ExprAddressOf t v) =
   pure $ LinearSyntax.ExprAddressOf t v
-linearizeExpr (SimplifiedSyntax.ExprConst t c) =
+linearizeExprImpl (SimplifiedSyntax.ExprConst t c) =
   pure $ LinearSyntax.ExprConst t c
-linearizeExpr (SimplifiedSyntax.ExprBinOp op lhs rhs) =
-  LinearSyntax.ExprBinOp op <$> linearizeExpr lhs <*> linearizeExpr rhs
-linearizeExpr (SimplifiedSyntax.ExprUnOp op e) =
-  LinearSyntax.ExprUnOp op <$> linearizeExpr e
+linearizeExprImpl (SimplifiedSyntax.ExprBinOp op lhs rhs) = do
+  lhsV <- linearizeExpr lhs
+  rhsV <- linearizeExpr rhs
+  pure $ LinearSyntax.ExprBinOp op lhsV rhsV
+linearizeExprImpl (SimplifiedSyntax.ExprUnOp op e) = do
+  v <- linearizeExpr e
+  pure $ LinearSyntax.ExprUnOp op v
+
+linearizeExpr :: SimplifiedSyntax.Expr -> StatementLinearizer LinearSyntax.Var
+linearizeExpr e = do
+  e' <- linearizeExprImpl e
+  v <- introduceVariable (LinearSyntax.exprType e')
+  addStatement $ LinearSyntax.StatementAssign (LinearSyntax.varName v) e'
+  pure v

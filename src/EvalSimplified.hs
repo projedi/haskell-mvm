@@ -316,6 +316,34 @@ writeToPtr ptr val = do
   let Just env' = writeToPtrInEnv env ptr val
   State.put env'
 
+evaluateUnOp :: UnOp -> (Value -> Value)
+evaluateUnOp UnNeg = negate
+evaluateUnOp UnNot =
+  \v ->
+    case v of
+      ValueInt 0 -> ValueInt 1
+      ValueInt _ -> ValueInt 0
+      _ -> error "Type mismatch"
+evaluateUnOp UnIntToFloat =
+  \v ->
+    case v of
+      ValueInt i -> ValueFloat $ fromIntegral i
+      _ -> error "Type mismatch"
+
+evaluateBinOp :: BinOp -> (Value -> Value -> Value)
+evaluateBinOp BinPlus = (+)
+evaluateBinOp BinMinus = (-)
+evaluateBinOp BinTimes = (*)
+evaluateBinOp BinDiv = (/)
+evaluateBinOp BinMod = rem
+evaluateBinOp BinBitAnd = (.&.)
+evaluateBinOp BinBitOr = (.|.)
+evaluateBinOp BinBitXor = xor
+evaluateBinOp BinAnd = \lhs rhs -> fromBool (toBool lhs && toBool rhs)
+evaluateBinOp BinOr = \lhs rhs -> fromBool (toBool lhs || toBool rhs)
+evaluateBinOp BinEq = (fromBool .) . (==)
+evaluateBinOp BinLt = (fromBool .) . (<)
+
 evaluate :: Expr -> Execute Value
 evaluate (ExprFunctionCall fcall) = do
   Just val <- functionCall fcall
@@ -326,35 +354,8 @@ evaluate (ExprDereference _ vname) = do
   v <- readVariable vname
   dereference v
 evaluate (ExprConst _ c) = readConstant c
-evaluate (ExprUnOp UnNeg e) = negate <$> evaluate e
-evaluate (ExprBinOp BinPlus el er) = (+) <$> evaluate el <*> evaluate er
-evaluate (ExprBinOp BinMinus el er) = (-) <$> evaluate el <*> evaluate er
-evaluate (ExprBinOp BinTimes el er) = (*) <$> evaluate el <*> evaluate er
-evaluate (ExprBinOp BinDiv el er) = (/) <$> evaluate el <*> evaluate er
-evaluate (ExprBinOp BinMod el er) = rem <$> evaluate el <*> evaluate er
-evaluate (ExprBinOp BinBitAnd el er) = (.&.) <$> evaluate el <*> evaluate er
-evaluate (ExprBinOp BinBitOr el er) = (.|.) <$> evaluate el <*> evaluate er
-evaluate (ExprBinOp BinBitXor el er) = xor <$> evaluate el <*> evaluate er
-evaluate (ExprUnOp UnNot e) = do
-  val <- evaluate e
-  case val of
-    ValueInt 0 -> pure $ ValueInt 1
-    ValueInt _ -> pure $ ValueInt 0
-    _ -> error "Type mismatch"
-evaluate (ExprBinOp BinAnd el er) =
-  (\lhs rhs -> fromBool (toBool lhs && toBool rhs)) <$> evaluate el <*>
-  evaluate er
-evaluate (ExprBinOp BinOr el er) =
-  (\lhs rhs -> fromBool (toBool lhs || toBool rhs)) <$> evaluate el <*>
-  evaluate er
-evaluate (ExprBinOp BinEq el er) =
-  (fromBool .) . (==) <$> evaluate el <*> evaluate er
-evaluate (ExprBinOp BinLt el er) =
-  (fromBool .) . (<) <$> evaluate el <*> evaluate er
-evaluate (ExprUnOp UnIntToFloat e) = go <$> evaluate e
-  where
-    go (ValueInt i) = ValueFloat $ fromIntegral i
-    go _ = error "Type mismatch"
+evaluate (ExprUnOp op e) = evaluateUnOp op <$> evaluate e
+evaluate (ExprBinOp op el er) = evaluateBinOp op <$> evaluate el <*> evaluate er
 
 evaluateAsBool :: Expr -> Execute Bool
 evaluateAsBool e = do
