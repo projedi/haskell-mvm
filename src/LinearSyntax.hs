@@ -71,10 +71,11 @@ data Statement
                     Expr
   | StatementAssignToPtr VarID
                          Expr
-  | StatementIfElse Expr
-                    Block
-                    Block
   | StatementReturn (Maybe Expr)
+  | StatementLabel LabelID
+  | StatementJump LabelID
+  | StatementJumpIfZero Expr
+                        LabelID
 
 data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType

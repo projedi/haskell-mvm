@@ -3,6 +3,7 @@ module SyntaxLinearizer
   ) where
 
 import Control.Monad.State (State, runState)
+import qualified Control.Monad.State as State
 import qualified Control.Monad.Trans as Trans
 import Control.Monad.Writer (WriterT, execWriterT)
 import qualified Control.Monad.Writer as Writer
@@ -58,6 +59,14 @@ type StatementLinearizer = WriterT [LinearSyntax.Statement] Linearizer
 addStatement :: LinearSyntax.Statement -> StatementLinearizer ()
 addStatement s = Writer.tell [s]
 
+newLabel :: StatementLinearizer LinearSyntax.LabelID
+newLabel = do
+  nextLabelID <- State.gets (inc . lastLabelID)
+  State.modify $ \env -> env {lastLabelID = nextLabelID}
+  pure nextLabelID
+  where
+    inc (LinearSyntax.LabelID lid) = LinearSyntax.LabelID (lid + 1)
+
 linearizeStatement :: SimplifiedSyntax.Statement -> StatementLinearizer ()
 linearizeStatement (SimplifiedSyntax.StatementBlock b) = do
   b' <- Trans.lift $ linearizeBlock b
@@ -79,9 +88,16 @@ linearizeStatement (SimplifiedSyntax.StatementAssignToPtr v e) = do
   addStatement $ LinearSyntax.StatementAssignToPtr v e'
 linearizeStatement (SimplifiedSyntax.StatementIfElse e tb fb) = do
   e' <- linearizeExpr e
+  elseLabel <- newLabel
+  endLabel <- newLabel
+  addStatement $ LinearSyntax.StatementJumpIfZero e' elseLabel
   tb' <- Trans.lift $ linearizeBlock tb
+  addStatement $ LinearSyntax.StatementBlock tb'
+  addStatement $ LinearSyntax.StatementJump endLabel
+  addStatement $ LinearSyntax.StatementLabel elseLabel
   fb' <- Trans.lift $ linearizeBlock fb
-  addStatement $ LinearSyntax.StatementIfElse e' tb' fb'
+  addStatement $ LinearSyntax.StatementBlock fb'
+  addStatement $ LinearSyntax.StatementLabel endLabel
 linearizeStatement (SimplifiedSyntax.StatementReturn Nothing) =
   addStatement $ LinearSyntax.StatementReturn Nothing
 linearizeStatement (SimplifiedSyntax.StatementReturn (Just e)) = do

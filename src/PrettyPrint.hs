@@ -137,6 +137,9 @@ instance PrettyPrintSimple VarID where
 instance PrettyPrintSimple FunID where
   prettyPrintSimple = show
 
+instance PrettyPrintSimple LabelID where
+  prettyPrintSimple = show
+
 instance PrettyPrintSimple FunctionCall where
   prettyPrintSimple NativeFunctionCall { nativeFunCallName = funname
                                        , nativeFunCallArgs = args
@@ -178,12 +181,13 @@ prettyPrintStatement n (StatementReturn (Just e)) =
   indent n ("return " ++ prettyPrintExpr 0 e ++ ";")
 prettyPrintStatement n (StatementWhile e s) =
   indent n ("while (" ++ prettyPrintExpr 0 e ++ ")") ++ prettyPrintBlock n s
-prettyPrintStatement n (StatementIfElse e s1 s2) =
-  indent n ("if (" ++ prettyPrintExpr 0 e ++ ")\n") ++
-  prettyPrintBlock n s1 ++ "\n" ++ indent n "else\n" ++ prettyPrintBlock n s2
 prettyPrintStatement n (StatementBlock stmts) = prettyPrintBlock n stmts
 prettyPrintStatement n (StatementVarAlloc v) =
   indent n ("alloc " ++ show v ++ ";")
+prettyPrintStatement n (StatementLabel l) = indent n (show l ++ ": nop;")
+prettyPrintStatement n (StatementJump l) = indent n ("jmp " ++ show l ++ ";")
+prettyPrintStatement n (StatementJumpIfZero e l) =
+  indent n ("jz (" ++ prettyPrintExpr 0 e ++ ") " ++ show l ++ ";")
 
 prettyPrintBlock :: Int -> Block -> String
 prettyPrintBlock n block =
