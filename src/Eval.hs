@@ -14,7 +14,6 @@ import Data.Array (Array)
 import qualified Data.Array as Array
 import Data.Bits
 import Data.Foldable (asum)
-import Data.Int (Int64)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.List as List
@@ -375,15 +374,9 @@ evaluate (ExprUnOp UnIntToFloat e) = go <$> evaluate e
     go (ValueInt i) = ValueFloat $ fromIntegral i
     go _ = error "Type mismatch"
 
-evaluateAsBool :: Expr -> Execute Bool
-evaluateAsBool e = do
-  i <- evaluateAsInt e
-  pure $ i /= 0
-
-evaluateAsInt :: Expr -> Execute Int64
-evaluateAsInt e = do
-  ValueInt i <- evaluate e
-  pure i
+valueAsBool :: Value -> Bool
+valueAsBool (ValueInt i) = i /= 0
+valueAsBool _ = error "Type mismatch"
 
 data ConstEnv = ConstEnv
   { constEnvInstructions :: Array Int Statement
@@ -414,16 +407,16 @@ execute (StatementFunctionCall fcall) =
 execute (StatementAssign var e) = do
   res <- Trans.lift $ evaluate e
   Trans.lift $ writeVariable var res
-execute (StatementAssignToPtr var e) = do
-  res <- Trans.lift $ evaluate e
-  v <- Trans.lift $ readVariable var
+execute (StatementAssignToPtr ptr var) = do
+  res <- Trans.lift $ readVariable $ varName var
+  v <- Trans.lift $ readVariable ptr
   Trans.lift $ writeToPtr v res
 execute (StatementReturn Nothing) = Trans.lift $ functionReturn Nothing
-execute (StatementReturn (Just e)) = do
-  res <- Trans.lift $ evaluate e
+execute (StatementReturn (Just v)) = do
+  res <- Trans.lift $ readVariable $ varName v
   Trans.lift $ functionReturn (Just res)
 execute (StatementLabel _) = pure ()
 execute (StatementJump l) = jump l
-execute (StatementJumpIfZero e l) = do
-  res <- Trans.lift $ evaluateAsBool e
+execute (StatementJumpIfZero v l) = do
+  res <- Trans.lift $ valueAsBool <$> readVariable (varName v)
   unless res $ jump l

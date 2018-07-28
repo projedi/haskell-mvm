@@ -16,6 +16,7 @@ module LinearSyntax
   , binOpTypeFromArgs
   , UnOp(..)
   , unOpTypeFromArg
+  , Var(..)
   , Expr(ExprFunctionCall, ExprVar, ExprDereference, ExprAddressOf,
      ExprConst, ExprBinOp, ExprUnOp)
   , exprType
@@ -61,11 +62,11 @@ data Statement
   | StatementAssign VarID
                     Expr
   | StatementAssignToPtr VarID
-                         Expr
-  | StatementReturn (Maybe Expr)
+                         Var
+  | StatementReturn (Maybe Var)
   | StatementLabel LabelID
   | StatementJump LabelID
-  | StatementJumpIfZero Expr
+  | StatementJumpIfZero Var
                         LabelID
 
 data FunctionDef = FunctionDef
@@ -87,6 +88,11 @@ data FunctionCall
 functionCallType :: FunctionCall -> Maybe VarType
 functionCallType NativeFunctionCall {nativeFunCallRetType = rettype} = rettype
 functionCallType ForeignFunctionCall {foreignFunCallRetType = rettype} = rettype
+
+data Var = Var
+  { varName :: VarID
+  , varType :: VarType
+  }
 
 data Expr = Expr
   { exprType :: VarType

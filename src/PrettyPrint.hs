@@ -116,9 +116,9 @@ prettyPrintUnOp UnIntToFloat = "(double)"
 
 prettyPrintExpr :: Int -> Expr -> String
 prettyPrintExpr _ (ExprFunctionCall fcall) = prettyPrintSimple fcall
-prettyPrintExpr _ (ExprVar _ varName) = prettyPrintSimple varName
-prettyPrintExpr _ (ExprDereference _ varName) = "*" ++ prettyPrintSimple varName
-prettyPrintExpr _ (ExprAddressOf _ varName) = "&" ++ prettyPrintSimple varName
+prettyPrintExpr _ (ExprVar _ varname) = prettyPrintSimple varname
+prettyPrintExpr _ (ExprDereference _ varname) = "*" ++ prettyPrintSimple varname
+prettyPrintExpr _ (ExprAddressOf _ varname) = "&" ++ prettyPrintSimple varname
 prettyPrintExpr _ (ExprConst _ c) = show c
 prettyPrintExpr n (ExprUnOp op e) =
   parenIfNeeded n (unOpPrec op) $
@@ -133,6 +133,9 @@ class PrettyPrintSimple a where
 
 instance PrettyPrintSimple VarID where
   prettyPrintSimple = show
+
+instance PrettyPrintSimple Var where
+  prettyPrintSimple = show . varName
 
 instance PrettyPrintSimple FunID where
   prettyPrintSimple = show
@@ -172,17 +175,17 @@ prettyPrintStatement n (StatementFunctionCall fcall) =
   indent n (prettyPrintSimple fcall ++ ";")
 prettyPrintStatement n (StatementAssign var expr) =
   indent n (prettyPrintSimple var ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
-prettyPrintStatement n (StatementAssignToPtr var expr) =
+prettyPrintStatement n (StatementAssignToPtr ptr var) =
   indent
     n
-    ("*" ++ prettyPrintSimple var ++ " = " ++ prettyPrintExpr 0 expr ++ ";")
+    ("*" ++ prettyPrintSimple ptr ++ " = " ++ prettyPrintSimple var ++ ";")
 prettyPrintStatement n (StatementReturn Nothing) = indent n "return;"
-prettyPrintStatement n (StatementReturn (Just e)) =
-  indent n ("return " ++ prettyPrintExpr 0 e ++ ";")
+prettyPrintStatement n (StatementReturn (Just v)) =
+  indent n ("return " ++ prettyPrintSimple v ++ ";")
 prettyPrintStatement n (StatementLabel l) = indent n (show l ++ ": nop;")
 prettyPrintStatement n (StatementJump l) = indent n ("jmp " ++ show l ++ ";")
-prettyPrintStatement n (StatementJumpIfZero e l) =
-  indent n ("jz (" ++ prettyPrintExpr 0 e ++ ") " ++ show l ++ ";")
+prettyPrintStatement n (StatementJumpIfZero v l) =
+  indent n ("jz (" ++ prettyPrintSimple v ++ ") " ++ show l ++ ";")
 
 prettyPrintBody :: [Statement] -> String
 prettyPrintBody body = "{\n" ++ printProgram 1 body ++ "\n}"
