@@ -6,6 +6,8 @@ import Control.Monad.State (State, runState)
 import qualified Control.Monad.State as State
 import Control.Monad.Writer (WriterT, execWriterT)
 import qualified Control.Monad.Writer as Writer
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 
 import qualified LinearSyntax
 import qualified SimplifiedSyntax
@@ -18,20 +20,27 @@ linearize p =
     , LinearSyntax.programForeignFunctions =
         SimplifiedSyntax.programForeignFunctions p
     , LinearSyntax.programConstants = SimplifiedSyntax.programConstants p
-    , LinearSyntax.programVariables = SimplifiedSyntax.programVariables p
+    , LinearSyntax.programVariables = vars finalEnv
     , LinearSyntax.programLastFunID = SimplifiedSyntax.programLastFunID p
-    , LinearSyntax.programLastVarID = SimplifiedSyntax.programLastVarID p
+    , LinearSyntax.programLastVarID = lastVarID finalEnv
     , LinearSyntax.programLastConstID = SimplifiedSyntax.programLastConstID p
     , LinearSyntax.programLastLabelID = lastLabelID finalEnv
     }
   where
     (fs, finalEnv) =
       runState (mapM linearizeFunctionDef $ SimplifiedSyntax.programFunctions p) $
-      Env {lastLabelID = LinearSyntax.LabelID 0, foundVariables = []}
+      Env
+        { lastLabelID = LinearSyntax.LabelID 0
+        , foundVariables = []
+        , lastVarID = SimplifiedSyntax.programLastVarID p
+        , vars = SimplifiedSyntax.programVariables p
+        }
 
 data Env = Env
   { lastLabelID :: LinearSyntax.LabelID
   , foundVariables :: [LinearSyntax.VarID]
+  , lastVarID :: LinearSyntax.VarID
+  , vars :: IntMap LinearSyntax.VarType
   }
 
 type Linearizer = State Env
@@ -79,7 +88,8 @@ linearizeStatement (SimplifiedSyntax.StatementWhile e b) = do
   loopEnd <- newLabel
   addStatement $ LinearSyntax.StatementLabel loopBegin
   e' <- linearizeExpr e
-  addStatement $ LinearSyntax.StatementJumpIfZero e' loopEnd
+  v <- extractExprToNewVar e'
+  addStatement $ LinearSyntax.StatementJumpIfZero v loopEnd
   linearizeBlock b
   addStatement $ LinearSyntax.StatementJump loopBegin
   addStatement $ LinearSyntax.StatementLabel loopEnd
@@ -91,9 +101,10 @@ linearizeStatement (SimplifiedSyntax.StatementAssignToPtr v e) = do
   addStatement $ LinearSyntax.StatementAssignToPtr v e'
 linearizeStatement (SimplifiedSyntax.StatementIfElse e tb fb) = do
   e' <- linearizeExpr e
+  v <- extractExprToNewVar e'
   elseLabel <- newLabel
   endLabel <- newLabel
-  addStatement $ LinearSyntax.StatementJumpIfZero e' elseLabel
+  addStatement $ LinearSyntax.StatementJumpIfZero v elseLabel
   linearizeBlock tb
   addStatement $ LinearSyntax.StatementJump endLabel
   addStatement $ LinearSyntax.StatementLabel elseLabel
@@ -128,6 +139,28 @@ linearizeFunctionCall fcall@SimplifiedSyntax.ForeignFunctionCall {} = do
           SimplifiedSyntax.foreignFunCallRetType fcall
       , LinearSyntax.foreignFunCallArgs = args
       }
+
+introduceVariable ::
+     LinearSyntax.VarType -> StatementLinearizer LinearSyntax.Var
+introduceVariable vtype = do
+  newVarID@(LinearSyntax.VarID vid) <- State.gets (inc . lastVarID)
+  State.modify $ \env ->
+    env
+      { vars = IntMap.insert vid vtype $ vars env
+      , lastVarID = newVarID
+      , foundVariables = newVarID : foundVariables env
+      }
+  pure $
+    LinearSyntax.Var
+      {LinearSyntax.varType = vtype, LinearSyntax.varName = newVarID}
+  where
+    inc (LinearSyntax.VarID v) = LinearSyntax.VarID (v + 1)
+
+extractExprToNewVar :: LinearSyntax.Expr -> StatementLinearizer LinearSyntax.Var
+extractExprToNewVar e = do
+  v <- introduceVariable (LinearSyntax.exprType e)
+  addStatement $ LinearSyntax.StatementAssign (LinearSyntax.varName v) e
+  pure v
 
 linearizeExpr :: SimplifiedSyntax.Expr -> StatementLinearizer LinearSyntax.Expr
 linearizeExpr (SimplifiedSyntax.ExprFunctionCall fcall) =

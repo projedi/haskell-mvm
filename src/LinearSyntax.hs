@@ -66,7 +66,7 @@ data Statement
   | StatementReturn (Maybe Expr)
   | StatementLabel LabelID
   | StatementJump LabelID
-  | StatementJumpIfZero Expr
+  | StatementJumpIfZero Var
                         LabelID
 
 data FunctionDef = FunctionDef

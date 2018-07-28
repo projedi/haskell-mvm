@@ -134,6 +134,9 @@ class PrettyPrintSimple a where
 instance PrettyPrintSimple VarID where
   prettyPrintSimple = show
 
+instance PrettyPrintSimple Var where
+  prettyPrintSimple = show . varName
+
 instance PrettyPrintSimple FunID where
   prettyPrintSimple = show
 
@@ -181,8 +184,8 @@ prettyPrintStatement n (StatementReturn (Just e)) =
   indent n ("return " ++ prettyPrintExpr 0 e ++ ";")
 prettyPrintStatement n (StatementLabel l) = indent n (show l ++ ": nop;")
 prettyPrintStatement n (StatementJump l) = indent n ("jmp " ++ show l ++ ";")
-prettyPrintStatement n (StatementJumpIfZero e l) =
-  indent n ("jz (" ++ prettyPrintExpr 0 e ++ ") " ++ show l ++ ";")
+prettyPrintStatement n (StatementJumpIfZero v l) =
+  indent n ("jz (" ++ prettyPrintSimple v ++ ") " ++ show l ++ ";")
 
 prettyPrintBody :: [Statement] -> String
 prettyPrintBody body = "{\n" ++ printProgram 1 body ++ "\n}"
