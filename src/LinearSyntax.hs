@@ -80,10 +80,10 @@ data FunctionDef = FunctionDef
 data FunctionCall
   = NativeFunctionCall { nativeFunCallName :: FunID
                        , nativeFunCallRetType :: Maybe VarType
-                       , nativeFunCallArgs :: [Expr] }
+                       , nativeFunCallArgs :: [Var] }
   | ForeignFunctionCall { foreignFunCallName :: FunID
                         , foreignFunCallRetType :: Maybe VarType
-                        , foreignFunCallArgs :: [Expr] }
+                        , foreignFunCallArgs :: [Var] }
 
 functionCallType :: FunctionCall -> Maybe VarType
 functionCallType NativeFunctionCall {nativeFunCallRetType = rettype} = rettype

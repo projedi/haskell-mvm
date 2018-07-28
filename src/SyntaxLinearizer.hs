@@ -2,6 +2,7 @@ module SyntaxLinearizer
   ( linearize
   ) where
 
+import Control.Monad
 import Control.Monad.State (State, runState)
 import qualified Control.Monad.State as State
 import Control.Monad.Writer (WriterT, execWriterT)
@@ -122,7 +123,9 @@ linearizeFunctionCall ::
      SimplifiedSyntax.FunctionCall
   -> StatementLinearizer LinearSyntax.FunctionCall
 linearizeFunctionCall fcall@SimplifiedSyntax.NativeFunctionCall {} = do
-  args <- mapM linearizeExpr $ SimplifiedSyntax.nativeFunCallArgs fcall
+  args <-
+    mapM (extractExprToNewVar <=< linearizeExpr) $
+    SimplifiedSyntax.nativeFunCallArgs fcall
   pure $
     LinearSyntax.NativeFunctionCall
       { LinearSyntax.nativeFunCallName =
@@ -132,7 +135,9 @@ linearizeFunctionCall fcall@SimplifiedSyntax.NativeFunctionCall {} = do
       , LinearSyntax.nativeFunCallArgs = args
       }
 linearizeFunctionCall fcall@SimplifiedSyntax.ForeignFunctionCall {} = do
-  args <- mapM linearizeExpr $ SimplifiedSyntax.foreignFunCallArgs fcall
+  args <-
+    mapM (extractExprToNewVar <=< linearizeExpr) $
+    SimplifiedSyntax.foreignFunCallArgs fcall
   pure $
     LinearSyntax.ForeignFunctionCall
       { LinearSyntax.foreignFunCallName =

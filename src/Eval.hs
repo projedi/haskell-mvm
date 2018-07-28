@@ -270,8 +270,8 @@ generateLocal (VarID v) = do
   Just vt <- State.gets (IntMap.lookup v . envVarTypes)
   declareVariable (VarDecl vt (VarID v))
 
-evaluateArgs :: [Expr] -> Execute [Value]
-evaluateArgs = mapM evaluate
+evaluateArgs :: [Var] -> Execute [Value]
+evaluateArgs = mapM (readVariable . varName)
 
 executeFunctionBody :: [Statement] -> Execute (Maybe Value)
 executeFunctionBody [] = pure Nothing
