@@ -171,12 +171,6 @@ withNewLayer m = do
 currentLayer :: Execute LayerID
 currentLayer = State.gets (length . envLayers)
 
-splitLayers :: LayerID -> Execute ()
-splitLayers lid = do
-  env <- State.get
-  let (_, _, newenv) = splitLayersInEnv env lid
-  State.put $ env {envLayers = newenv}
-
 runExecute :: Execute () -> IO ()
 runExecute m = do
   _ <- runStateT (runExceptT m) emptyEnv
@@ -282,22 +276,16 @@ evaluateArgs = mapM evaluate
 
 executeFunctionBody :: [Statement] -> Execute (Maybe Value)
 executeFunctionBody body = do
-  lid <- currentLayer
-  (executeBlock body >> pure Nothing) `Except.catchError` restoreFromReturn lid
-  where
-    restoreFromReturn lid val = do
-      _ <- splitLayers lid
-      pure val
+  (executeBlock body >> pure Nothing) `Except.catchError` pure
 
 executeBlock :: [Statement] -> Execute ()
 executeBlock [] = pure ()
-executeBlock ss =
-  withNewLayer $ do
-    prevIP <- State.gets envInstructionPointer
-    State.modify $ \env -> env {envInstructionPointer = 0}
-    let instructions = Array.listArray (0, length ss - 1) ss
-    startExecution instructions `finallyError`
-      State.modify (\env -> env {envInstructionPointer = prevIP})
+executeBlock ss = do
+  prevIP <- State.gets envInstructionPointer
+  State.modify $ \env -> env {envInstructionPointer = 0}
+  let instructions = Array.listArray (0, length ss - 1) ss
+  startExecution instructions `finallyError`
+    State.modify (\env -> env {envInstructionPointer = prevIP})
   where
     startExecution instructions =
       runReaderT executeStatement $
