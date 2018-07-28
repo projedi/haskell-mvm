@@ -8,7 +8,6 @@ module LinearSyntax
   , LabelID(..)
   , VarType(..)
   , VarDecl(..)
-  , Block(..)
   , Statement(..)
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
@@ -57,14 +56,8 @@ data Program = Program
   , programLastLabelID :: LabelID
   }
 
-newtype Block = Block
-  { blockStatements :: [Statement]
-  }
-
 data Statement
-  = StatementBlock Block
-  | StatementVarAlloc VarID
-  | StatementFunctionCall FunctionCall
+  = StatementFunctionCall FunctionCall
   | StatementAssign VarID
                     Expr
   | StatementAssignToPtr VarID
@@ -79,7 +72,8 @@ data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
-  , funDefBody :: Block
+  , funDefLocals :: [VarID]
+  , funDefBody :: [Statement]
   }
 
 data FunctionCall

@@ -171,12 +171,6 @@ withNewLayer m = do
 currentLayer :: Execute LayerID
 currentLayer = State.gets (length . envLayers)
 
-splitLayers :: LayerID -> Execute ()
-splitLayers lid = do
-  env <- State.get
-  let (_, _, newenv) = splitLayersInEnv env lid
-  State.put $ env {envLayers = newenv}
-
 runExecute :: Execute () -> IO ()
 runExecute m = do
   _ <- runStateT (runExceptT m) emptyEnv
@@ -216,7 +210,8 @@ nativeFunctionCall fdef vals = do
   res <-
     withNewLayer $ do
       generateAssignments (funDefParams fdef) vals
-      executeBlockWithReturn (funDefBody fdef)
+      mapM_ generateLocal (funDefLocals fdef)
+      executeFunctionBody (funDefBody fdef)
   case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
     (Just val, Just valtype)
@@ -271,17 +266,35 @@ generateAssignments (decl:decls) (val:vals) = do
   generateAssignments decls vals
 generateAssignments _ _ = error "Type mismatch"
 
+generateLocal :: VarID -> Execute ()
+generateLocal (VarID v) = do
+  Just vt <- State.gets (IntMap.lookup v . envVarTypes)
+  declareVariable (VarDecl vt (VarID v))
+
 evaluateArgs :: [Expr] -> Execute [Value]
 evaluateArgs = mapM evaluate
 
-executeBlockWithReturn :: Block -> Execute (Maybe Value)
-executeBlockWithReturn block = do
-  lid <- currentLayer
-  (executeBlock block >> pure Nothing) `Except.catchError` restoreFromReturn lid
+executeFunctionBody :: [Statement] -> Execute (Maybe Value)
+executeFunctionBody [] = pure Nothing
+executeFunctionBody ss = do
+  prevIP <- State.gets envInstructionPointer
+  State.modify $ \env -> env {envInstructionPointer = 0}
+  let instructions = Array.listArray (0, length ss - 1) ss
+  retValue <-
+    (startExecution instructions >> pure Nothing) `Except.catchError` pure
+  State.modify (\env -> env {envInstructionPointer = prevIP})
+  pure retValue
   where
-    restoreFromReturn lid val = do
-      _ <- splitLayers lid
-      pure val
+    startExecution instructions =
+      runReaderT executeStatement $
+      ConstEnv
+        { constEnvInstructions = instructions
+        , constEnvLabelMap = buildLabelMap $ Array.assocs instructions
+        }
+    buildLabelMap [] = IntMap.empty
+    buildLabelMap ((i, StatementLabel (LabelID lid)):is) =
+      IntMap.insert lid i $ buildLabelMap is
+    buildLabelMap (_:is) = buildLabelMap is
 
 functionReturn :: Maybe Value -> Execute ()
 functionReturn = Except.throwError
@@ -372,33 +385,6 @@ evaluateAsInt e = do
   ValueInt i <- evaluate e
   pure i
 
-finallyError :: (Except.MonadError e m) => m a -> m () -> m a
-finallyError action finallyAction = do
-  res <- action `Except.catchError` \e -> finallyAction >> Except.throwError e
-  finallyAction
-  pure res
-
-executeBlock :: Block -> Execute ()
-executeBlock Block {blockStatements = []} = pure ()
-executeBlock Block {blockStatements = ss} =
-  withNewLayer $ do
-    prevIP <- State.gets envInstructionPointer
-    State.modify $ \env -> env {envInstructionPointer = 0}
-    let instructions = Array.listArray (0, length ss - 1) ss
-    startExecution instructions `finallyError`
-      State.modify (\env -> env {envInstructionPointer = prevIP})
-  where
-    startExecution instructions =
-      runReaderT executeStatement $
-      ConstEnv
-        { constEnvInstructions = instructions
-        , constEnvLabelMap = buildLabelMap $ Array.assocs instructions
-        }
-    buildLabelMap [] = IntMap.empty
-    buildLabelMap ((i, StatementLabel (LabelID lid)):is) =
-      IntMap.insert lid i $ buildLabelMap is
-    buildLabelMap (_:is) = buildLabelMap is
-
 data ConstEnv = ConstEnv
   { constEnvInstructions :: Array Int Statement
   , constEnvLabelMap :: IntMap Int
@@ -423,10 +409,6 @@ executeStatement = do
     executeStatement
 
 execute :: Statement -> ExecuteStatement ()
-execute (StatementBlock block) = Trans.lift $ executeBlock block
-execute (StatementVarAlloc (VarID v)) = do
-  Just vt <- State.gets (IntMap.lookup v . envVarTypes)
-  Trans.lift $ declareVariable (VarDecl vt (VarID v))
 execute (StatementFunctionCall fcall) =
   Trans.lift (functionCall fcall) >> pure ()
 execute (StatementAssign var e) = do

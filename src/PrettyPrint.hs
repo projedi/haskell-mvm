@@ -48,7 +48,7 @@ printFunctions funs =
   "Functions: " ++
   IntMap.foldrWithKey
     (\key val rest ->
-       rest ++ "\n" ++ show key ++ ": " ++ prettyPrintFunctionDef 0 val)
+       rest ++ "\n" ++ show key ++ ": " ++ prettyPrintFunctionDef val)
     ""
     funs
 
@@ -179,28 +179,25 @@ prettyPrintStatement n (StatementAssignToPtr var expr) =
 prettyPrintStatement n (StatementReturn Nothing) = indent n "return;"
 prettyPrintStatement n (StatementReturn (Just e)) =
   indent n ("return " ++ prettyPrintExpr 0 e ++ ";")
-prettyPrintStatement n (StatementBlock stmts) = prettyPrintBlock n stmts
-prettyPrintStatement n (StatementVarAlloc v) =
-  indent n ("alloc " ++ show v ++ ";")
 prettyPrintStatement n (StatementLabel l) = indent n (show l ++ ": nop;")
 prettyPrintStatement n (StatementJump l) = indent n ("jmp " ++ show l ++ ";")
 prettyPrintStatement n (StatementJumpIfZero e l) =
   indent n ("jz (" ++ prettyPrintExpr 0 e ++ ") " ++ show l ++ ";")
 
-prettyPrintBlock :: Int -> Block -> String
-prettyPrintBlock n block =
-  indent n "{\n" ++
-  printProgram (n + 1) (blockStatements block) ++ "\n" ++ indent n "}"
+prettyPrintBody :: [Statement] -> String
+prettyPrintBody body = "{\n" ++ printProgram 1 body ++ "\n}"
 
-prettyPrintFunctionDef :: Int -> FunctionDef -> String
-prettyPrintFunctionDef n fdef =
-  indent
-    n
-    (prettyPrintSimple (funDefRetType fdef) ++
-     " " ++
-     prettyPrintSimple (funDefName fdef) ++
-     paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef)))) ++
-  "\n" ++ prettyPrintBlock n (funDefBody fdef)
+prettyPrintFunctionDef :: FunctionDef -> String
+prettyPrintFunctionDef fdef =
+  prettyPrintSimple (funDefRetType fdef) ++
+  " " ++
+  prettyPrintSimple (funDefName fdef) ++
+  paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef))) ++
+  "\n" ++
+  List.intercalate
+    "\n"
+    (map (\v -> "local " ++ prettyPrintSimple v) (funDefLocals fdef)) ++
+  "\n" ++ prettyPrintBody (funDefBody fdef)
 
 printProgram :: Int -> [Statement] -> String
 printProgram n stmts =

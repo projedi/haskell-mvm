@@ -4,7 +4,6 @@ module SyntaxLinearizer
 
 import Control.Monad.State (State, runState)
 import qualified Control.Monad.State as State
-import qualified Control.Monad.Trans as Trans
 import Control.Monad.Writer (WriterT, execWriterT)
 import qualified Control.Monad.Writer as Writer
 
@@ -28,10 +27,11 @@ linearize p =
   where
     (fs, finalEnv) =
       runState (mapM linearizeFunctionDef $ SimplifiedSyntax.programFunctions p) $
-      Env {lastLabelID = LinearSyntax.LabelID 0}
+      Env {lastLabelID = LinearSyntax.LabelID 0, foundVariables = []}
 
 data Env = Env
   { lastLabelID :: LinearSyntax.LabelID
+  , foundVariables :: [LinearSyntax.VarID]
   }
 
 type Linearizer = State Env
@@ -39,20 +39,20 @@ type Linearizer = State Env
 linearizeFunctionDef ::
      SimplifiedSyntax.FunctionDef -> Linearizer LinearSyntax.FunctionDef
 linearizeFunctionDef f = do
-  body <- linearizeBlock $ SimplifiedSyntax.funDefBody f
+  State.modify $ \env -> env {foundVariables = []}
+  body <- execWriterT $ linearizeBlock $ SimplifiedSyntax.funDefBody f
+  locals <- State.gets foundVariables
   pure $
     LinearSyntax.FunctionDef
       { LinearSyntax.funDefRetType = SimplifiedSyntax.funDefRetType f
       , LinearSyntax.funDefName = SimplifiedSyntax.funDefName f
       , LinearSyntax.funDefParams = SimplifiedSyntax.funDefParams f
+      , LinearSyntax.funDefLocals = locals
       , LinearSyntax.funDefBody = body
       }
 
-linearizeBlock :: SimplifiedSyntax.Block -> Linearizer LinearSyntax.Block
-linearizeBlock b = do
-  ss <-
-    execWriterT (mapM_ linearizeStatement $ SimplifiedSyntax.blockStatements b)
-  pure $ LinearSyntax.Block {LinearSyntax.blockStatements = ss}
+linearizeBlock :: SimplifiedSyntax.Block -> StatementLinearizer ()
+linearizeBlock = mapM_ linearizeStatement . SimplifiedSyntax.blockStatements
 
 type StatementLinearizer = WriterT [LinearSyntax.Statement] Linearizer
 
@@ -68,11 +68,9 @@ newLabel = do
     inc (LinearSyntax.LabelID lid) = LinearSyntax.LabelID (lid + 1)
 
 linearizeStatement :: SimplifiedSyntax.Statement -> StatementLinearizer ()
-linearizeStatement (SimplifiedSyntax.StatementBlock b) = do
-  b' <- Trans.lift $ linearizeBlock b
-  addStatement $ LinearSyntax.StatementBlock b'
+linearizeStatement (SimplifiedSyntax.StatementBlock b) = linearizeBlock b
 linearizeStatement (SimplifiedSyntax.StatementVarAlloc v) =
-  addStatement $ LinearSyntax.StatementVarAlloc v
+  State.modify $ \env -> env {foundVariables = v : foundVariables env}
 linearizeStatement (SimplifiedSyntax.StatementFunctionCall fcall) = do
   fcall' <- linearizeFunctionCall fcall
   addStatement $ LinearSyntax.StatementFunctionCall fcall'
@@ -82,8 +80,7 @@ linearizeStatement (SimplifiedSyntax.StatementWhile e b) = do
   addStatement $ LinearSyntax.StatementLabel loopBegin
   e' <- linearizeExpr e
   addStatement $ LinearSyntax.StatementJumpIfZero e' loopEnd
-  b' <- Trans.lift $ linearizeBlock b
-  addStatement $ LinearSyntax.StatementBlock b'
+  linearizeBlock b
   addStatement $ LinearSyntax.StatementJump loopBegin
   addStatement $ LinearSyntax.StatementLabel loopEnd
 linearizeStatement (SimplifiedSyntax.StatementAssign v e) = do
@@ -97,12 +94,10 @@ linearizeStatement (SimplifiedSyntax.StatementIfElse e tb fb) = do
   elseLabel <- newLabel
   endLabel <- newLabel
   addStatement $ LinearSyntax.StatementJumpIfZero e' elseLabel
-  tb' <- Trans.lift $ linearizeBlock tb
-  addStatement $ LinearSyntax.StatementBlock tb'
+  linearizeBlock tb
   addStatement $ LinearSyntax.StatementJump endLabel
   addStatement $ LinearSyntax.StatementLabel elseLabel
-  fb' <- Trans.lift $ linearizeBlock fb
-  addStatement $ LinearSyntax.StatementBlock fb'
+  linearizeBlock fb
   addStatement $ LinearSyntax.StatementLabel endLabel
 linearizeStatement (SimplifiedSyntax.StatementReturn Nothing) =
   addStatement $ LinearSyntax.StatementReturn Nothing
