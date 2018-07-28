@@ -216,6 +216,7 @@ nativeFunctionCall fdef vals = do
   res <-
     withNewLayer $ do
       generateAssignments (funDefParams fdef) vals
+      mapM_ generateLocal (funDefLocals fdef)
       executeBlockWithReturn (funDefBody fdef)
   case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
@@ -270,6 +271,11 @@ generateAssignments (decl:decls) (val:vals) = do
   generateAssignment decl val
   generateAssignments decls vals
 generateAssignments _ _ = error "Type mismatch"
+
+generateLocal :: VarID -> Execute ()
+generateLocal (VarID v) = do
+  Just vt <- State.gets (IntMap.lookup v . envVarTypes)
+  declareVariable (VarDecl vt (VarID v))
 
 evaluateArgs :: [Expr] -> Execute [Value]
 evaluateArgs = mapM evaluate
@@ -424,9 +430,6 @@ executeStatement = do
 
 execute :: Statement -> ExecuteStatement ()
 execute (StatementBlock block) = Trans.lift $ executeBlock block
-execute (StatementVarAlloc (VarID v)) = do
-  Just vt <- State.gets (IntMap.lookup v . envVarTypes)
-  Trans.lift $ declareVariable (VarDecl vt (VarID v))
 execute (StatementFunctionCall fcall) =
   Trans.lift (functionCall fcall) >> pure ()
 execute (StatementAssign var e) = do

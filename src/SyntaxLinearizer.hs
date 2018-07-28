@@ -28,10 +28,11 @@ linearize p =
   where
     (fs, finalEnv) =
       runState (mapM linearizeFunctionDef $ SimplifiedSyntax.programFunctions p) $
-      Env {lastLabelID = LinearSyntax.LabelID 0}
+      Env {lastLabelID = LinearSyntax.LabelID 0, foundVariables = []}
 
 data Env = Env
   { lastLabelID :: LinearSyntax.LabelID
+  , foundVariables :: [LinearSyntax.VarID]
   }
 
 type Linearizer = State Env
@@ -39,12 +40,15 @@ type Linearizer = State Env
 linearizeFunctionDef ::
      SimplifiedSyntax.FunctionDef -> Linearizer LinearSyntax.FunctionDef
 linearizeFunctionDef f = do
+  State.modify $ \env -> env {foundVariables = []}
   body <- linearizeBlock $ SimplifiedSyntax.funDefBody f
+  locals <- State.gets foundVariables
   pure $
     LinearSyntax.FunctionDef
       { LinearSyntax.funDefRetType = SimplifiedSyntax.funDefRetType f
       , LinearSyntax.funDefName = SimplifiedSyntax.funDefName f
       , LinearSyntax.funDefParams = SimplifiedSyntax.funDefParams f
+      , LinearSyntax.funDefLocals = locals
       , LinearSyntax.funDefBody = body
       }
 
@@ -72,7 +76,7 @@ linearizeStatement (SimplifiedSyntax.StatementBlock b) = do
   b' <- Trans.lift $ linearizeBlock b
   addStatement $ LinearSyntax.StatementBlock b'
 linearizeStatement (SimplifiedSyntax.StatementVarAlloc v) =
-  addStatement $ LinearSyntax.StatementVarAlloc v
+  State.modify $ \env -> env {foundVariables = v : foundVariables env}
 linearizeStatement (SimplifiedSyntax.StatementFunctionCall fcall) = do
   fcall' <- linearizeFunctionCall fcall
   addStatement $ LinearSyntax.StatementFunctionCall fcall'

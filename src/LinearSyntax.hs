@@ -63,7 +63,6 @@ newtype Block = Block
 
 data Statement
   = StatementBlock Block
-  | StatementVarAlloc VarID
   | StatementFunctionCall FunctionCall
   | StatementAssign VarID
                     Expr
@@ -79,6 +78,7 @@ data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
+  , funDefLocals :: [VarID]
   , funDefBody :: Block
   }
 
