@@ -2,14 +2,18 @@ module SyntaxLinearizer
   ( linearize
   ) where
 
+import Control.Monad.State (State, runState)
+import qualified Control.Monad.Trans as Trans
+import Control.Monad.Writer (WriterT, execWriterT)
+import qualified Control.Monad.Writer as Writer
+
 import qualified LinearSyntax
 import qualified SimplifiedSyntax
 
 linearize :: SimplifiedSyntax.Program -> LinearSyntax.Program
 linearize p =
   LinearSyntax.Program
-    { LinearSyntax.programFunctions =
-        linearizeFunctionDef <$> SimplifiedSyntax.programFunctions p
+    { LinearSyntax.programFunctions = fs
     , LinearSyntax.programLibraries = SimplifiedSyntax.programLibraries p
     , LinearSyntax.programForeignFunctions =
         SimplifiedSyntax.programForeignFunctions p
@@ -19,74 +23,104 @@ linearize p =
     , LinearSyntax.programLastVarID = SimplifiedSyntax.programLastVarID p
     , LinearSyntax.programLastConstID = SimplifiedSyntax.programLastConstID p
     }
+  where
+    (fs, _) =
+      runState (mapM linearizeFunctionDef $ SimplifiedSyntax.programFunctions p) $
+      Env
 
-linearizeFunctionDef :: SimplifiedSyntax.FunctionDef -> LinearSyntax.FunctionDef
-linearizeFunctionDef f =
-  LinearSyntax.FunctionDef
-    { LinearSyntax.funDefRetType = SimplifiedSyntax.funDefRetType f
-    , LinearSyntax.funDefName = SimplifiedSyntax.funDefName f
-    , LinearSyntax.funDefParams = SimplifiedSyntax.funDefParams f
-    , LinearSyntax.funDefBody = linearizeBlock $ SimplifiedSyntax.funDefBody f
-    }
+data Env =
+  Env
 
-linearizeBlock :: SimplifiedSyntax.Block -> LinearSyntax.Block
-linearizeBlock b =
-  LinearSyntax.Block
-    { LinearSyntax.blockStatements =
-        linearizeStatement <$> SimplifiedSyntax.blockStatements b
-    }
+type Linearizer = State Env
 
-linearizeStatement :: SimplifiedSyntax.Statement -> LinearSyntax.Statement
-linearizeStatement (SimplifiedSyntax.StatementBlock b) =
-  LinearSyntax.StatementBlock $ linearizeBlock b
+linearizeFunctionDef ::
+     SimplifiedSyntax.FunctionDef -> Linearizer LinearSyntax.FunctionDef
+linearizeFunctionDef f = do
+  body <- linearizeBlock $ SimplifiedSyntax.funDefBody f
+  pure $
+    LinearSyntax.FunctionDef
+      { LinearSyntax.funDefRetType = SimplifiedSyntax.funDefRetType f
+      , LinearSyntax.funDefName = SimplifiedSyntax.funDefName f
+      , LinearSyntax.funDefParams = SimplifiedSyntax.funDefParams f
+      , LinearSyntax.funDefBody = body
+      }
+
+linearizeBlock :: SimplifiedSyntax.Block -> Linearizer LinearSyntax.Block
+linearizeBlock b = do
+  ss <-
+    execWriterT (mapM_ linearizeStatement $ SimplifiedSyntax.blockStatements b)
+  pure $ LinearSyntax.Block {LinearSyntax.blockStatements = ss}
+
+type StatementLinearizer = WriterT [LinearSyntax.Statement] Linearizer
+
+addStatement :: LinearSyntax.Statement -> StatementLinearizer ()
+addStatement s = Writer.tell [s]
+
+linearizeStatement :: SimplifiedSyntax.Statement -> StatementLinearizer ()
+linearizeStatement (SimplifiedSyntax.StatementBlock b) = do
+  b' <- Trans.lift $ linearizeBlock b
+  addStatement $ LinearSyntax.StatementBlock b'
 linearizeStatement (SimplifiedSyntax.StatementVarAlloc v) =
-  LinearSyntax.StatementVarAlloc v
-linearizeStatement (SimplifiedSyntax.StatementFunctionCall fcall) =
-  LinearSyntax.StatementFunctionCall $ linearizeFunctionCall fcall
-linearizeStatement (SimplifiedSyntax.StatementWhile e b) =
-  LinearSyntax.StatementWhile (linearizeExpr e) (linearizeBlock b)
-linearizeStatement (SimplifiedSyntax.StatementAssign v e) =
-  LinearSyntax.StatementAssign v (linearizeExpr e)
-linearizeStatement (SimplifiedSyntax.StatementAssignToPtr v e) =
-  LinearSyntax.StatementAssignToPtr v (linearizeExpr e)
-linearizeStatement (SimplifiedSyntax.StatementIfElse e tb fb) =
-  LinearSyntax.StatementIfElse
-    (linearizeExpr e)
-    (linearizeBlock tb)
-    (linearizeBlock fb)
-linearizeStatement (SimplifiedSyntax.StatementReturn me) =
-  LinearSyntax.StatementReturn (linearizeExpr <$> me)
+  addStatement $ LinearSyntax.StatementVarAlloc v
+linearizeStatement (SimplifiedSyntax.StatementFunctionCall fcall) = do
+  fcall' <- linearizeFunctionCall fcall
+  addStatement $ LinearSyntax.StatementFunctionCall fcall'
+linearizeStatement (SimplifiedSyntax.StatementWhile e b) = do
+  e' <- linearizeExpr e
+  b' <- Trans.lift $ linearizeBlock b
+  addStatement $ LinearSyntax.StatementWhile e' b'
+linearizeStatement (SimplifiedSyntax.StatementAssign v e) = do
+  e' <- linearizeExpr e
+  addStatement $ LinearSyntax.StatementAssign v e'
+linearizeStatement (SimplifiedSyntax.StatementAssignToPtr v e) = do
+  e' <- linearizeExpr e
+  addStatement $ LinearSyntax.StatementAssignToPtr v e'
+linearizeStatement (SimplifiedSyntax.StatementIfElse e tb fb) = do
+  e' <- linearizeExpr e
+  tb' <- Trans.lift $ linearizeBlock tb
+  fb' <- Trans.lift $ linearizeBlock fb
+  addStatement $ LinearSyntax.StatementIfElse e' tb' fb'
+linearizeStatement (SimplifiedSyntax.StatementReturn Nothing) =
+  addStatement $ LinearSyntax.StatementReturn Nothing
+linearizeStatement (SimplifiedSyntax.StatementReturn (Just e)) = do
+  e' <- linearizeExpr e
+  addStatement $ LinearSyntax.StatementReturn (Just e')
 
 linearizeFunctionCall ::
-     SimplifiedSyntax.FunctionCall -> LinearSyntax.FunctionCall
-linearizeFunctionCall fcall@SimplifiedSyntax.NativeFunctionCall {} =
-  LinearSyntax.NativeFunctionCall
-    { LinearSyntax.nativeFunCallName = SimplifiedSyntax.nativeFunCallName fcall
-    , LinearSyntax.nativeFunCallRetType =
-        SimplifiedSyntax.nativeFunCallRetType fcall
-    , LinearSyntax.nativeFunCallArgs =
-        linearizeExpr <$> SimplifiedSyntax.nativeFunCallArgs fcall
-    }
-linearizeFunctionCall fcall@SimplifiedSyntax.ForeignFunctionCall {} =
-  LinearSyntax.ForeignFunctionCall
-    { LinearSyntax.foreignFunCallName =
-        SimplifiedSyntax.foreignFunCallName fcall
-    , LinearSyntax.foreignFunCallRetType =
-        SimplifiedSyntax.foreignFunCallRetType fcall
-    , LinearSyntax.foreignFunCallArgs =
-        linearizeExpr <$> SimplifiedSyntax.foreignFunCallArgs fcall
-    }
+     SimplifiedSyntax.FunctionCall
+  -> StatementLinearizer LinearSyntax.FunctionCall
+linearizeFunctionCall fcall@SimplifiedSyntax.NativeFunctionCall {} = do
+  args <- mapM linearizeExpr $ SimplifiedSyntax.nativeFunCallArgs fcall
+  pure $
+    LinearSyntax.NativeFunctionCall
+      { LinearSyntax.nativeFunCallName =
+          SimplifiedSyntax.nativeFunCallName fcall
+      , LinearSyntax.nativeFunCallRetType =
+          SimplifiedSyntax.nativeFunCallRetType fcall
+      , LinearSyntax.nativeFunCallArgs = args
+      }
+linearizeFunctionCall fcall@SimplifiedSyntax.ForeignFunctionCall {} = do
+  args <- mapM linearizeExpr $ SimplifiedSyntax.foreignFunCallArgs fcall
+  pure $
+    LinearSyntax.ForeignFunctionCall
+      { LinearSyntax.foreignFunCallName =
+          SimplifiedSyntax.foreignFunCallName fcall
+      , LinearSyntax.foreignFunCallRetType =
+          SimplifiedSyntax.foreignFunCallRetType fcall
+      , LinearSyntax.foreignFunCallArgs = args
+      }
 
-linearizeExpr :: SimplifiedSyntax.Expr -> LinearSyntax.Expr
+linearizeExpr :: SimplifiedSyntax.Expr -> StatementLinearizer LinearSyntax.Expr
 linearizeExpr (SimplifiedSyntax.ExprFunctionCall fcall) =
-  LinearSyntax.ExprFunctionCall (linearizeFunctionCall fcall)
-linearizeExpr (SimplifiedSyntax.ExprVar t v) = LinearSyntax.ExprVar t v
+  LinearSyntax.ExprFunctionCall <$> linearizeFunctionCall fcall
+linearizeExpr (SimplifiedSyntax.ExprVar t v) = pure $ LinearSyntax.ExprVar t v
 linearizeExpr (SimplifiedSyntax.ExprDereference t v) =
-  LinearSyntax.ExprDereference t v
+  pure $ LinearSyntax.ExprDereference t v
 linearizeExpr (SimplifiedSyntax.ExprAddressOf t v) =
-  LinearSyntax.ExprAddressOf t v
-linearizeExpr (SimplifiedSyntax.ExprConst t c) = LinearSyntax.ExprConst t c
+  pure $ LinearSyntax.ExprAddressOf t v
+linearizeExpr (SimplifiedSyntax.ExprConst t c) =
+  pure $ LinearSyntax.ExprConst t c
 linearizeExpr (SimplifiedSyntax.ExprBinOp op lhs rhs) =
-  LinearSyntax.ExprBinOp op (linearizeExpr lhs) (linearizeExpr rhs)
+  LinearSyntax.ExprBinOp op <$> linearizeExpr lhs <*> linearizeExpr rhs
 linearizeExpr (SimplifiedSyntax.ExprUnOp op e) =
-  LinearSyntax.ExprUnOp op (linearizeExpr e)
+  LinearSyntax.ExprUnOp op <$> linearizeExpr e
