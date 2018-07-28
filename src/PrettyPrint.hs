@@ -116,9 +116,9 @@ prettyPrintUnOp UnIntToFloat = "(double)"
 
 prettyPrintExpr :: Int -> Expr -> String
 prettyPrintExpr _ (ExprFunctionCall fcall) = prettyPrintSimple fcall
-prettyPrintExpr _ (ExprVar _ varName) = prettyPrintSimple varName
-prettyPrintExpr _ (ExprDereference _ varName) = "*" ++ prettyPrintSimple varName
-prettyPrintExpr _ (ExprAddressOf _ varName) = "&" ++ prettyPrintSimple varName
+prettyPrintExpr _ (ExprVar _ varname) = prettyPrintSimple varname
+prettyPrintExpr _ (ExprDereference _ varname) = "*" ++ prettyPrintSimple varname
+prettyPrintExpr _ (ExprAddressOf _ varname) = "&" ++ prettyPrintSimple varname
 prettyPrintExpr _ (ExprConst _ c) = show c
 prettyPrintExpr n (ExprUnOp op e) =
   parenIfNeeded n (unOpPrec op) $
