@@ -13,7 +13,6 @@ import qualified Control.Monad.Trans as Trans
 import Data.Array (Array)
 import qualified Data.Array as Array
 import Data.Bits
-import Data.Foldable (asum)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.List as List
@@ -36,139 +35,62 @@ eval p = do
       (programVariables p)
   forM_ libhandles dlclose
 
-type LayerID = Int
-
-newtype Layer = Layer
-  { varEnv :: IntMap Value
-  }
-
-emptyLayer :: Layer
-emptyLayer = Layer {varEnv = IntMap.empty}
-
-readVariableFromLayer :: Layer -> VarID -> Maybe Value
-readVariableFromLayer l (VarID vid) = IntMap.lookup vid (varEnv l)
-
-writeVariableToLayer :: Layer -> VarID -> Value -> Maybe Layer
-writeVariableToLayer l (VarID vid) value =
-  let (moldvalue, newvarenv) =
-        IntMap.insertLookupWithKey (\_ a _ -> a) vid value (varEnv l)
-   in case moldvalue of
-        Just oldValue
-          | typeIs value (typeof oldValue) -> Just $ l {varEnv = newvarenv}
-        _ -> Nothing
-
-addVariableToLayer :: Layer -> VarID -> VarType -> Maybe Layer
-addVariableToLayer l (VarID vid) vtype =
-  let (oldvalue, newvarenv) =
-        IntMap.insertLookupWithKey
-          (\_ a _ -> a)
-          vid
-          (defaultValueFromType vtype)
-          (varEnv l)
-   in maybe (Just $ l {varEnv = newvarenv}) (const Nothing) oldvalue
-
 data Env = Env
-  { envLayers :: [Layer]
-  , envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
+  { envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   , envFunctions :: IntMap FunctionDef
   , envConsts :: IntMap Value
   , envVarTypes :: IntMap VarType
-  , envInstructionPointer :: Int
+  , envRIP :: Int
+  , envRSP :: Int
+  , envStack :: [Value]
+  , envVarMap :: IntMap Int -- displacements to RBP.
+  , envRBP :: Int
   }
 
 emptyEnv :: Env
 emptyEnv =
   Env
-    { envLayers = []
-    , envForeignFunctions = IntMap.empty
+    { envForeignFunctions = IntMap.empty
     , envFunctions = IntMap.empty
     , envConsts = IntMap.empty
     , envVarTypes = IntMap.empty
-    , envInstructionPointer = 0
+    , envRIP = 0
+    , envRSP = 0
+    , envStack = []
+    , envVarMap = IntMap.empty
+    , envRBP = 0
     }
 
-modifyingLayer :: (Layer -> Maybe Layer) -> [Layer] -> Maybe [Layer]
-modifyingLayer _ [] = Nothing
-modifyingLayer f (l:ls) =
-  case f l of
-    Nothing -> (l :) <$> modifyingLayer f ls
-    Just l' -> Just (l' : ls)
+readVariableFromEnv :: Env -> VarID -> Value
+readVariableFromEnv env (VarID vid) =
+  let d = (envVarMap env) IntMap.! vid
+  in (envStack env) !! (envRBP env + d)
 
-readVariableFromEnv :: Env -> VarID -> Maybe Value
-readVariableFromEnv Env {envLayers = curlayer:otherlayers} vname =
-  asum (map (`readVariableFromLayer` vname) (curlayer : otherlayers))
-readVariableFromEnv _ _ = error "Env broke"
+writeVariableToEnv :: Env -> VarID -> Value -> Env
+writeVariableToEnv env (VarID vid) val =
+  let d = (envVarMap env) IntMap.! vid
+      (before, _:after) = List.splitAt (envRBP env + d) $ envStack env
+  in env {envStack = before ++ [val] ++ after}
 
-writeVariableToEnv :: Env -> VarID -> Value -> Maybe Env
-writeVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname val =
-  case modifyingLayer
-         (\l -> writeVariableToLayer l vname val)
-         (curlayer : otherlayers) of
-    Just (curlayer':otherlayers') ->
-      Just (env {envLayers = curlayer' : otherlayers'})
-    Just _ -> error "Impossible"
-    Nothing -> Nothing
-writeVariableToEnv _ _ _ = error "Env broke"
+readConstantFromEnv :: Env -> ConstID -> Value
+readConstantFromEnv env (ConstID cid) = (envConsts env) IntMap.! cid
 
-addVariableToEnv :: Env -> VarID -> VarType -> Maybe Env
-addVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname vtype =
-  case addVariableToLayer curlayer vname vtype of
-    Nothing -> Nothing
-    Just l' -> Just (env {envLayers = l' : otherlayers})
-addVariableToEnv _ _ _ = error "Env broke"
-
-readConstantFromEnv :: Env -> ConstID -> Maybe Value
-readConstantFromEnv env (ConstID cid) = IntMap.lookup cid (envConsts env)
-
-splitLayersInEnv :: Env -> LayerID -> ([Layer], Layer, [Layer])
-splitLayersInEnv Env {envLayers = ls} lid =
-  let (before, target:after) = List.splitAt lid $ List.reverse ls
-   in (List.reverse after, target, List.reverse before)
-
-dereferenceInEnv :: Env -> Value -> Maybe Value
-dereferenceInEnv env (ValuePtr _ [lid, vid]) =
-  let (_, target, _) = splitLayersInEnv env lid
-   in readVariableFromLayer target (VarID vid)
+dereferenceInEnv :: Env -> Value -> Value
+dereferenceInEnv env (ValuePtr _ [d]) = (envStack env) !! d
 dereferenceInEnv _ _ = error "Type mismatch"
 
-addressOfInEnv :: Env -> VarID -> Maybe Value
-addressOfInEnv Env {envLayers = layers} name@(VarID vid) = go layers
-  where
-    go [] = Nothing
-    go (l:ls) =
-      case readVariableFromLayer l name of
-        Nothing -> go ls
-        Just v -> Just $ ValuePtr (typeof v) [length ls, vid]
+addressOfInEnv :: Env -> VarID -> Value
+addressOfInEnv env (VarID vid) =
+  let d = (envVarMap env) IntMap.! vid
+  in ValuePtr (envVarTypes env IntMap.! vid) [d + envRBP env]
 
-writeToPtrInEnv :: Env -> Value -> Value -> Maybe Env
-writeToPtrInEnv env (ValuePtr _ [lid, vid]) val =
-  let (after, target, before) = splitLayersInEnv env lid
-   in case writeVariableToLayer target (VarID vid) val of
-        Nothing -> Nothing
-        Just target' -> Just $ env {envLayers = after ++ [target'] ++ before}
+writeToPtrInEnv :: Env -> Value -> Value -> Env
+writeToPtrInEnv env (ValuePtr _ [d]) val =
+  let (stackBefore, _:stackAfter) = List.splitAt d $ envStack env
+   in env {envStack = stackBefore ++ [val] ++ stackAfter}
 writeToPtrInEnv _ _ _ = error "Type mismatch"
 
 type Execute = ExceptT (Maybe Value) (StateT Env IO)
-
-withNewLayer :: Execute a -> Execute a
-withNewLayer m = do
-  lid <- currentLayer
-  newLayer
-  res <- m
-  dropLayer
-  newLid <- currentLayer
-  when (lid /= newLid) $ error "Scoping broke."
-  pure res
-  where
-    newLayer =
-      State.modify
-        (\env@Env {envLayers = layers} -> env {envLayers = emptyLayer : layers})
-    dropLayer =
-      State.modify
-        (\env@Env {envLayers = layers} -> env {envLayers = tail layers})
-
-currentLayer :: Execute LayerID
-currentLayer = State.gets (length . envLayers)
 
 runExecute :: Execute () -> IO ()
 runExecute m = do
@@ -198,24 +120,55 @@ startExecute foreignFuns nativeFuns consts vars = do
       Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
       pure (fdecl, f)
 
-declareVariable :: VarDecl -> Execute ()
-declareVariable (VarDecl vtype vname) = do
+pushOnStack :: Value -> Execute ()
+pushOnStack v =
+  State.modify $ \env ->
+    env {envRSP = envRSP env + 1, envStack = envStack env ++ [v]}
+
+popFromStack :: Execute Value
+popFromStack = do
   env <- State.get
-  let Just env' = addVariableToEnv env vname vtype
-  State.put env'
+  let (before, [target]) =
+        List.splitAt (length (envStack env) - 1) (envStack env)
+  State.put $ env {envRSP = envRSP env - 1, envStack = before}
+  pure target
+
+declareVariable :: VarDecl -> Execute ()
+declareVariable (VarDecl vtype (VarID vid)) = do
+  State.modify $ \env ->
+    env
+      {envVarMap = IntMap.insert vid (envRSP env - envRBP env) $ envVarMap env}
+  pushOnStack (defaultValueFromType vtype)
+
+undeclareVariable :: VarDecl -> Execute ()
+undeclareVariable _ = popFromStack >> pure ()
 
 nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)
 nativeFunctionCall fdef vals = do
   res <-
-    withNewLayer $ do
-      generateAssignments (funDefParams fdef) vals
-      mapM_ generateLocal (funDefLocals fdef)
-      executeFunctionBody (funDefBody fdef)
+    do rbp <- State.gets envRBP
+       pushOnStack (ValueInt $ fromIntegral rbp)
+       rsp <- State.gets envRSP
+       State.modify $ \env -> env {envRBP = rsp}
+       localDecls <- mapM varIDToDecl (funDefLocals fdef)
+       let allLocals = funDefParams fdef ++ localDecls
+       mapM_ declareVariable allLocals
+       generateAssignments (funDefParams fdef) vals
+       mv <- executeFunctionBody (funDefBody fdef)
+       mapM_ undeclareVariable (reverse allLocals)
+       ValueInt oldRBP <- popFromStack
+       State.modify $ \env -> env {envRBP = fromIntegral oldRBP}
+       pure mv
   case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
     (Just val, Just valtype)
       | typeIs val valtype -> pure $ Just val
     _ -> error "Type mismatch"
+  where
+    varIDToDecl :: VarID -> Execute VarDecl
+    varIDToDecl (VarID v) = do
+      t <- State.gets ((IntMap.! v) . envVarTypes)
+      pure $ VarDecl t (VarID v)
 
 foreignFunctionCall ::
      Maybe VarType
@@ -253,22 +206,12 @@ functionCall NativeFunctionCall { nativeFunCallName = (FunID fid)
   Just f <- State.gets (IntMap.lookup fid . envFunctions)
   nativeFunctionCall f vals
 
-generateAssignment :: VarDecl -> Value -> Execute ()
-generateAssignment decl@(VarDecl _ name) val = do
-  declareVariable decl
-  writeVariable name val
-
 generateAssignments :: [VarDecl] -> [Value] -> Execute ()
 generateAssignments [] [] = pure ()
-generateAssignments (decl:decls) (val:vals) = do
-  generateAssignment decl val
+generateAssignments ((VarDecl _ name):decls) (val:vals) = do
+  writeVariable name val
   generateAssignments decls vals
 generateAssignments _ _ = error "Type mismatch"
-
-generateLocal :: VarID -> Execute ()
-generateLocal (VarID v) = do
-  Just vt <- State.gets (IntMap.lookup v . envVarTypes)
-  declareVariable (VarDecl vt (VarID v))
 
 evaluateArgs :: [Var] -> Execute [Value]
 evaluateArgs = mapM (readVariable . varName)
@@ -276,12 +219,12 @@ evaluateArgs = mapM (readVariable . varName)
 executeFunctionBody :: [Statement] -> Execute (Maybe Value)
 executeFunctionBody [] = pure Nothing
 executeFunctionBody ss = do
-  prevIP <- State.gets envInstructionPointer
-  State.modify $ \env -> env {envInstructionPointer = 0}
+  prevIP <- State.gets envRIP
+  State.modify $ \env -> env {envRIP = 0}
   let instructions = Array.listArray (0, length ss - 1) ss
   retValue <-
     (startExecution instructions >> pure Nothing) `Except.catchError` pure
-  State.modify (\env -> env {envInstructionPointer = prevIP})
+  State.modify (\env -> env {envRIP = prevIP})
   pure retValue
   where
     startExecution instructions =
@@ -299,40 +242,28 @@ functionReturn :: Maybe Value -> Execute ()
 functionReturn = Except.throwError
 
 readVariable :: VarID -> Execute Value
-readVariable name = do
-  env <- State.get
-  let Just val = readVariableFromEnv env name
-  pure val
+readVariable name =
+  State.gets $ \env -> readVariableFromEnv env name
 
 writeVariable :: VarID -> Value -> Execute ()
-writeVariable name val = do
-  env <- State.get
-  let Just env' = writeVariableToEnv env name val
-  State.put env'
+writeVariable name val =
+  State.modify $ \env -> writeVariableToEnv env name val
 
 readConstant :: ConstID -> Execute Value
-readConstant name = do
-  env <- State.get
-  let Just val = readConstantFromEnv env name
-  pure val
+readConstant name =
+  State.gets $ \env -> readConstantFromEnv env name
 
 addressOf :: VarID -> Execute Value
-addressOf name = do
-  env <- State.get
-  let Just val = addressOfInEnv env name
-  pure val
+addressOf name =
+  State.gets $ \env -> addressOfInEnv env name
 
 dereference :: Value -> Execute Value
-dereference ptr = do
-  env <- State.get
-  let Just val = dereferenceInEnv env ptr
-  pure val
+dereference ptr =
+  State.gets $ \env -> dereferenceInEnv env ptr
 
 writeToPtr :: Value -> Value -> Execute ()
-writeToPtr ptr val = do
-  env <- State.get
-  let Just env' = writeToPtrInEnv env ptr val
-  State.put env'
+writeToPtr ptr val =
+  State.modify $ \env -> writeToPtrInEnv env ptr val
 
 evaluateUnOp :: UnOp -> (Value -> Value)
 evaluateUnOp UnNeg = negate
@@ -390,17 +321,17 @@ type ExecuteStatement = ReaderT ConstEnv Execute
 jump :: LabelID -> ExecuteStatement ()
 jump (LabelID lid) = do
   ip <- Reader.asks ((IntMap.! lid) . constEnvLabelMap)
-  State.modify $ \env -> env {envInstructionPointer = ip - 1}
+  State.modify $ \env -> env {envRIP = ip - 1}
 
 executeStatement :: ExecuteStatement ()
 executeStatement = do
-  ipBefore <- State.gets envInstructionPointer
+  ipBefore <- State.gets envRIP
   arr <- Reader.asks constEnvInstructions
   execute (arr Array.! ipBefore)
-  ipAfter <- State.gets envInstructionPointer
+  ipAfter <- State.gets envRIP
   let nextIP = ipAfter + 1
   when (nextIP <= snd (Array.bounds arr)) $ do
-    State.modify $ \env -> env {envInstructionPointer = nextIP}
+    State.modify $ \env -> env {envRIP = nextIP}
     executeStatement
 
 execute :: Statement -> ExecuteStatement ()
