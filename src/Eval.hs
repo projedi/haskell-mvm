@@ -64,13 +64,13 @@ emptyEnv =
 readVariableFromEnv :: Env -> VarID -> Value
 readVariableFromEnv env (VarID vid) =
   let d = (envVarMap env) IntMap.! vid
-  in (envStack env) !! (envRBP env + d)
+   in (envStack env) !! (envRBP env + d)
 
 writeVariableToEnv :: Env -> VarID -> Value -> Env
 writeVariableToEnv env (VarID vid) val =
   let d = (envVarMap env) IntMap.! vid
       (before, _:after) = List.splitAt (envRBP env + d) $ envStack env
-  in env {envStack = before ++ [val] ++ after}
+   in env {envStack = before ++ [val] ++ after}
 
 readConstantFromEnv :: Env -> ConstID -> Value
 readConstantFromEnv env (ConstID cid) = (envConsts env) IntMap.! cid
@@ -82,7 +82,7 @@ dereferenceInEnv _ _ = error "Type mismatch"
 addressOfInEnv :: Env -> VarID -> Value
 addressOfInEnv env (VarID vid) =
   let d = (envVarMap env) IntMap.! vid
-  in ValuePtr (envVarTypes env IntMap.! vid) [d + envRBP env]
+   in ValuePtr (envVarTypes env IntMap.! vid) [d + envRBP env]
 
 writeToPtrInEnv :: Env -> Value -> Value -> Env
 writeToPtrInEnv env (ValuePtr _ [d]) val =
@@ -150,8 +150,7 @@ nativeFunctionCall fdef vals = do
        pushOnStack (ValueInt $ fromIntegral rbp)
        rsp <- State.gets envRSP
        State.modify $ \env -> env {envRBP = rsp}
-       localDecls <- mapM varIDToDecl (funDefLocals fdef)
-       let allLocals = funDefParams fdef ++ localDecls
+       let allLocals = funDefParams fdef ++ map varToDecl (funDefLocals fdef)
        mapM_ declareVariable allLocals
        generateAssignments (funDefParams fdef) vals
        mv <- executeFunctionBody (funDefBody fdef)
@@ -165,10 +164,8 @@ nativeFunctionCall fdef vals = do
       | typeIs val valtype -> pure $ Just val
     _ -> error "Type mismatch"
   where
-    varIDToDecl :: VarID -> Execute VarDecl
-    varIDToDecl (VarID v) = do
-      t <- State.gets ((IntMap.! v) . envVarTypes)
-      pure $ VarDecl t (VarID v)
+    varToDecl :: Var -> VarDecl
+    varToDecl (Var v t) = VarDecl t v
 
 foreignFunctionCall ::
      Maybe VarType
@@ -242,28 +239,22 @@ functionReturn :: Maybe Value -> Execute ()
 functionReturn = Except.throwError
 
 readVariable :: VarID -> Execute Value
-readVariable name =
-  State.gets $ \env -> readVariableFromEnv env name
+readVariable name = State.gets $ \env -> readVariableFromEnv env name
 
 writeVariable :: VarID -> Value -> Execute ()
-writeVariable name val =
-  State.modify $ \env -> writeVariableToEnv env name val
+writeVariable name val = State.modify $ \env -> writeVariableToEnv env name val
 
 readConstant :: ConstID -> Execute Value
-readConstant name =
-  State.gets $ \env -> readConstantFromEnv env name
+readConstant name = State.gets $ \env -> readConstantFromEnv env name
 
 addressOf :: VarID -> Execute Value
-addressOf name =
-  State.gets $ \env -> addressOfInEnv env name
+addressOf name = State.gets $ \env -> addressOfInEnv env name
 
 dereference :: Value -> Execute Value
-dereference ptr =
-  State.gets $ \env -> dereferenceInEnv env ptr
+dereference ptr = State.gets $ \env -> dereferenceInEnv env ptr
 
 writeToPtr :: Value -> Value -> Execute ()
-writeToPtr ptr val =
-  State.modify $ \env -> writeToPtrInEnv env ptr val
+writeToPtr ptr val = State.modify $ \env -> writeToPtrInEnv env ptr val
 
 evaluateUnOp :: UnOp -> (Value -> Value)
 evaluateUnOp UnNeg = negate

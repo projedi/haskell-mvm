@@ -73,7 +73,7 @@ data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
   , funDefParams :: [VarDecl]
-  , funDefLocals :: [VarID]
+  , funDefLocals :: [Var]
   , funDefBody :: [Statement]
   }
 

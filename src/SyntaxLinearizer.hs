@@ -38,7 +38,7 @@ linearize p =
 
 data Env = Env
   { lastLabelID :: LinearSyntax.LabelID
-  , foundVariables :: [LinearSyntax.VarID]
+  , foundVariables :: [LinearSyntax.Var]
   , lastVarID :: LinearSyntax.VarID
   , vars :: IntMap LinearSyntax.VarType
   }
@@ -78,8 +78,14 @@ newLabel = do
 
 linearizeStatement :: SimplifiedSyntax.Statement -> StatementLinearizer ()
 linearizeStatement (SimplifiedSyntax.StatementBlock b) = linearizeBlock b
-linearizeStatement (SimplifiedSyntax.StatementVarAlloc v) =
-  State.modify $ \env -> env {foundVariables = v : foundVariables env}
+linearizeStatement (SimplifiedSyntax.StatementVarAlloc v@(LinearSyntax.VarID vid)) = do
+  t <- State.gets ((IntMap.! vid) . vars)
+  State.modify $ \env ->
+    env
+      { foundVariables =
+          LinearSyntax.Var {LinearSyntax.varName = v, LinearSyntax.varType = t} :
+          foundVariables env
+      }
 linearizeStatement (SimplifiedSyntax.StatementFunctionCall fcall) = do
   fcall' <- linearizeFunctionCall fcall
   addStatement $ LinearSyntax.StatementFunctionCall fcall'
@@ -146,7 +152,10 @@ introduceVariable vtype = do
     env
       { vars = IntMap.insert vid vtype $ vars env
       , lastVarID = newVarID
-      , foundVariables = newVarID : foundVariables env
+      , foundVariables =
+          LinearSyntax.Var
+            {LinearSyntax.varName = newVarID, LinearSyntax.varType = vtype} :
+          foundVariables env
       }
   pure $
     LinearSyntax.Var
