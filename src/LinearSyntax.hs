@@ -7,7 +7,6 @@ module LinearSyntax
   , ConstID(..)
   , LabelID(..)
   , VarType(..)
-  , VarDecl(..)
   , Statement(..)
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
@@ -31,7 +30,6 @@ import SimplifiedSyntax
   , ForeignFunctionDecl(..)
   , FunID(..)
   , UnOp(..)
-  , VarDecl(..)
   , VarID(..)
   , VarType(..)
   , binOpTypeFromArgs
@@ -59,9 +57,9 @@ data Program = Program
 
 data Statement
   = StatementFunctionCall FunctionCall
-  | StatementAssign VarID
+  | StatementAssign Var
                     Expr
-  | StatementAssignToPtr VarID
+  | StatementAssignToPtr Var
                          Var
   | StatementReturn (Maybe Var)
   | StatementLabel LabelID
@@ -72,8 +70,8 @@ data Statement
 data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
-  , funDefParams :: [VarDecl]
-  , funDefLocals :: [VarID]
+  , funDefParams :: [Var]
+  , funDefLocals :: [Var]
   , funDefBody :: [Statement]
   }
 
@@ -101,9 +99,9 @@ data Expr = Expr
 
 data ExprImpl
   = ExprFunctionCallImpl FunctionCall
-  | ExprVarImpl VarID
-  | ExprDereferenceImpl VarID
-  | ExprAddressOfImpl VarID
+  | ExprVarImpl Var
+  | ExprDereferenceImpl Var
+  | ExprAddressOfImpl Var
   | ExprConstImpl ConstID
   | ExprBinOpImpl BinOp
                   Var
@@ -119,20 +117,25 @@ pattern ExprFunctionCall fcall <-
           = Expr{exprType = t, exprImpl = ExprFunctionCallImpl fcall}
           where Just t = functionCallType fcall
 
-pattern ExprVar :: VarType -> VarID -> Expr
+pattern ExprVar :: Var -> Expr
 
-pattern ExprVar vType v =
-        Expr{exprType = vType, exprImpl = ExprVarImpl v}
+pattern ExprVar v <- Expr{exprImpl = ExprVarImpl v}
+  where ExprVar v
+          = Expr{exprType = varType v, exprImpl = ExprVarImpl v}
 
-pattern ExprDereference :: VarType -> VarID -> Expr
+pattern ExprDereference :: Var -> Expr
 
-pattern ExprDereference vType v =
-        Expr{exprType = vType, exprImpl = ExprDereferenceImpl v}
+pattern ExprDereference v <- Expr{exprImpl = ExprDereferenceImpl v}
+  where ExprDereference v
+          = Expr{exprType = t, exprImpl = ExprDereferenceImpl v}
+          where (VarTypePtr t) = varType v
 
-pattern ExprAddressOf :: VarType -> VarID -> Expr
+pattern ExprAddressOf :: Var -> Expr
 
-pattern ExprAddressOf vType v =
-        Expr{exprType = vType, exprImpl = ExprAddressOfImpl v}
+pattern ExprAddressOf v <- Expr{exprImpl = ExprAddressOfImpl v}
+  where ExprAddressOf v
+          = Expr{exprType = VarTypePtr (varType v),
+                 exprImpl = ExprAddressOfImpl v}
 
 pattern ExprConst :: VarType -> ConstID -> Expr
 
