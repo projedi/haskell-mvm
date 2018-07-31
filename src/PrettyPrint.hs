@@ -97,10 +97,6 @@ instance PrettyPrintSimple FunctionCall where
     prettyPrintSimple funname ++
     paren (List.intercalate ", " (map prettyPrintSimple args))
 
-instance PrettyPrintSimple VarDecl where
-  prettyPrintSimple (VarDecl vtype name) =
-    prettyPrintSimple vtype ++ " " ++ prettyPrintSimple name
-
 instance PrettyPrintSimple VarType where
   prettyPrintSimple = show
 

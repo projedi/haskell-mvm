@@ -60,10 +60,13 @@ linearizeFunctionDef f = do
     LinearSyntax.FunctionDef
       { LinearSyntax.funDefRetType = SimplifiedSyntax.funDefRetType f
       , LinearSyntax.funDefName = SimplifiedSyntax.funDefName f
-      , LinearSyntax.funDefParams = SimplifiedSyntax.funDefParams f
+      , LinearSyntax.funDefParams =
+          map varDeclToVar $ SimplifiedSyntax.funDefParams f
       , LinearSyntax.funDefLocals = locals
       , LinearSyntax.funDefBody = body
       }
+  where
+    varDeclToVar (SimplifiedSyntax.VarDecl t v) = LinearSyntax.Var v t
 
 linearizeBlock :: SimplifiedSyntax.Block -> StatementLinearizer ()
 linearizeBlock = mapM_ linearizeStatement . SimplifiedSyntax.blockStatements

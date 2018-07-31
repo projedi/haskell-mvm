@@ -7,7 +7,6 @@ module LinearSyntax
   , ConstID(..)
   , LabelID(..)
   , VarType(..)
-  , VarDecl(..)
   , Statement(..)
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
@@ -31,7 +30,6 @@ import SimplifiedSyntax
   , ForeignFunctionDecl(..)
   , FunID(..)
   , UnOp(..)
-  , VarDecl(..)
   , VarID(..)
   , VarType(..)
   , binOpTypeFromArgs
@@ -72,7 +70,7 @@ data Statement
 data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
-  , funDefParams :: [VarDecl]
+  , funDefParams :: [Var]
   , funDefLocals :: [Var]
   , funDefBody :: [Statement]
   }

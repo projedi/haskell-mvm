@@ -133,14 +133,14 @@ popFromStack = do
   State.put $ env {envRSP = envRSP env - 1, envStack = before}
   pure target
 
-declareVariable :: VarDecl -> Execute ()
-declareVariable (VarDecl vtype (VarID vid)) = do
+declareVariable :: Var -> Execute ()
+declareVariable (Var (VarID vid) vtype) = do
   State.modify $ \env ->
     env
       {envVarMap = IntMap.insert vid (envRSP env - envRBP env) $ envVarMap env}
   pushOnStack (defaultValueFromType vtype)
 
-undeclareVariable :: VarDecl -> Execute ()
+undeclareVariable :: Var -> Execute ()
 undeclareVariable _ = popFromStack >> pure ()
 
 nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)
@@ -150,7 +150,7 @@ nativeFunctionCall fdef vals = do
        pushOnStack (ValueInt $ fromIntegral rbp)
        rsp <- State.gets envRSP
        State.modify $ \env -> env {envRBP = rsp}
-       let allLocals = funDefParams fdef ++ map varToDecl (funDefLocals fdef)
+       let allLocals = funDefParams fdef ++ funDefLocals fdef
        mapM_ declareVariable allLocals
        generateAssignments (funDefParams fdef) vals
        mv <- executeFunctionBody (funDefBody fdef)
@@ -163,9 +163,6 @@ nativeFunctionCall fdef vals = do
     (Just val, Just valtype)
       | typeIs val valtype -> pure $ Just val
     _ -> error "Type mismatch"
-  where
-    varToDecl :: Var -> VarDecl
-    varToDecl (Var v t) = VarDecl t v
 
 foreignFunctionCall ::
      Maybe VarType
@@ -203,15 +200,15 @@ functionCall NativeFunctionCall { nativeFunCallName = (FunID fid)
   Just f <- State.gets (IntMap.lookup fid . envFunctions)
   nativeFunctionCall f vals
 
-generateAssignments :: [VarDecl] -> [Value] -> Execute ()
+generateAssignments :: [Var] -> [Value] -> Execute ()
 generateAssignments [] [] = pure ()
-generateAssignments ((VarDecl _ name):decls) (val:vals) = do
-  writeVariable name val
-  generateAssignments decls vals
+generateAssignments (v:vs) (val:vals) = do
+  writeVariable v val
+  generateAssignments vs vals
 generateAssignments _ _ = error "Type mismatch"
 
 evaluateArgs :: [Var] -> Execute [Value]
-evaluateArgs = mapM (readVariable . varName)
+evaluateArgs = mapM readVariable
 
 executeFunctionBody :: [Statement] -> Execute (Maybe Value)
 executeFunctionBody [] = pure Nothing
@@ -238,17 +235,18 @@ executeFunctionBody ss = do
 functionReturn :: Maybe Value -> Execute ()
 functionReturn = Except.throwError
 
-readVariable :: VarID -> Execute Value
-readVariable name = State.gets $ \env -> readVariableFromEnv env name
+readVariable :: Var -> Execute Value
+readVariable v = State.gets $ \env -> readVariableFromEnv env (varName v)
 
-writeVariable :: VarID -> Value -> Execute ()
-writeVariable name val = State.modify $ \env -> writeVariableToEnv env name val
+writeVariable :: Var -> Value -> Execute ()
+writeVariable v val =
+  State.modify $ \env -> writeVariableToEnv env (varName v) val
 
 readConstant :: ConstID -> Execute Value
 readConstant name = State.gets $ \env -> readConstantFromEnv env name
 
-addressOf :: VarID -> Execute Value
-addressOf name = State.gets $ \env -> addressOfInEnv env name
+addressOf :: Var -> Execute Value
+addressOf v = State.gets $ \env -> addressOfInEnv env (varName v)
 
 dereference :: Value -> Execute Value
 dereference ptr = State.gets $ \env -> dereferenceInEnv env ptr
@@ -288,15 +286,15 @@ evaluate :: Expr -> Execute Value
 evaluate (ExprFunctionCall fcall) = do
   Just val <- functionCall fcall
   pure val
-evaluate (ExprVar v) = readVariable (varName v)
-evaluate (ExprAddressOf v) = addressOf (varName v)
+evaluate (ExprVar v) = readVariable v
+evaluate (ExprAddressOf v) = addressOf v
 evaluate (ExprDereference p) = do
-  v <- readVariable $ varName p
+  v <- readVariable p
   dereference v
 evaluate (ExprConst _ c) = readConstant c
-evaluate (ExprUnOp op v) = evaluateUnOp op <$> readVariable (varName v)
+evaluate (ExprUnOp op v) = evaluateUnOp op <$> readVariable v
 evaluate (ExprBinOp op vl vr) =
-  evaluateBinOp op <$> readVariable (varName vl) <*> readVariable (varName vr)
+  evaluateBinOp op <$> readVariable vl <*> readVariable vr
 
 valueAsBool :: Value -> Bool
 valueAsBool (ValueInt i) = i /= 0
@@ -330,17 +328,17 @@ execute (StatementFunctionCall fcall) =
   Trans.lift (functionCall fcall) >> pure ()
 execute (StatementAssign var e) = do
   res <- Trans.lift $ evaluate e
-  Trans.lift $ writeVariable (varName var) res
+  Trans.lift $ writeVariable var res
 execute (StatementAssignToPtr ptr var) = do
-  res <- Trans.lift $ readVariable $ varName var
-  v <- Trans.lift $ readVariable $ varName ptr
+  res <- Trans.lift $ readVariable var
+  v <- Trans.lift $ readVariable ptr
   Trans.lift $ writeToPtr v res
 execute (StatementReturn Nothing) = Trans.lift $ functionReturn Nothing
 execute (StatementReturn (Just v)) = do
-  res <- Trans.lift $ readVariable $ varName v
+  res <- Trans.lift $ readVariable v
   Trans.lift $ functionReturn (Just res)
 execute (StatementLabel _) = pure ()
 execute (StatementJump l) = jump l
 execute (StatementJumpIfZero v l) = do
-  res <- Trans.lift $ valueAsBool <$> readVariable (varName v)
+  res <- Trans.lift $ valueAsBool <$> readVariable v
   unless res $ jump l
