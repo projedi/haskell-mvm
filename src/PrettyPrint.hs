@@ -129,10 +129,9 @@ instance PrettyPrintSimple UnOp where
 
 instance PrettyPrintSimple Expr where
   prettyPrintSimple (ExprFunctionCall fcall) = prettyPrintSimple fcall
-  prettyPrintSimple (ExprVar _ varname) = prettyPrintSimple varname
-  prettyPrintSimple (ExprDereference _ varname) =
-    "*" ++ prettyPrintSimple varname
-  prettyPrintSimple (ExprAddressOf _ varname) = "&" ++ prettyPrintSimple varname
+  prettyPrintSimple (ExprVar v) = prettyPrintSimple v
+  prettyPrintSimple (ExprDereference p) = "*" ++ prettyPrintSimple p
+  prettyPrintSimple (ExprAddressOf v) = "&" ++ prettyPrintSimple v
   prettyPrintSimple (ExprConst _ c) = show c
   prettyPrintSimple (ExprUnOp op v) =
     prettyPrintSimple op ++ prettyPrintSimple v

@@ -175,11 +175,13 @@ linearizeExprImpl ::
 linearizeExprImpl (SimplifiedSyntax.ExprFunctionCall fcall) =
   LinearSyntax.ExprFunctionCall <$> linearizeFunctionCall fcall
 linearizeExprImpl (SimplifiedSyntax.ExprVar t v) =
-  pure $ LinearSyntax.ExprVar t v
+  pure $ LinearSyntax.ExprVar (LinearSyntax.Var v t)
 linearizeExprImpl (SimplifiedSyntax.ExprDereference t v) =
-  pure $ LinearSyntax.ExprDereference t v
-linearizeExprImpl (SimplifiedSyntax.ExprAddressOf t v) =
-  pure $ LinearSyntax.ExprAddressOf t v
+  pure $
+  LinearSyntax.ExprDereference (LinearSyntax.Var v (LinearSyntax.VarTypePtr t))
+linearizeExprImpl (SimplifiedSyntax.ExprAddressOf (LinearSyntax.VarTypePtr t) v) =
+  pure $ LinearSyntax.ExprAddressOf (LinearSyntax.Var v t)
+linearizeExprImpl (SimplifiedSyntax.ExprAddressOf _ _) = error "Type mismatch"
 linearizeExprImpl (SimplifiedSyntax.ExprConst t c) =
   pure $ LinearSyntax.ExprConst t c
 linearizeExprImpl (SimplifiedSyntax.ExprBinOp op lhs rhs) = do

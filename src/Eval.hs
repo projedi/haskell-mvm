@@ -288,10 +288,10 @@ evaluate :: Expr -> Execute Value
 evaluate (ExprFunctionCall fcall) = do
   Just val <- functionCall fcall
   pure val
-evaluate (ExprVar _ vname) = readVariable vname
-evaluate (ExprAddressOf _ vname) = addressOf vname
-evaluate (ExprDereference _ vname) = do
-  v <- readVariable vname
+evaluate (ExprVar v) = readVariable (varName v)
+evaluate (ExprAddressOf v) = addressOf (varName v)
+evaluate (ExprDereference p) = do
+  v <- readVariable $ varName p
   dereference v
 evaluate (ExprConst _ c) = readConstant c
 evaluate (ExprUnOp op v) = evaluateUnOp op <$> readVariable (varName v)
