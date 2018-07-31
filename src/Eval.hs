@@ -330,10 +330,10 @@ execute (StatementFunctionCall fcall) =
   Trans.lift (functionCall fcall) >> pure ()
 execute (StatementAssign var e) = do
   res <- Trans.lift $ evaluate e
-  Trans.lift $ writeVariable var res
+  Trans.lift $ writeVariable (varName var) res
 execute (StatementAssignToPtr ptr var) = do
   res <- Trans.lift $ readVariable $ varName var
-  v <- Trans.lift $ readVariable ptr
+  v <- Trans.lift $ readVariable $ varName ptr
   Trans.lift $ writeToPtr v res
 execute (StatementReturn Nothing) = Trans.lift $ functionReturn Nothing
 execute (StatementReturn (Just v)) = do

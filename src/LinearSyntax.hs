@@ -59,9 +59,9 @@ data Program = Program
 
 data Statement
   = StatementFunctionCall FunctionCall
-  | StatementAssign VarID
+  | StatementAssign Var
                     Expr
-  | StatementAssignToPtr VarID
+  | StatementAssignToPtr Var
                          Var
   | StatementReturn (Maybe Var)
   | StatementLabel LabelID

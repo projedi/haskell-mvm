@@ -1,8 +1,10 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module SyntaxLinearizer
   ( linearize
   ) where
 
-import Control.Monad.State (State, runState)
+import Control.Monad.State (MonadState, State, runState)
 import qualified Control.Monad.State as State
 import Control.Monad.Writer (WriterT, execWriterT)
 import qualified Control.Monad.Writer as Writer
@@ -43,6 +45,9 @@ data Env = Env
   , vars :: IntMap LinearSyntax.VarType
   }
 
+getVarType :: MonadState Env m => LinearSyntax.VarID -> m LinearSyntax.VarType
+getVarType (LinearSyntax.VarID vid) = State.gets ((IntMap.! vid) . vars)
+
 type Linearizer = State Env
 
 linearizeFunctionDef ::
@@ -78,8 +83,8 @@ newLabel = do
 
 linearizeStatement :: SimplifiedSyntax.Statement -> StatementLinearizer ()
 linearizeStatement (SimplifiedSyntax.StatementBlock b) = linearizeBlock b
-linearizeStatement (SimplifiedSyntax.StatementVarAlloc v@(LinearSyntax.VarID vid)) = do
-  t <- State.gets ((IntMap.! vid) . vars)
+linearizeStatement (SimplifiedSyntax.StatementVarAlloc v) = do
+  t <- getVarType v
   State.modify $ \env ->
     env
       { foundVariables =
@@ -99,11 +104,13 @@ linearizeStatement (SimplifiedSyntax.StatementWhile e b) = do
   addStatement $ LinearSyntax.StatementJump loopBegin
   addStatement $ LinearSyntax.StatementLabel loopEnd
 linearizeStatement (SimplifiedSyntax.StatementAssign v e) = do
+  t <- getVarType v
   e' <- linearizeExprImpl e
-  addStatement $ LinearSyntax.StatementAssign v e'
+  addStatement $ LinearSyntax.StatementAssign (LinearSyntax.Var v t) e'
 linearizeStatement (SimplifiedSyntax.StatementAssignToPtr p e) = do
+  t <- getVarType p
   v <- linearizeExpr e
-  addStatement $ LinearSyntax.StatementAssignToPtr p v
+  addStatement $ LinearSyntax.StatementAssignToPtr (LinearSyntax.Var p t) v
 linearizeStatement (SimplifiedSyntax.StatementIfElse e tb fb) = do
   v <- linearizeExpr e
   elseLabel <- newLabel
@@ -187,5 +194,5 @@ linearizeExpr :: SimplifiedSyntax.Expr -> StatementLinearizer LinearSyntax.Var
 linearizeExpr e = do
   e' <- linearizeExprImpl e
   v <- introduceVariable (LinearSyntax.exprType e')
-  addStatement $ LinearSyntax.StatementAssign (LinearSyntax.varName v) e'
+  addStatement $ LinearSyntax.StatementAssign v e'
   pure v
