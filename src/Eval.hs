@@ -256,9 +256,16 @@ dereference ptr = State.gets $ \env -> dereferenceInEnv env ptr
 writeToPtr :: Value -> Value -> Execute ()
 writeToPtr ptr val = State.modify $ \env -> writeToPtrInEnv env ptr val
 
+readRegister :: Register -> Execute Value
+readRegister RegisterRSP = State.gets (ValueInt . regRSP)
+
 writeRegister :: Register -> Value -> Execute ()
 writeRegister RegisterRSP (ValueInt i) = State.modify $ \env -> env {regRSP = i}
 writeRegister RegisterRSP _ = error "Type mismatch"
+
+readOperand :: Operand -> Execute Value
+readOperand (OperandVar v) = readVariable v
+readOperand (OperandRegister _ r) = readRegister r
 
 writeOperand :: Operand -> Value -> Execute ()
 writeOperand (OperandVar v) val = writeVariable v val
@@ -296,15 +303,15 @@ evaluate :: Expr -> Execute Value
 evaluate (ExprFunctionCall fcall) = do
   Just val <- functionCall fcall
   pure val
-evaluate (ExprVar v) = readVariable v
+evaluate (ExprRead x) = readOperand x
 evaluate (ExprAddressOf v) = addressOf v
 evaluate (ExprDereference p) = do
-  v <- readVariable p
+  v <- readOperand p
   dereference v
 evaluate (ExprConst _ c) = readConstant c
-evaluate (ExprUnOp op v) = evaluateUnOp op <$> readVariable v
-evaluate (ExprBinOp op vl vr) =
-  evaluateBinOp op <$> readVariable vl <*> readVariable vr
+evaluate (ExprUnOp op x) = evaluateUnOp op <$> readOperand x
+evaluate (ExprBinOp op lhs rhs) =
+  evaluateBinOp op <$> readOperand lhs <*> readOperand rhs
 
 valueAsBool :: Value -> Bool
 valueAsBool (ValueInt i) = i /= 0
@@ -339,16 +346,16 @@ execute (StatementFunctionCall fcall) =
 execute (StatementAssign lhs e) = do
   res <- Trans.lift $ evaluate e
   Trans.lift $ writeOperand lhs res
-execute (StatementAssignToPtr ptr var) = do
-  res <- Trans.lift $ readVariable var
-  v <- Trans.lift $ readVariable ptr
+execute (StatementAssignToPtr ptr rhs) = do
+  res <- Trans.lift $ readOperand rhs
+  v <- Trans.lift $ readOperand ptr
   Trans.lift $ writeToPtr v res
 execute (StatementReturn Nothing) = Trans.lift $ functionReturn Nothing
-execute (StatementReturn (Just v)) = do
-  res <- Trans.lift $ readVariable v
+execute (StatementReturn (Just x)) = do
+  res <- Trans.lift $ readOperand x
   Trans.lift $ functionReturn (Just res)
 execute (StatementLabel _) = pure ()
 execute (StatementJump l) = jump l
-execute (StatementJumpIfZero v l) = do
-  res <- Trans.lift $ valueAsBool <$> readVariable v
+execute (StatementJumpIfZero x l) = do
+  res <- Trans.lift $ valueAsBool <$> readOperand x
   unless res $ jump l

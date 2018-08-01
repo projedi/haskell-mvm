@@ -48,6 +48,9 @@ resolveVariable :: LinearSyntax.Var -> ASM ASMSyntax.Var
 resolveVariable LinearSyntax.Var {LinearSyntax.varName = LinearSyntax.VarID vid} =
   State.gets ((IntMap.! vid) . varMap)
 
+resolveVariableAsOperand :: LinearSyntax.Var -> ASM ASMSyntax.Operand
+resolveVariableAsOperand v = ASMSyntax.OperandVar <$> resolveVariable v
+
 translateFunctionDef :: LinearSyntax.FunctionDef -> ASM ASMSyntax.FunctionDef
 translateFunctionDef fdef = do
   params <- mapM introduceVariable $ LinearSyntax.funDefParams fdef
@@ -66,20 +69,20 @@ translateStatement :: LinearSyntax.Statement -> ASM ASMSyntax.Statement
 translateStatement (LinearSyntax.StatementFunctionCall fcall) =
   ASMSyntax.StatementFunctionCall <$> translateFunctionCall fcall
 translateStatement (LinearSyntax.StatementAssign v e) =
-  ASMSyntax.StatementAssign <$> (ASMSyntax.OperandVar <$> resolveVariable v) <*>
-  translateExpr e
+  ASMSyntax.StatementAssign <$> resolveVariableAsOperand v <*> translateExpr e
 translateStatement (LinearSyntax.StatementAssignToPtr p v) =
-  ASMSyntax.StatementAssignToPtr <$> resolveVariable p <*> resolveVariable v
+  ASMSyntax.StatementAssignToPtr <$> resolveVariableAsOperand p <*>
+  resolveVariableAsOperand v
 translateStatement (LinearSyntax.StatementReturn Nothing) =
   pure $ ASMSyntax.StatementReturn Nothing
 translateStatement (LinearSyntax.StatementReturn (Just v)) =
-  (ASMSyntax.StatementReturn . Just) <$> resolveVariable v
+  (ASMSyntax.StatementReturn . Just) <$> resolveVariableAsOperand v
 translateStatement (LinearSyntax.StatementLabel l) =
   pure $ ASMSyntax.StatementLabel l
 translateStatement (LinearSyntax.StatementJump l) =
   pure $ ASMSyntax.StatementJump l
 translateStatement (LinearSyntax.StatementJumpIfZero v l) = do
-  v' <- resolveVariable v
+  v' <- resolveVariableAsOperand v
   pure $ ASMSyntax.StatementJumpIfZero v' l
 
 translateFunctionCall :: LinearSyntax.FunctionCall -> ASM ASMSyntax.FunctionCall
@@ -104,13 +107,15 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
 translateExpr :: LinearSyntax.Expr -> ASM ASMSyntax.Expr
 translateExpr (LinearSyntax.ExprFunctionCall fcall) =
   ASMSyntax.ExprFunctionCall <$> translateFunctionCall fcall
-translateExpr (LinearSyntax.ExprVar v) = ASMSyntax.ExprVar <$> resolveVariable v
+translateExpr (LinearSyntax.ExprVar v) =
+  ASMSyntax.ExprRead <$> resolveVariableAsOperand v
 translateExpr (LinearSyntax.ExprDereference v) =
-  ASMSyntax.ExprDereference <$> resolveVariable v
+  ASMSyntax.ExprDereference <$> resolveVariableAsOperand v
 translateExpr (LinearSyntax.ExprAddressOf v) =
   ASMSyntax.ExprAddressOf <$> resolveVariable v
 translateExpr (LinearSyntax.ExprConst t c) = pure $ ASMSyntax.ExprConst t c
 translateExpr (LinearSyntax.ExprBinOp op lhs rhs) =
-  ASMSyntax.ExprBinOp op <$> resolveVariable lhs <*> resolveVariable rhs
+  ASMSyntax.ExprBinOp op <$> resolveVariableAsOperand lhs <*>
+  resolveVariableAsOperand rhs
 translateExpr (LinearSyntax.ExprUnOp op v) =
-  ASMSyntax.ExprUnOp op <$> resolveVariable v
+  ASMSyntax.ExprUnOp op <$> resolveVariableAsOperand v

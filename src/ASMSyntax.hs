@@ -18,7 +18,8 @@ module ASMSyntax
   , Var(..)
   , Register(..)
   , Operand(..)
-  , Expr(ExprFunctionCall, ExprVar, ExprDereference, ExprAddressOf,
+  , operandType
+  , Expr(ExprFunctionCall, ExprRead, ExprDereference, ExprAddressOf,
      ExprConst, ExprBinOp, ExprUnOp)
   , exprType
   , functionCallType
@@ -60,16 +61,20 @@ data Operand
   | OperandRegister VarType
                     Register
 
+operandType :: Operand -> VarType
+operandType (OperandVar v) = varType v
+operandType (OperandRegister t _) = t
+
 data Statement
   = StatementFunctionCall FunctionCall
   | StatementAssign Operand
                     Expr
-  | StatementAssignToPtr Var
-                         Var
-  | StatementReturn (Maybe Var)
+  | StatementAssignToPtr Operand
+                         Operand
+  | StatementReturn (Maybe Operand)
   | StatementLabel LabelID
   | StatementJump LabelID
-  | StatementJumpIfZero Var
+  | StatementJumpIfZero Operand
                         LabelID
 
 data FunctionDef = FunctionDef
@@ -104,15 +109,15 @@ data Expr = Expr
 
 data ExprImpl
   = ExprFunctionCallImpl FunctionCall
-  | ExprVarImpl Var
-  | ExprDereferenceImpl Var
+  | ExprReadImpl Operand
+  | ExprDereferenceImpl Operand
   | ExprAddressOfImpl Var
   | ExprConstImpl ConstID
   | ExprBinOpImpl BinOp
-                  Var
-                  Var
+                  Operand
+                  Operand
   | ExprUnOpImpl UnOp
-                 Var
+                 Operand
 
 pattern ExprFunctionCall :: FunctionCall -> Expr
 
@@ -122,18 +127,18 @@ pattern ExprFunctionCall fcall <-
           = Expr{exprType = t, exprImpl = ExprFunctionCallImpl fcall}
           where Just t = functionCallType fcall
 
-pattern ExprVar :: Var -> Expr
+pattern ExprRead :: Operand -> Expr
 
-pattern ExprVar v <- Expr{exprImpl = ExprVarImpl v}
-  where ExprVar v
-          = Expr{exprType = varType v, exprImpl = ExprVarImpl v}
+pattern ExprRead x <- Expr{exprImpl = ExprReadImpl x}
+  where ExprRead x
+          = Expr{exprType = operandType x, exprImpl = ExprReadImpl x}
 
-pattern ExprDereference :: Var -> Expr
+pattern ExprDereference :: Operand -> Expr
 
-pattern ExprDereference v <- Expr{exprImpl = ExprDereferenceImpl v}
-  where ExprDereference v
-          = Expr{exprType = t, exprImpl = ExprDereferenceImpl v}
-          where (VarTypePtr t) = varType v
+pattern ExprDereference x <- Expr{exprImpl = ExprDereferenceImpl x}
+  where ExprDereference x
+          = Expr{exprType = t, exprImpl = ExprDereferenceImpl x}
+          where (VarTypePtr t) = operandType x
 
 pattern ExprAddressOf :: Var -> Expr
 
@@ -144,23 +149,23 @@ pattern ExprAddressOf v <- Expr{exprImpl = ExprAddressOfImpl v}
 
 pattern ExprConst :: VarType -> ConstID -> Expr
 
-pattern ExprConst vType cid =
-        Expr{exprType = vType, exprImpl = ExprConstImpl cid}
+pattern ExprConst cType cid =
+        Expr{exprType = cType, exprImpl = ExprConstImpl cid}
 
-pattern ExprBinOp :: BinOp -> Var -> Var -> Expr
+pattern ExprBinOp :: BinOp -> Operand -> Operand -> Expr
 
 pattern ExprBinOp op lhs rhs <-
         Expr{exprImpl = ExprBinOpImpl op lhs rhs}
   where ExprBinOp op lhs rhs
           = Expr{exprType = t, exprImpl = ExprBinOpImpl op lhs rhs}
-          where t = binOpTypeFromArgs op (varType lhs) (varType rhs)
+          where t = binOpTypeFromArgs op (operandType lhs) (operandType rhs)
 
-pattern ExprUnOp :: UnOp -> Var -> Expr
+pattern ExprUnOp :: UnOp -> Operand -> Expr
 
-pattern ExprUnOp op v <- Expr{exprImpl = ExprUnOpImpl op v}
-  where ExprUnOp op v
-          = Expr{exprType = t, exprImpl = ExprUnOpImpl op v}
-          where t = unOpTypeFromArg op $ varType v
+pattern ExprUnOp op x <- Expr{exprImpl = ExprUnOpImpl op x}
+  where ExprUnOp op x
+          = Expr{exprType = t, exprImpl = ExprUnOpImpl op x}
+          where t = unOpTypeFromArg op $ operandType x
 
-{-# COMPLETE ExprFunctionCall, ExprVar, ExprDereference,
+{-# COMPLETE ExprFunctionCall, ExprRead, ExprDereference,
   ExprAddressOf, ExprConst, ExprBinOp, ExprUnOp :: Expr #-}
