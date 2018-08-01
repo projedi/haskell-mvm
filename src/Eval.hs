@@ -71,16 +71,15 @@ readConstantFromEnv :: Env -> ConstID -> Value
 readConstantFromEnv env (ConstID cid) = (envConsts env) IntMap.! cid
 
 dereferenceInEnv :: Env -> Value -> Value
-dereferenceInEnv env (ValuePtr _ [d]) = (envStack env) !! d
+dereferenceInEnv env (ValueInt d) = (envStack env) !! (fromIntegral d)
 dereferenceInEnv _ _ = error "Type mismatch"
 
 addressOfInEnv :: Env -> Var -> Value
-addressOfInEnv env Var {varDisplacement = d, varType = vtype} =
-  ValuePtr vtype [fromIntegral (d + regRBP env)]
+addressOfInEnv env Var {varDisplacement = d} = ValueInt (d + regRBP env)
 
 writeToPtrInEnv :: Env -> Value -> Value -> Env
-writeToPtrInEnv env (ValuePtr _ [d]) val =
-  let (stackBefore, _:stackAfter) = List.splitAt d $ envStack env
+writeToPtrInEnv env (ValueInt d) val =
+  let (stackBefore, _:stackAfter) = List.splitAt (fromIntegral d) $ envStack env
    in env {envStack = stackBefore ++ [val] ++ stackAfter}
 writeToPtrInEnv _ _ _ = error "Type mismatch"
 
