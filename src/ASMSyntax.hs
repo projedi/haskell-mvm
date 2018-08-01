@@ -31,7 +31,6 @@ import LinearSyntax
   , FunID(..)
   , LabelID(..)
   , UnOp(..)
-  , Var(..)
   , VarID(..)
   , VarType(..)
   , binOpTypeFromArgs
@@ -82,6 +81,11 @@ data FunctionCall
 functionCallType :: FunctionCall -> Maybe VarType
 functionCallType NativeFunctionCall {nativeFunCallRetType = rettype} = rettype
 functionCallType ForeignFunctionCall {foreignFunCallRetType = rettype} = rettype
+
+data Var = Var
+  { varName :: VarID
+  , varType :: VarType
+  }
 
 data Expr = Expr
   { exprType :: VarType
