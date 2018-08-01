@@ -118,7 +118,7 @@ translateStatement (LinearSyntax.StatementJumpIfZero v l) = do
 
 translateFunctionCall :: LinearSyntax.FunctionCall -> ASM ASMSyntax.FunctionCall
 translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
-  args <- mapM resolveVariable $ LinearSyntax.nativeFunCallArgs fcall
+  args <- mapM resolveVariableAsOperand $ LinearSyntax.nativeFunCallArgs fcall
   pure $
     ASMSyntax.NativeFunctionCall
       { ASMSyntax.nativeFunCallName = LinearSyntax.nativeFunCallName fcall
@@ -126,7 +126,7 @@ translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
       , ASMSyntax.nativeFunCallArgs = args
       }
 translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
-  args <- mapM resolveVariable $ LinearSyntax.foreignFunCallArgs fcall
+  args <- mapM resolveVariableAsOperand $ LinearSyntax.foreignFunCallArgs fcall
   pure $
     ASMSyntax.ForeignFunctionCall
       { ASMSyntax.foreignFunCallName = LinearSyntax.foreignFunCallName fcall

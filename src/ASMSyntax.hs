@@ -91,10 +91,10 @@ data FunctionDef = FunctionDef
 data FunctionCall
   = NativeFunctionCall { nativeFunCallName :: FunID
                        , nativeFunCallRetType :: Maybe VarType
-                       , nativeFunCallArgs :: [Var] }
+                       , nativeFunCallArgs :: [Operand] }
   | ForeignFunctionCall { foreignFunCallName :: FunID
                         , foreignFunCallRetType :: Maybe VarType
-                        , foreignFunCallArgs :: [Var] }
+                        , foreignFunCallArgs :: [Operand] }
 
 functionCallType :: FunctionCall -> Maybe VarType
 functionCallType NativeFunctionCall {nativeFunCallRetType = rettype} = rettype

@@ -182,8 +182,8 @@ generateAssignments (v:vs) (val:vals) = do
   generateAssignments vs vals
 generateAssignments _ _ = error "Type mismatch"
 
-evaluateArgs :: [Var] -> Execute [Value]
-evaluateArgs = mapM readVariable
+evaluateArgs :: [Operand] -> Execute [Value]
+evaluateArgs = mapM readOperand
 
 executeFunctionBody :: [Statement] -> Execute (Maybe Value)
 executeFunctionBody [] = pure Nothing
