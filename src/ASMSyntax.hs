@@ -16,6 +16,8 @@ module ASMSyntax
   , UnOp(..)
   , unOpTypeFromArg
   , Var(..)
+  , Register(..)
+  , Operand(..)
   , Expr(ExprFunctionCall, ExprVar, ExprDereference, ExprAddressOf,
      ExprConst, ExprBinOp, ExprUnOp)
   , exprType
@@ -50,9 +52,17 @@ data Program = Program
   , programLastLabelID :: LabelID
   }
 
+data Register =
+  RegisterRSP
+
+data Operand
+  = OperandVar Var
+  | OperandRegister VarType
+                    Register
+
 data Statement
   = StatementFunctionCall FunctionCall
-  | StatementAssign Var
+  | StatementAssign Operand
                     Expr
   | StatementAssignToPtr Var
                          Var

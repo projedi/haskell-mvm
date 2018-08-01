@@ -13,6 +13,7 @@ import qualified Control.Monad.Trans as Trans
 import Data.Array (Array)
 import qualified Data.Array as Array
 import Data.Bits
+import Data.Int (Int64)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.List as List
@@ -45,6 +46,7 @@ data Env = Env
   , envStack :: [Value]
   , envVarMap :: IntMap Int -- displacements to RBP.
   , envRBP :: Int
+  , regRSP :: Int64
   }
 
 emptyEnv :: Env
@@ -59,6 +61,7 @@ emptyEnv =
     , envStack = []
     , envVarMap = IntMap.empty
     , envRBP = 0
+    , regRSP = 0
     }
 
 readVariableFromEnv :: Env -> Var -> Value
@@ -253,6 +256,14 @@ dereference ptr = State.gets $ \env -> dereferenceInEnv env ptr
 writeToPtr :: Value -> Value -> Execute ()
 writeToPtr ptr val = State.modify $ \env -> writeToPtrInEnv env ptr val
 
+writeRegister :: Register -> Value -> Execute ()
+writeRegister RegisterRSP (ValueInt i) = State.modify $ \env -> env {regRSP = i}
+writeRegister RegisterRSP _ = error "Type mismatch"
+
+writeOperand :: Operand -> Value -> Execute ()
+writeOperand (OperandVar v) val = writeVariable v val
+writeOperand (OperandRegister _ r) val = writeRegister r val
+
 evaluateUnOp :: UnOp -> (Value -> Value)
 evaluateUnOp UnNeg = negate
 evaluateUnOp UnNot =
@@ -325,9 +336,9 @@ executeStatement = do
 execute :: Statement -> ExecuteStatement ()
 execute (StatementFunctionCall fcall) =
   Trans.lift (functionCall fcall) >> pure ()
-execute (StatementAssign var e) = do
+execute (StatementAssign lhs e) = do
   res <- Trans.lift $ evaluate e
-  Trans.lift $ writeVariable var res
+  Trans.lift $ writeOperand lhs res
 execute (StatementAssignToPtr ptr var) = do
   res <- Trans.lift $ readVariable var
   v <- Trans.lift $ readVariable ptr

@@ -66,7 +66,8 @@ translateStatement :: LinearSyntax.Statement -> ASM ASMSyntax.Statement
 translateStatement (LinearSyntax.StatementFunctionCall fcall) =
   ASMSyntax.StatementFunctionCall <$> translateFunctionCall fcall
 translateStatement (LinearSyntax.StatementAssign v e) =
-  ASMSyntax.StatementAssign <$> resolveVariable v <*> translateExpr e
+  ASMSyntax.StatementAssign <$> (ASMSyntax.OperandVar <$> resolveVariable v) <*>
+  translateExpr e
 translateStatement (LinearSyntax.StatementAssignToPtr p v) =
   ASMSyntax.StatementAssignToPtr <$> resolveVariable p <*> resolveVariable v
 translateStatement (LinearSyntax.StatementReturn Nothing) =

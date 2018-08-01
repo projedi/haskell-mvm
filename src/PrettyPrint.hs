@@ -135,6 +135,13 @@ instance PrettyPrintSimple Expr where
     prettyPrintSimple el ++
     " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er
 
+instance PrettyPrintSimple Operand where
+  prettyPrintSimple (OperandVar v) = prettyPrintSimple v
+  prettyPrintSimple (OperandRegister _ r) = prettyPrintSimple r
+
+instance PrettyPrintSimple Register where
+  prettyPrintSimple RegisterRSP = "RSP"
+
 instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementFunctionCall fcall) =
     prettyPrintSimple fcall ++ ";"
