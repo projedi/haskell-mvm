@@ -72,6 +72,9 @@ translateFunctionDef fdef = do
                   ASMSyntax.VarTypeInt
                   ASMSyntax.RegisterRSP))
         ]
+  let declareVars =
+        map (ASMSyntax.StatementAllocateOnStack . ASMSyntax.varType) $
+        (params ++ locals)
   let undeclareVars =
         map (const ASMSyntax.StatementPopFromStack) $ reverse (params ++ locals)
   let restoreRBP =
@@ -89,7 +92,7 @@ translateFunctionDef fdef = do
       , ASMSyntax.funDefParams = params
       , ASMSyntax.funDefLocals = locals
       , ASMSyntax.funDefBody = body
-      , ASMSyntax.funDefBeforeBody = saveRBP
+      , ASMSyntax.funDefBeforeBody = saveRBP ++ declareVars
       , ASMSyntax.funDefAfterBody = undeclareVars ++ restoreRBP
       }
 

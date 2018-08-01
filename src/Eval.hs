@@ -125,16 +125,10 @@ popFromStack =
   State.modify $ \env ->
     env {regRSP = regRSP env - 1, envStack = List.init (envStack env)}
 
-declareVariable :: Var -> Execute ()
-declareVariable Var {varType = vtype} = do
-  pushOnStack (defaultValueFromType vtype)
-
 nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)
 nativeFunctionCall fdef vals = do
   res <-
     do Nothing <- executeFunctionBody (funDefBeforeBody fdef)
-       let allLocals = funDefParams fdef ++ funDefLocals fdef
-       mapM_ declareVariable allLocals
        generateAssignments (funDefParams fdef) vals
        mv <- executeFunctionBody (funDefBody fdef)
        Nothing <- executeFunctionBody (funDefAfterBody fdef)
