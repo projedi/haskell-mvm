@@ -2,7 +2,6 @@
 
 module ASMSyntax
   ( Program(..)
-  , VarID(..)
   , FunID(..)
   , ConstID(..)
   , LabelID(..)
@@ -25,6 +24,7 @@ module ASMSyntax
   , functionCallType
   ) where
 
+import Data.Int (Int64)
 import Data.IntMap (IntMap)
 
 import LinearSyntax
@@ -34,7 +34,6 @@ import LinearSyntax
   , FunID(..)
   , LabelID(..)
   , UnOp(..)
-  , VarID(..)
   , VarType(..)
   , binOpTypeFromArgs
   , unOpTypeFromArg
@@ -46,9 +45,7 @@ data Program = Program
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
   , programConstants :: IntMap Value
-  , programVariables :: IntMap VarType
   , programLastFunID :: FunID
-  , programLastVarID :: VarID
   , programLastConstID :: ConstID
   , programLastLabelID :: LabelID
   }
@@ -104,8 +101,8 @@ functionCallType NativeFunctionCall {nativeFunCallRetType = rettype} = rettype
 functionCallType ForeignFunctionCall {foreignFunCallRetType = rettype} = rettype
 
 data Var = Var
-  { varName :: VarID
-  , varType :: VarType
+  { varType :: VarType
+  , varDisplacement :: Int64 -- Displacement from RBP.
   }
 
 data Expr = Expr

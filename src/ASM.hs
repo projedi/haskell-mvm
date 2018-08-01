@@ -17,19 +17,18 @@ avenge p =
     , ASMSyntax.programLibraries = LinearSyntax.programLibraries p
     , ASMSyntax.programForeignFunctions = LinearSyntax.programForeignFunctions p
     , ASMSyntax.programConstants = LinearSyntax.programConstants p
-    , ASMSyntax.programVariables = LinearSyntax.programVariables p
     , ASMSyntax.programLastFunID = LinearSyntax.programLastFunID p
-    , ASMSyntax.programLastVarID = LinearSyntax.programLastVarID p
     , ASMSyntax.programLastConstID = LinearSyntax.programLastConstID p
     , ASMSyntax.programLastLabelID = LinearSyntax.programLastLabelID p
     }
   where
     (fs, _) =
       runState (mapM translateFunctionDef (LinearSyntax.programFunctions p)) $
-      Env {varMap = IntMap.empty}
+      Env {varMap = IntMap.empty, varStack = []}
 
 data Env = Env
   { varMap :: IntMap ASMSyntax.Var
+  , varStack :: [ASMSyntax.VarType]
   }
 
 type ASM = State Env
@@ -38,10 +37,11 @@ introduceVariable :: LinearSyntax.Var -> ASM ASMSyntax.Var
 introduceVariable LinearSyntax.Var { LinearSyntax.varName = LinearSyntax.VarID vid
                                    , LinearSyntax.varType = t
                                    } = do
-  let var =
-        ASMSyntax.Var
-          {ASMSyntax.varName = LinearSyntax.VarID vid, ASMSyntax.varType = t}
-  State.modify $ \env -> env {varMap = IntMap.insert vid var $ varMap env}
+  d <- State.gets (fromIntegral . length . varStack)
+  let var = ASMSyntax.Var {ASMSyntax.varType = t, ASMSyntax.varDisplacement = d}
+  State.modify $ \env ->
+    env
+      {varMap = IntMap.insert vid var $ varMap env, varStack = t : varStack env}
   pure var
 
 resolveVariable :: LinearSyntax.Var -> ASM ASMSyntax.Var
@@ -53,8 +53,10 @@ resolveVariableAsOperand v = ASMSyntax.OperandVar <$> resolveVariable v
 
 translateFunctionDef :: LinearSyntax.FunctionDef -> ASM ASMSyntax.FunctionDef
 translateFunctionDef fdef = do
+  State.modify $ \env -> env {varStack = []}
   params <- mapM introduceVariable $ LinearSyntax.funDefParams fdef
   locals <- mapM introduceVariable $ LinearSyntax.funDefLocals fdef
+  State.modify $ \env -> env {varStack = []}
   body <- mapM translateStatement $ LinearSyntax.funDefBody fdef
   let saveRBP =
         [ ASMSyntax.StatementPushOnStack

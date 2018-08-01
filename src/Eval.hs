@@ -33,17 +33,14 @@ eval p = do
       (programForeignFunctions p)
       (programFunctions p)
       (programConstants p)
-      (programVariables p)
   forM_ libhandles dlclose
 
 data Env = Env
   { envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   , envFunctions :: IntMap FunctionDef
   , envConsts :: IntMap Value
-  , envVarTypes :: IntMap VarType
   , envRIP :: Int
   , envStack :: [Value]
-  , envVarMap :: IntMap Int64 -- displacements to RBP.
   , regRBP :: Int64
   , regRSP :: Int64
   }
@@ -54,23 +51,19 @@ emptyEnv =
     { envForeignFunctions = IntMap.empty
     , envFunctions = IntMap.empty
     , envConsts = IntMap.empty
-    , envVarTypes = IntMap.empty
     , envRIP = 0
     , envStack = []
-    , envVarMap = IntMap.empty
     , regRBP = 0
     , regRSP = 0
     }
 
 readVariableFromEnv :: Env -> Var -> Value
-readVariableFromEnv env Var {varName = VarID vid} =
-  let d = (envVarMap env) IntMap.! vid
-   in (envStack env) !! fromIntegral (regRBP env + d)
+readVariableFromEnv env Var {varDisplacement = d} =
+  (envStack env) !! fromIntegral (regRBP env + d)
 
 writeVariableToEnv :: Env -> Var -> Value -> Env
-writeVariableToEnv env Var {varName = VarID vid} val =
-  let d = (envVarMap env) IntMap.! vid
-      (before, _:after) =
+writeVariableToEnv env Var {varDisplacement = d} val =
+  let (before, _:after) =
         List.splitAt (fromIntegral (regRBP env + d)) $ envStack env
    in env {envStack = before ++ [val] ++ after}
 
@@ -82,9 +75,8 @@ dereferenceInEnv env (ValuePtr _ [d]) = (envStack env) !! d
 dereferenceInEnv _ _ = error "Type mismatch"
 
 addressOfInEnv :: Env -> Var -> Value
-addressOfInEnv env Var {varName = VarID vid, varType = vtype} =
-  let d = (envVarMap env) IntMap.! vid
-   in ValuePtr vtype [fromIntegral (d + regRBP env)]
+addressOfInEnv env Var {varDisplacement = d, varType = vtype} =
+  ValuePtr vtype [fromIntegral (d + regRBP env)]
 
 writeToPtrInEnv :: Env -> Value -> Value -> Env
 writeToPtrInEnv env (ValuePtr _ [d]) val =
@@ -103,16 +95,14 @@ startExecute ::
      IntMap ForeignFunctionDecl
   -> IntMap FunctionDef
   -> IntMap Value
-  -> IntMap VarType
   -> Execute ()
-startExecute foreignFuns nativeFuns consts vars = do
+startExecute foreignFuns nativeFuns consts = do
   funs <- mapM getForeignFun foreignFuns
   State.modify $ \env ->
     env
       { envForeignFunctions = funs
       , envFunctions = nativeFuns
       , envConsts = consts
-      , envVarTypes = vars
       }
   let Just mainFun = IntMap.lookup 0 nativeFuns
   _ <- nativeFunctionCall mainFun []
@@ -136,10 +126,7 @@ popFromStack =
     env {regRSP = regRSP env - 1, envStack = List.init (envStack env)}
 
 declareVariable :: Var -> Execute ()
-declareVariable Var {varName = VarID vid, varType = vtype} = do
-  State.modify $ \env ->
-    env
-      {envVarMap = IntMap.insert vid (regRSP env - regRBP env) $ envVarMap env}
+declareVariable Var {varType = vtype} = do
   pushOnStack (defaultValueFromType vtype)
 
 nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)

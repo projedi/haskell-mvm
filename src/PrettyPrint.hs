@@ -17,7 +17,6 @@ prettyPrint p =
     [ printLibs $ programLibraries p
     , printForeignFunctions $ programForeignFunctions p
     , printConstants $ programConstants p
-    , printVariables $ programVariables p
     , printFunctions $ programFunctions p
     ]
 
@@ -59,25 +58,14 @@ printConstants vals =
     ""
     vals
 
-printVariables :: IntMap VarType -> String
-printVariables vals =
-  "Variables: " ++
-  IntMap.foldrWithKey
-    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ show val)
-    ""
-    vals
-
 paren :: String -> String
 paren str = "(" ++ str ++ ")"
 
 class PrettyPrintSimple a where
   prettyPrintSimple :: a -> String
 
-instance PrettyPrintSimple VarID where
-  prettyPrintSimple = show
-
 instance PrettyPrintSimple Var where
-  prettyPrintSimple = show . varName
+  prettyPrintSimple v = "RBP + " ++ show (varDisplacement v)
 
 instance PrettyPrintSimple FunID where
   prettyPrintSimple = show
