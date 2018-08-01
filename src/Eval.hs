@@ -61,13 +61,13 @@ emptyEnv =
     , envRBP = 0
     }
 
-readVariableFromEnv :: Env -> VarID -> Value
-readVariableFromEnv env (VarID vid) =
+readVariableFromEnv :: Env -> Var -> Value
+readVariableFromEnv env Var {varName = VarID vid} =
   let d = (envVarMap env) IntMap.! vid
    in (envStack env) !! (envRBP env + d)
 
-writeVariableToEnv :: Env -> VarID -> Value -> Env
-writeVariableToEnv env (VarID vid) val =
+writeVariableToEnv :: Env -> Var -> Value -> Env
+writeVariableToEnv env Var {varName = VarID vid} val =
   let d = (envVarMap env) IntMap.! vid
       (before, _:after) = List.splitAt (envRBP env + d) $ envStack env
    in env {envStack = before ++ [val] ++ after}
@@ -79,10 +79,10 @@ dereferenceInEnv :: Env -> Value -> Value
 dereferenceInEnv env (ValuePtr _ [d]) = (envStack env) !! d
 dereferenceInEnv _ _ = error "Type mismatch"
 
-addressOfInEnv :: Env -> VarID -> Value
-addressOfInEnv env (VarID vid) =
+addressOfInEnv :: Env -> Var -> Value
+addressOfInEnv env Var {varName = VarID vid, varType = vtype} =
   let d = (envVarMap env) IntMap.! vid
-   in ValuePtr (envVarTypes env IntMap.! vid) [d + envRBP env]
+   in ValuePtr vtype [d + envRBP env]
 
 writeToPtrInEnv :: Env -> Value -> Value -> Env
 writeToPtrInEnv env (ValuePtr _ [d]) val =
@@ -134,7 +134,7 @@ popFromStack = do
   pure target
 
 declareVariable :: Var -> Execute ()
-declareVariable (Var (VarID vid) vtype) = do
+declareVariable Var {varName = VarID vid, varType = vtype} = do
   State.modify $ \env ->
     env
       {envVarMap = IntMap.insert vid (envRSP env - envRBP env) $ envVarMap env}
@@ -236,17 +236,16 @@ functionReturn :: Maybe Value -> Execute ()
 functionReturn = Except.throwError
 
 readVariable :: Var -> Execute Value
-readVariable v = State.gets $ \env -> readVariableFromEnv env (varName v)
+readVariable v = State.gets $ \env -> readVariableFromEnv env v
 
 writeVariable :: Var -> Value -> Execute ()
-writeVariable v val =
-  State.modify $ \env -> writeVariableToEnv env (varName v) val
+writeVariable v val = State.modify $ \env -> writeVariableToEnv env v val
 
 readConstant :: ConstID -> Execute Value
 readConstant name = State.gets $ \env -> readConstantFromEnv env name
 
 addressOf :: Var -> Execute Value
-addressOf v = State.gets $ \env -> addressOfInEnv env (varName v)
+addressOf v = State.gets $ \env -> addressOfInEnv env v
 
 dereference :: Value -> Execute Value
 dereference ptr = State.gets $ \env -> dereferenceInEnv env ptr
