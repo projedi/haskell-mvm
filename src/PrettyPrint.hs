@@ -8,7 +8,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
-import LinearSyntax
+import ASMSyntax
 import Value (Value)
 
 prettyPrint :: Program -> String
@@ -17,7 +17,6 @@ prettyPrint p =
     [ printLibs $ programLibraries p
     , printForeignFunctions $ programForeignFunctions p
     , printConstants $ programConstants p
-    , printVariables $ programVariables p
     , printFunctions $ programFunctions p
     ]
 
@@ -59,25 +58,14 @@ printConstants vals =
     ""
     vals
 
-printVariables :: IntMap VarType -> String
-printVariables vals =
-  "Variables: " ++
-  IntMap.foldrWithKey
-    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ show val)
-    ""
-    vals
-
 paren :: String -> String
 paren str = "(" ++ str ++ ")"
 
 class PrettyPrintSimple a where
   prettyPrintSimple :: a -> String
 
-instance PrettyPrintSimple VarID where
-  prettyPrintSimple = show
-
 instance PrettyPrintSimple Var where
-  prettyPrintSimple = show . varName
+  prettyPrintSimple v = "RBP + " ++ show (varDisplacement v)
 
 instance PrettyPrintSimple FunID where
   prettyPrintSimple = show
@@ -125,7 +113,8 @@ instance PrettyPrintSimple UnOp where
 
 instance PrettyPrintSimple Expr where
   prettyPrintSimple (ExprFunctionCall fcall) = prettyPrintSimple fcall
-  prettyPrintSimple (ExprVar v) = prettyPrintSimple v
+  prettyPrintSimple (ExprRead v) = prettyPrintSimple v
+  prettyPrintSimple (ExprPeekStack _) = "peek"
   prettyPrintSimple (ExprDereference p) = "*" ++ prettyPrintSimple p
   prettyPrintSimple (ExprAddressOf v) = "&" ++ prettyPrintSimple v
   prettyPrintSimple (ExprConst _ c) = show c
@@ -135,6 +124,14 @@ instance PrettyPrintSimple Expr where
     prettyPrintSimple el ++
     " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er
 
+instance PrettyPrintSimple Operand where
+  prettyPrintSimple (OperandVar v) = prettyPrintSimple v
+  prettyPrintSimple (OperandRegister _ r) = prettyPrintSimple r
+
+instance PrettyPrintSimple Register where
+  prettyPrintSimple RegisterRSP = "RSP"
+  prettyPrintSimple RegisterRBP = "RBP"
+
 instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementFunctionCall fcall) =
     prettyPrintSimple fcall ++ ";"
@@ -142,6 +139,11 @@ instance PrettyPrintSimple Statement where
     prettyPrintSimple var ++ " = " ++ prettyPrintSimple expr ++ ";"
   prettyPrintSimple (StatementAssignToPtr ptr var) =
     "*" ++ prettyPrintSimple ptr ++ " = " ++ prettyPrintSimple var ++ ";"
+  prettyPrintSimple (StatementPushOnStack x) =
+    "push " ++ prettyPrintSimple x ++ ";"
+  prettyPrintSimple (StatementAllocateOnStack t) =
+    "alloc " ++ prettyPrintSimple t ++ ";"
+  prettyPrintSimple StatementPopFromStack = "pop;"
   prettyPrintSimple (StatementReturn Nothing) = "return;"
   prettyPrintSimple (StatementReturn (Just v)) =
     "return " ++ prettyPrintSimple v ++ ";"
@@ -160,8 +162,18 @@ instance PrettyPrintSimple FunctionDef where
     List.intercalate
       "\n"
       (map (\v -> "local " ++ prettyPrintSimple v) (funDefLocals fdef)) ++
+    "\nbefore {\n" ++
+    List.intercalate
+      "\n"
+      (map (indent . prettyPrintSimple) (funDefBeforeBody fdef)) ++
+    "\n}" ++
     "\n{\n" ++
     List.intercalate "\n" (map (indent . prettyPrintSimple) (funDefBody fdef)) ++
+    "\n}" ++
+    "\nafter {\n" ++
+    List.intercalate
+      "\n"
+      (map (indent . prettyPrintSimple) (funDefAfterBody fdef)) ++
     "\n}"
     where
       indent :: String -> String

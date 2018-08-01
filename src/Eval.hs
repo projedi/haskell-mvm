@@ -13,12 +13,13 @@ import qualified Control.Monad.Trans as Trans
 import Data.Array (Array)
 import qualified Data.Array as Array
 import Data.Bits
+import Data.Int (Int64)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
+import ASMSyntax
 import ForeignEval
-import LinearSyntax
 import Value
 
 eval :: Program -> IO ()
@@ -32,19 +33,16 @@ eval p = do
       (programForeignFunctions p)
       (programFunctions p)
       (programConstants p)
-      (programVariables p)
   forM_ libhandles dlclose
 
 data Env = Env
   { envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   , envFunctions :: IntMap FunctionDef
   , envConsts :: IntMap Value
-  , envVarTypes :: IntMap VarType
   , envRIP :: Int
-  , envRSP :: Int
   , envStack :: [Value]
-  , envVarMap :: IntMap Int -- displacements to RBP.
-  , envRBP :: Int
+  , regRBP :: Int64
+  , regRSP :: Int64
   }
 
 emptyEnv :: Env
@@ -53,40 +51,35 @@ emptyEnv =
     { envForeignFunctions = IntMap.empty
     , envFunctions = IntMap.empty
     , envConsts = IntMap.empty
-    , envVarTypes = IntMap.empty
     , envRIP = 0
-    , envRSP = 0
     , envStack = []
-    , envVarMap = IntMap.empty
-    , envRBP = 0
+    , regRBP = 0
+    , regRSP = 0
     }
 
-readVariableFromEnv :: Env -> VarID -> Value
-readVariableFromEnv env (VarID vid) =
-  let d = (envVarMap env) IntMap.! vid
-   in (envStack env) !! (envRBP env + d)
+readVariableFromEnv :: Env -> Var -> Value
+readVariableFromEnv env Var {varDisplacement = d} =
+  (envStack env) !! fromIntegral (regRBP env + d)
 
-writeVariableToEnv :: Env -> VarID -> Value -> Env
-writeVariableToEnv env (VarID vid) val =
-  let d = (envVarMap env) IntMap.! vid
-      (before, _:after) = List.splitAt (envRBP env + d) $ envStack env
+writeVariableToEnv :: Env -> Var -> Value -> Env
+writeVariableToEnv env Var {varDisplacement = d} val =
+  let (before, _:after) =
+        List.splitAt (fromIntegral (regRBP env + d)) $ envStack env
    in env {envStack = before ++ [val] ++ after}
 
 readConstantFromEnv :: Env -> ConstID -> Value
 readConstantFromEnv env (ConstID cid) = (envConsts env) IntMap.! cid
 
 dereferenceInEnv :: Env -> Value -> Value
-dereferenceInEnv env (ValuePtr _ [d]) = (envStack env) !! d
+dereferenceInEnv env (ValueInt d) = (envStack env) !! (fromIntegral d)
 dereferenceInEnv _ _ = error "Type mismatch"
 
-addressOfInEnv :: Env -> VarID -> Value
-addressOfInEnv env (VarID vid) =
-  let d = (envVarMap env) IntMap.! vid
-   in ValuePtr (envVarTypes env IntMap.! vid) [d + envRBP env]
+addressOfInEnv :: Env -> Var -> Value
+addressOfInEnv env Var {varDisplacement = d} = ValueInt (d + regRBP env)
 
 writeToPtrInEnv :: Env -> Value -> Value -> Env
-writeToPtrInEnv env (ValuePtr _ [d]) val =
-  let (stackBefore, _:stackAfter) = List.splitAt d $ envStack env
+writeToPtrInEnv env (ValueInt d) val =
+  let (stackBefore, _:stackAfter) = List.splitAt (fromIntegral d) $ envStack env
    in env {envStack = stackBefore ++ [val] ++ stackAfter}
 writeToPtrInEnv _ _ _ = error "Type mismatch"
 
@@ -101,16 +94,14 @@ startExecute ::
      IntMap ForeignFunctionDecl
   -> IntMap FunctionDef
   -> IntMap Value
-  -> IntMap VarType
   -> Execute ()
-startExecute foreignFuns nativeFuns consts vars = do
+startExecute foreignFuns nativeFuns consts = do
   funs <- mapM getForeignFun foreignFuns
   State.modify $ \env ->
     env
       { envForeignFunctions = funs
       , envFunctions = nativeFuns
       , envConsts = consts
-      , envVarTypes = vars
       }
   let Just mainFun = IntMap.lookup 0 nativeFuns
   _ <- nativeFunctionCall mainFun []
@@ -123,40 +114,23 @@ startExecute foreignFuns nativeFuns consts vars = do
 pushOnStack :: Value -> Execute ()
 pushOnStack v =
   State.modify $ \env ->
-    env {envRSP = envRSP env + 1, envStack = envStack env ++ [v]}
+    env {regRSP = regRSP env + 1, envStack = envStack env ++ [v]}
 
-popFromStack :: Execute Value
-popFromStack = do
-  env <- State.get
-  let (before, [target]) =
-        List.splitAt (length (envStack env) - 1) (envStack env)
-  State.put $ env {envRSP = envRSP env - 1, envStack = before}
-  pure target
+peekStack :: Execute Value
+peekStack = State.gets (List.last . envStack)
 
-declareVariable :: Var -> Execute ()
-declareVariable (Var (VarID vid) vtype) = do
+popFromStack :: Execute ()
+popFromStack =
   State.modify $ \env ->
-    env
-      {envVarMap = IntMap.insert vid (envRSP env - envRBP env) $ envVarMap env}
-  pushOnStack (defaultValueFromType vtype)
-
-undeclareVariable :: Var -> Execute ()
-undeclareVariable _ = popFromStack >> pure ()
+    env {regRSP = regRSP env - 1, envStack = List.init (envStack env)}
 
 nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)
 nativeFunctionCall fdef vals = do
   res <-
-    do rbp <- State.gets envRBP
-       pushOnStack (ValueInt $ fromIntegral rbp)
-       rsp <- State.gets envRSP
-       State.modify $ \env -> env {envRBP = rsp}
-       let allLocals = funDefParams fdef ++ funDefLocals fdef
-       mapM_ declareVariable allLocals
+    do Nothing <- executeFunctionBody (funDefBeforeBody fdef)
        generateAssignments (funDefParams fdef) vals
        mv <- executeFunctionBody (funDefBody fdef)
-       mapM_ undeclareVariable (reverse allLocals)
-       ValueInt oldRBP <- popFromStack
-       State.modify $ \env -> env {envRBP = fromIntegral oldRBP}
+       Nothing <- executeFunctionBody (funDefAfterBody fdef)
        pure mv
   case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
@@ -207,8 +181,8 @@ generateAssignments (v:vs) (val:vals) = do
   generateAssignments vs vals
 generateAssignments _ _ = error "Type mismatch"
 
-evaluateArgs :: [Var] -> Execute [Value]
-evaluateArgs = mapM readVariable
+evaluateArgs :: [Operand] -> Execute [Value]
+evaluateArgs = mapM readOperand
 
 executeFunctionBody :: [Statement] -> Execute (Maybe Value)
 executeFunctionBody [] = pure Nothing
@@ -236,23 +210,40 @@ functionReturn :: Maybe Value -> Execute ()
 functionReturn = Except.throwError
 
 readVariable :: Var -> Execute Value
-readVariable v = State.gets $ \env -> readVariableFromEnv env (varName v)
+readVariable v = State.gets $ \env -> readVariableFromEnv env v
 
 writeVariable :: Var -> Value -> Execute ()
-writeVariable v val =
-  State.modify $ \env -> writeVariableToEnv env (varName v) val
+writeVariable v val = State.modify $ \env -> writeVariableToEnv env v val
 
 readConstant :: ConstID -> Execute Value
 readConstant name = State.gets $ \env -> readConstantFromEnv env name
 
 addressOf :: Var -> Execute Value
-addressOf v = State.gets $ \env -> addressOfInEnv env (varName v)
+addressOf v = State.gets $ \env -> addressOfInEnv env v
 
 dereference :: Value -> Execute Value
 dereference ptr = State.gets $ \env -> dereferenceInEnv env ptr
 
 writeToPtr :: Value -> Value -> Execute ()
 writeToPtr ptr val = State.modify $ \env -> writeToPtrInEnv env ptr val
+
+readRegister :: Register -> Execute Value
+readRegister RegisterRSP = State.gets (ValueInt . regRSP)
+readRegister RegisterRBP = State.gets (ValueInt . regRBP)
+
+writeRegister :: Register -> Value -> Execute ()
+writeRegister RegisterRSP (ValueInt i) = State.modify $ \env -> env {regRSP = i}
+writeRegister RegisterRSP _ = error "Type mismatch"
+writeRegister RegisterRBP (ValueInt i) = State.modify $ \env -> env {regRBP = i}
+writeRegister RegisterRBP _ = error "Type mismatch"
+
+readOperand :: Operand -> Execute Value
+readOperand (OperandVar v) = readVariable v
+readOperand (OperandRegister _ r) = readRegister r
+
+writeOperand :: Operand -> Value -> Execute ()
+writeOperand (OperandVar v) val = writeVariable v val
+writeOperand (OperandRegister _ r) val = writeRegister r val
 
 evaluateUnOp :: UnOp -> (Value -> Value)
 evaluateUnOp UnNeg = negate
@@ -286,15 +277,16 @@ evaluate :: Expr -> Execute Value
 evaluate (ExprFunctionCall fcall) = do
   Just val <- functionCall fcall
   pure val
-evaluate (ExprVar v) = readVariable v
+evaluate (ExprRead x) = readOperand x
+evaluate (ExprPeekStack _) = peekStack
 evaluate (ExprAddressOf v) = addressOf v
 evaluate (ExprDereference p) = do
-  v <- readVariable p
+  v <- readOperand p
   dereference v
 evaluate (ExprConst _ c) = readConstant c
-evaluate (ExprUnOp op v) = evaluateUnOp op <$> readVariable v
-evaluate (ExprBinOp op vl vr) =
-  evaluateBinOp op <$> readVariable vl <*> readVariable vr
+evaluate (ExprUnOp op x) = evaluateUnOp op <$> readOperand x
+evaluate (ExprBinOp op lhs rhs) =
+  evaluateBinOp op <$> readOperand lhs <*> readOperand rhs
 
 valueAsBool :: Value -> Bool
 valueAsBool (ValueInt i) = i /= 0
@@ -326,19 +318,25 @@ executeStatement = do
 execute :: Statement -> ExecuteStatement ()
 execute (StatementFunctionCall fcall) =
   Trans.lift (functionCall fcall) >> pure ()
-execute (StatementAssign var e) = do
+execute (StatementAssign lhs e) = do
   res <- Trans.lift $ evaluate e
-  Trans.lift $ writeVariable var res
-execute (StatementAssignToPtr ptr var) = do
-  res <- Trans.lift $ readVariable var
-  v <- Trans.lift $ readVariable ptr
+  Trans.lift $ writeOperand lhs res
+execute (StatementAssignToPtr ptr rhs) = do
+  res <- Trans.lift $ readOperand rhs
+  v <- Trans.lift $ readOperand ptr
   Trans.lift $ writeToPtr v res
+execute (StatementPushOnStack x) = do
+  res <- Trans.lift $ readOperand x
+  Trans.lift $ pushOnStack res
+execute (StatementAllocateOnStack v) = do
+  Trans.lift $ pushOnStack (defaultValueFromType v)
+execute StatementPopFromStack = Trans.lift popFromStack
 execute (StatementReturn Nothing) = Trans.lift $ functionReturn Nothing
-execute (StatementReturn (Just v)) = do
-  res <- Trans.lift $ readVariable v
+execute (StatementReturn (Just x)) = do
+  res <- Trans.lift $ readOperand x
   Trans.lift $ functionReturn (Just res)
 execute (StatementLabel _) = pure ()
 execute (StatementJump l) = jump l
-execute (StatementJumpIfZero v l) = do
-  res <- Trans.lift $ valueAsBool <$> readVariable v
+execute (StatementJumpIfZero x l) = do
+  res <- Trans.lift $ valueAsBool <$> readOperand x
   unless res $ jump l

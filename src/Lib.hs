@@ -5,9 +5,10 @@ module Lib
 import Control.Monad (forM_)
 import System.Environment (getArgs)
 
+import ASM
+import qualified ASMSyntax
 import qualified Eval
 import qualified EvalSimplified
-import qualified LinearSyntax
 import Parser (parseExpr)
 import qualified PrettyPrint
 import qualified PrettyPrintSimplified
@@ -20,8 +21,8 @@ import TypeChecker (typeCheck)
 getExpr :: String -> SimplifiedSyntax.Program
 getExpr = simplify . typeCheck . resolve . parseExpr
 
-getASM :: SimplifiedSyntax.Program -> LinearSyntax.Program
-getASM = linearize
+getASM :: SimplifiedSyntax.Program -> ASMSyntax.Program
+getASM = avenge . linearize
 
 evaluateFileDumb :: FilePath -> IO ()
 evaluateFileDumb fname = do
