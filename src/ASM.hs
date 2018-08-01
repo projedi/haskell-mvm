@@ -56,6 +56,30 @@ translateFunctionDef fdef = do
   params <- mapM introduceVariable $ LinearSyntax.funDefParams fdef
   locals <- mapM introduceVariable $ LinearSyntax.funDefLocals fdef
   body <- mapM translateStatement $ LinearSyntax.funDefBody fdef
+  let saveRBP =
+        [ ASMSyntax.StatementPushOnStack
+            (ASMSyntax.OperandRegister
+               ASMSyntax.VarTypeInt
+               ASMSyntax.RegisterRBP)
+        , ASMSyntax.StatementAssign
+            (ASMSyntax.OperandRegister
+               ASMSyntax.VarTypeInt
+               ASMSyntax.RegisterRBP)
+            (ASMSyntax.ExprRead
+               (ASMSyntax.OperandRegister
+                  ASMSyntax.VarTypeInt
+                  ASMSyntax.RegisterRSP))
+        ]
+  let undeclareVars =
+        map (const ASMSyntax.StatementPopFromStack) $ reverse (params ++ locals)
+  let restoreRBP =
+        [ ASMSyntax.StatementAssign
+            (ASMSyntax.OperandRegister
+               ASMSyntax.VarTypeInt
+               ASMSyntax.RegisterRBP)
+            (ASMSyntax.ExprPeekStack ASMSyntax.VarTypeInt)
+        , ASMSyntax.StatementPopFromStack
+        ]
   pure $
     ASMSyntax.FunctionDef
       { ASMSyntax.funDefRetType = LinearSyntax.funDefRetType fdef
@@ -63,6 +87,8 @@ translateFunctionDef fdef = do
       , ASMSyntax.funDefParams = params
       , ASMSyntax.funDefLocals = locals
       , ASMSyntax.funDefBody = body
+      , ASMSyntax.funDefBeforeBody = saveRBP
+      , ASMSyntax.funDefAfterBody = undeclareVars ++ restoreRBP
       }
 
 translateStatement :: LinearSyntax.Statement -> ASM ASMSyntax.Statement

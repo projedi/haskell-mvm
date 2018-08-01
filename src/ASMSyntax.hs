@@ -19,8 +19,8 @@ module ASMSyntax
   , Register(..)
   , Operand(..)
   , operandType
-  , Expr(ExprFunctionCall, ExprRead, ExprDereference, ExprAddressOf,
-     ExprConst, ExprBinOp, ExprUnOp)
+  , Expr(ExprFunctionCall, ExprRead, ExprPeekStack, ExprDereference,
+     ExprAddressOf, ExprConst, ExprBinOp, ExprUnOp)
   , exprType
   , functionCallType
   ) where
@@ -53,8 +53,9 @@ data Program = Program
   , programLastLabelID :: LabelID
   }
 
-data Register =
-  RegisterRSP
+data Register
+  = RegisterRSP
+  | RegisterRBP
 
 data Operand
   = OperandVar Var
@@ -71,6 +72,9 @@ data Statement
                     Expr
   | StatementAssignToPtr Operand
                          Operand
+  | StatementPushOnStack Operand
+  | StatementAllocateOnStack VarType
+  | StatementPopFromStack
   | StatementReturn (Maybe Operand)
   | StatementLabel LabelID
   | StatementJump LabelID
@@ -83,6 +87,8 @@ data FunctionDef = FunctionDef
   , funDefParams :: [Var]
   , funDefLocals :: [Var]
   , funDefBody :: [Statement]
+  , funDefBeforeBody :: [Statement]
+  , funDefAfterBody :: [Statement]
   }
 
 data FunctionCall
@@ -110,6 +116,7 @@ data Expr = Expr
 data ExprImpl
   = ExprFunctionCallImpl FunctionCall
   | ExprReadImpl Operand
+  | ExprPeekStackImpl
   | ExprDereferenceImpl Operand
   | ExprAddressOfImpl Var
   | ExprConstImpl ConstID
@@ -132,6 +139,11 @@ pattern ExprRead :: Operand -> Expr
 pattern ExprRead x <- Expr{exprImpl = ExprReadImpl x}
   where ExprRead x
           = Expr{exprType = operandType x, exprImpl = ExprReadImpl x}
+
+pattern ExprPeekStack :: VarType -> Expr
+
+pattern ExprPeekStack vType =
+        Expr{exprType = vType, exprImpl = ExprPeekStackImpl}
 
 pattern ExprDereference :: Operand -> Expr
 
@@ -167,5 +179,6 @@ pattern ExprUnOp op x <- Expr{exprImpl = ExprUnOpImpl op x}
           = Expr{exprType = t, exprImpl = ExprUnOpImpl op x}
           where t = unOpTypeFromArg op $ operandType x
 
-{-# COMPLETE ExprFunctionCall, ExprRead, ExprDereference,
-  ExprAddressOf, ExprConst, ExprBinOp, ExprUnOp :: Expr #-}
+{-# COMPLETE ExprFunctionCall, ExprRead, ExprPeekStack,
+  ExprDereference, ExprAddressOf, ExprConst, ExprBinOp, ExprUnOp
+  :: Expr #-}

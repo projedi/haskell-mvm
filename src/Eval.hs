@@ -42,10 +42,9 @@ data Env = Env
   , envConsts :: IntMap Value
   , envVarTypes :: IntMap VarType
   , envRIP :: Int
-  , envRSP :: Int
   , envStack :: [Value]
-  , envVarMap :: IntMap Int -- displacements to RBP.
-  , envRBP :: Int
+  , envVarMap :: IntMap Int64 -- displacements to RBP.
+  , regRBP :: Int64
   , regRSP :: Int64
   }
 
@@ -57,22 +56,22 @@ emptyEnv =
     , envConsts = IntMap.empty
     , envVarTypes = IntMap.empty
     , envRIP = 0
-    , envRSP = 0
     , envStack = []
     , envVarMap = IntMap.empty
-    , envRBP = 0
+    , regRBP = 0
     , regRSP = 0
     }
 
 readVariableFromEnv :: Env -> Var -> Value
 readVariableFromEnv env Var {varName = VarID vid} =
   let d = (envVarMap env) IntMap.! vid
-   in (envStack env) !! (envRBP env + d)
+   in (envStack env) !! fromIntegral (regRBP env + d)
 
 writeVariableToEnv :: Env -> Var -> Value -> Env
 writeVariableToEnv env Var {varName = VarID vid} val =
   let d = (envVarMap env) IntMap.! vid
-      (before, _:after) = List.splitAt (envRBP env + d) $ envStack env
+      (before, _:after) =
+        List.splitAt (fromIntegral (regRBP env + d)) $ envStack env
    in env {envStack = before ++ [val] ++ after}
 
 readConstantFromEnv :: Env -> ConstID -> Value
@@ -85,7 +84,7 @@ dereferenceInEnv _ _ = error "Type mismatch"
 addressOfInEnv :: Env -> Var -> Value
 addressOfInEnv env Var {varName = VarID vid, varType = vtype} =
   let d = (envVarMap env) IntMap.! vid
-   in ValuePtr vtype [d + envRBP env]
+   in ValuePtr vtype [fromIntegral (d + regRBP env)]
 
 writeToPtrInEnv :: Env -> Value -> Value -> Env
 writeToPtrInEnv env (ValuePtr _ [d]) val =
@@ -126,40 +125,32 @@ startExecute foreignFuns nativeFuns consts vars = do
 pushOnStack :: Value -> Execute ()
 pushOnStack v =
   State.modify $ \env ->
-    env {envRSP = envRSP env + 1, envStack = envStack env ++ [v]}
+    env {regRSP = regRSP env + 1, envStack = envStack env ++ [v]}
 
-popFromStack :: Execute Value
-popFromStack = do
-  env <- State.get
-  let (before, [target]) =
-        List.splitAt (length (envStack env) - 1) (envStack env)
-  State.put $ env {envRSP = envRSP env - 1, envStack = before}
-  pure target
+peekStack :: Execute Value
+peekStack = State.gets (List.last . envStack)
+
+popFromStack :: Execute ()
+popFromStack =
+  State.modify $ \env ->
+    env {regRSP = regRSP env - 1, envStack = List.init (envStack env)}
 
 declareVariable :: Var -> Execute ()
 declareVariable Var {varName = VarID vid, varType = vtype} = do
   State.modify $ \env ->
     env
-      {envVarMap = IntMap.insert vid (envRSP env - envRBP env) $ envVarMap env}
+      {envVarMap = IntMap.insert vid (regRSP env - regRBP env) $ envVarMap env}
   pushOnStack (defaultValueFromType vtype)
-
-undeclareVariable :: Var -> Execute ()
-undeclareVariable _ = popFromStack >> pure ()
 
 nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)
 nativeFunctionCall fdef vals = do
   res <-
-    do rbp <- State.gets envRBP
-       pushOnStack (ValueInt $ fromIntegral rbp)
-       rsp <- State.gets envRSP
-       State.modify $ \env -> env {envRBP = rsp}
+    do Nothing <- executeFunctionBody (funDefBeforeBody fdef)
        let allLocals = funDefParams fdef ++ funDefLocals fdef
        mapM_ declareVariable allLocals
        generateAssignments (funDefParams fdef) vals
        mv <- executeFunctionBody (funDefBody fdef)
-       mapM_ undeclareVariable (reverse allLocals)
-       ValueInt oldRBP <- popFromStack
-       State.modify $ \env -> env {envRBP = fromIntegral oldRBP}
+       Nothing <- executeFunctionBody (funDefAfterBody fdef)
        pure mv
   case (res, funDefRetType fdef) of
     (Nothing, Nothing) -> pure res
@@ -258,10 +249,13 @@ writeToPtr ptr val = State.modify $ \env -> writeToPtrInEnv env ptr val
 
 readRegister :: Register -> Execute Value
 readRegister RegisterRSP = State.gets (ValueInt . regRSP)
+readRegister RegisterRBP = State.gets (ValueInt . regRBP)
 
 writeRegister :: Register -> Value -> Execute ()
 writeRegister RegisterRSP (ValueInt i) = State.modify $ \env -> env {regRSP = i}
 writeRegister RegisterRSP _ = error "Type mismatch"
+writeRegister RegisterRBP (ValueInt i) = State.modify $ \env -> env {regRBP = i}
+writeRegister RegisterRBP _ = error "Type mismatch"
 
 readOperand :: Operand -> Execute Value
 readOperand (OperandVar v) = readVariable v
@@ -304,6 +298,7 @@ evaluate (ExprFunctionCall fcall) = do
   Just val <- functionCall fcall
   pure val
 evaluate (ExprRead x) = readOperand x
+evaluate (ExprPeekStack _) = peekStack
 evaluate (ExprAddressOf v) = addressOf v
 evaluate (ExprDereference p) = do
   v <- readOperand p
@@ -350,6 +345,12 @@ execute (StatementAssignToPtr ptr rhs) = do
   res <- Trans.lift $ readOperand rhs
   v <- Trans.lift $ readOperand ptr
   Trans.lift $ writeToPtr v res
+execute (StatementPushOnStack x) = do
+  res <- Trans.lift $ readOperand x
+  Trans.lift $ pushOnStack res
+execute (StatementAllocateOnStack v) = do
+  Trans.lift $ pushOnStack (defaultValueFromType v)
+execute StatementPopFromStack = Trans.lift popFromStack
 execute (StatementReturn Nothing) = Trans.lift $ functionReturn Nothing
 execute (StatementReturn (Just x)) = do
   res <- Trans.lift $ readOperand x

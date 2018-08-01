@@ -126,6 +126,7 @@ instance PrettyPrintSimple UnOp where
 instance PrettyPrintSimple Expr where
   prettyPrintSimple (ExprFunctionCall fcall) = prettyPrintSimple fcall
   prettyPrintSimple (ExprRead v) = prettyPrintSimple v
+  prettyPrintSimple (ExprPeekStack _) = "peek"
   prettyPrintSimple (ExprDereference p) = "*" ++ prettyPrintSimple p
   prettyPrintSimple (ExprAddressOf v) = "&" ++ prettyPrintSimple v
   prettyPrintSimple (ExprConst _ c) = show c
@@ -141,6 +142,7 @@ instance PrettyPrintSimple Operand where
 
 instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"
+  prettyPrintSimple RegisterRBP = "RBP"
 
 instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementFunctionCall fcall) =
@@ -149,6 +151,11 @@ instance PrettyPrintSimple Statement where
     prettyPrintSimple var ++ " = " ++ prettyPrintSimple expr ++ ";"
   prettyPrintSimple (StatementAssignToPtr ptr var) =
     "*" ++ prettyPrintSimple ptr ++ " = " ++ prettyPrintSimple var ++ ";"
+  prettyPrintSimple (StatementPushOnStack x) =
+    "push " ++ prettyPrintSimple x ++ ";"
+  prettyPrintSimple (StatementAllocateOnStack t) =
+    "alloc " ++ prettyPrintSimple t ++ ";"
+  prettyPrintSimple StatementPopFromStack = "pop;"
   prettyPrintSimple (StatementReturn Nothing) = "return;"
   prettyPrintSimple (StatementReturn (Just v)) =
     "return " ++ prettyPrintSimple v ++ ";"
@@ -167,8 +174,18 @@ instance PrettyPrintSimple FunctionDef where
     List.intercalate
       "\n"
       (map (\v -> "local " ++ prettyPrintSimple v) (funDefLocals fdef)) ++
+    "\nbefore {\n" ++
+    List.intercalate
+      "\n"
+      (map (indent . prettyPrintSimple) (funDefBeforeBody fdef)) ++
+    "\n}" ++
     "\n{\n" ++
     List.intercalate "\n" (map (indent . prettyPrintSimple) (funDefBody fdef)) ++
+    "\n}" ++
+    "\nafter {\n" ++
+    List.intercalate
+      "\n"
+      (map (indent . prettyPrintSimple) (funDefAfterBody fdef)) ++
     "\n}"
     where
       indent :: String -> String
