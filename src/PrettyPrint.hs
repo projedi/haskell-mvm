@@ -130,6 +130,8 @@ instance PrettyPrintSimple Operand where
 instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"
   prettyPrintSimple RegisterRBP = "RBP"
+  prettyPrintSimple RegisterRAX = "RAX"
+  prettyPrintSimple RegisterXMM0 = "XMM0"
 
 instance PrettyPrintSimple Pointer where
   prettyPrintSimple Pointer {pointerBase = mr, pointerDisplacement = d} =
@@ -163,9 +165,6 @@ instance PrettyPrintSimple FunctionDef where
     prettyPrintSimple (funDefName fdef) ++
     paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef))) ++
     "\n" ++
-    List.intercalate
-      "\n"
-      (map (\v -> "local " ++ prettyPrintSimple v) (funDefLocals fdef)) ++
     "\nbefore {\n" ++
     List.intercalate
       "\n"

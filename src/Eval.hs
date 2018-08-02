@@ -19,6 +19,8 @@ import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
 import ASMSyntax
+import CallingConvention (CallingConvention)
+import qualified CallingConvention
 import ForeignEval
 import Value
 
@@ -50,14 +52,17 @@ data Env = Env
   , envStack :: [Value]
   , regRBP :: Int64
   , regRSP :: Int64
+  , regRAX :: Int64
+  , regXMM0 :: Double
   }
 
 instance Show Env where
   show env =
-    "rip = " ++ show (envRIP env) ++
-    ", rbp = " ++ show (regRBP env) ++
-    ", rsp = " ++ show (regRSP env) ++
-    ", stack = " ++ show (envStack env)
+    "rip = " ++
+    show (envRIP env) ++
+    ", rbp = " ++
+    show (regRBP env) ++
+    ", rsp = " ++ show (regRSP env) ++ ", stack = " ++ show (envStack env)
 
 emptyEnv :: Env
 emptyEnv =
@@ -69,6 +74,8 @@ emptyEnv =
     , envStack = []
     , regRBP = 0
     , regRSP = 0
+    , regRAX = 0
+    , regXMM0 = 0
     }
 
 type Execute = ExceptT (Maybe Value) (StateT Env IO)
@@ -92,7 +99,13 @@ startExecute foreignFuns nativeFuns consts = do
       , envConsts = consts
       }
   let Just mainFun = IntMap.lookup 0 nativeFuns
-  _ <- nativeFunctionCall mainFun []
+  _ <-
+    nativeFunctionCall mainFun $
+    CallingConvention.computeCallingConvention
+      CallingConvention.FunctionCall
+        { CallingConvention.funRetType = Nothing
+        , CallingConvention.funArgTypes = []
+        }
   pure ()
   where
     getForeignFun fdecl = do
@@ -111,10 +124,47 @@ popFromStack t = do
   State.modify $ \env ->
     env {regRSP = regRSP env - 1, envStack = List.init (envStack env)}
 
-nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)
-nativeFunctionCall fdef vals = do
+prepareArgsForCall :: CallingConvention -> [Value] -> Execute ()
+prepareArgsForCall cc vals = do
+  mapM_
+    (pushOnStack . defaultValueFromType)
+    (CallingConvention.funStackToAllocate cc)
+  mapM_ go (zip vals (CallingConvention.funArgValues cc))
+  where
+    go :: (Value, CallingConvention.ArgLocation) -> Execute ()
+    go (val, CallingConvention.ArgLocationRegister _ r) = writeRegister r val
+    go (val, CallingConvention.ArgLocationStack t d) =
+      writePointer
+        Pointer
+          { pointerType = t
+          , pointerBase = Just RegisterRSP
+          , pointerDisplacement = -(d + 1)
+          }
+        val
+
+prepareArgsAtCall :: CallingConvention -> Execute [Value]
+prepareArgsAtCall cc = do
+  mapM go (CallingConvention.funArgValues cc)
+  where
+    go :: CallingConvention.ArgLocation -> Execute Value
+    go (CallingConvention.ArgLocationRegister _ r) = readRegister r
+    go (CallingConvention.ArgLocationStack t d) =
+      readPointer
+        Pointer
+          { pointerType = t
+          , pointerBase = Just RegisterRBP
+          , pointerDisplacement = -(d + 2)
+          }
+
+cleanStackAfterCall :: CallingConvention -> Execute ()
+cleanStackAfterCall cc = do
+  mapM_ popFromStack (reverse $ CallingConvention.funStackToAllocate cc)
+
+nativeFunctionCall :: FunctionDef -> CallingConvention -> Execute (Maybe Value)
+nativeFunctionCall fdef cc = do
   res <-
     do Nothing <- executeFunctionBody (funDefBeforeBody fdef)
+       vals <- prepareArgsAtCall cc
        generateAssignments (funDefParams fdef) vals
        mv <- executeFunctionBody (funDefBody fdef)
        Nothing <- executeFunctionBody (funDefAfterBody fdef)
@@ -129,11 +179,28 @@ foreignFunctionCall ::
      Maybe VarType
   -> [VarType]
   -> Bool
-  -> [Value]
+  -> CallingConvention
   -> ForeignFun
   -> Execute (Maybe Value)
-foreignFunctionCall rettype params hasVarArgs vals fun =
-  Trans.liftIO $ call fun rettype (assertVals params vals)
+foreignFunctionCall rettype params hasVarArgs cc fun
+  -- We need to model what happens during nativeFunctionCAll because of prepareArgsAtCall
+ = do
+  rbp1 <- readRegister RegisterRBP
+  pushOnStack rbp1
+  rsp1 <- readRegister RegisterRSP
+  writeRegister RegisterRBP rsp1
+  vals <- prepareArgsAtCall cc
+  res <- Trans.liftIO $ call fun rettype (assertVals params vals)
+  rbp2 <-
+    readPointer $
+    Pointer
+      { pointerType = VarTypeInt
+      , pointerBase = Just RegisterRSP
+      , pointerDisplacement = -1
+      }
+  writeRegister RegisterRBP rbp2
+  popFromStack VarTypeInt
+  pure res
   where
     assertVals [] [] = []
     assertVals (vtype:ps) (v:vs)
@@ -148,18 +215,37 @@ functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
                                  } = do
   vals <- evaluateArgs args
   Just (fdecl, f) <- State.gets (IntMap.lookup fid . envForeignFunctions)
-  foreignFunctionCall
-    (foreignFunDeclRetType fdecl)
-    (foreignFunDeclParams fdecl)
-    (foreignFunDeclHasVarArgs fdecl)
-    vals
-    f
+  let cc =
+        CallingConvention.computeCallingConvention
+          CallingConvention.FunctionCall
+            { CallingConvention.funRetType = foreignFunDeclRetType fdecl
+            , CallingConvention.funArgTypes = map typeof vals
+            }
+  prepareArgsForCall cc vals
+  res <-
+    foreignFunctionCall
+      (foreignFunDeclRetType fdecl)
+      (foreignFunDeclParams fdecl)
+      (foreignFunDeclHasVarArgs fdecl)
+      cc
+      f
+  cleanStackAfterCall cc
+  pure res
 functionCall NativeFunctionCall { nativeFunCallName = (FunID fid)
                                 , nativeFunCallArgs = args
                                 } = do
   vals <- evaluateArgs args
   Just f <- State.gets (IntMap.lookup fid . envFunctions)
-  nativeFunctionCall f vals
+  let cc =
+        CallingConvention.computeCallingConvention
+          CallingConvention.FunctionCall
+            { CallingConvention.funRetType = funDefRetType f
+            , CallingConvention.funArgTypes = map typeof vals
+            }
+  prepareArgsForCall cc vals
+  res <- nativeFunctionCall f cc
+  cleanStackAfterCall cc
+  pure res
 
 generateAssignments :: [Var] -> [Value] -> Execute ()
 generateAssignments [] [] = pure ()
@@ -217,12 +303,19 @@ writeToPtr _ _ = error "Type mismatch"
 readRegister :: Register -> Execute Value
 readRegister RegisterRSP = State.gets (ValueInt . regRSP)
 readRegister RegisterRBP = State.gets (ValueInt . regRBP)
+readRegister RegisterRAX = State.gets (ValueInt . regRAX)
+readRegister RegisterXMM0 = State.gets (ValueFloat . regXMM0)
 
 writeRegister :: Register -> Value -> Execute ()
 writeRegister RegisterRSP (ValueInt i) = State.modify $ \env -> env {regRSP = i}
 writeRegister RegisterRSP _ = error "Type mismatch"
 writeRegister RegisterRBP (ValueInt i) = State.modify $ \env -> env {regRBP = i}
 writeRegister RegisterRBP _ = error "Type mismatch"
+writeRegister RegisterRAX (ValueInt i) = State.modify $ \env -> env {regRAX = i}
+writeRegister RegisterRAX _ = error "Type mismatch"
+writeRegister RegisterXMM0 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM0 = f}
+writeRegister RegisterXMM0 _ = error "Type mismatch"
 
 readPointer :: Pointer -> Execute Value
 readPointer Pointer {pointerBase = mr, pointerDisplacement = d} = do

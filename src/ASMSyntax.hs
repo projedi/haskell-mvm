@@ -54,6 +54,8 @@ data Program = Program
 data Register
   = RegisterRSP
   | RegisterRBP
+  | RegisterRAX
+  | RegisterXMM0
 
 data Pointer = Pointer
   { pointerType :: VarType
@@ -91,7 +93,6 @@ data FunctionDef = FunctionDef
   { funDefRetType :: Maybe VarType
   , funDefName :: FunID
   , funDefParams :: [Var]
-  , funDefLocals :: [Var]
   , funDefBody :: [Statement]
   , funDefBeforeBody :: [Statement]
   , funDefAfterBody :: [Statement]

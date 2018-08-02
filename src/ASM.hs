@@ -102,7 +102,6 @@ translateFunctionDef fdef = do
       { ASMSyntax.funDefRetType = LinearSyntax.funDefRetType fdef
       , ASMSyntax.funDefName = LinearSyntax.funDefName fdef
       , ASMSyntax.funDefParams = params
-      , ASMSyntax.funDefLocals = locals
       , ASMSyntax.funDefBody = body
       , ASMSyntax.funDefBeforeBody = saveRBP ++ declareVars
       , ASMSyntax.funDefAfterBody = undeclareVars ++ restoreRBP
