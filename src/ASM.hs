@@ -1,9 +1,13 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module ASM
   ( avenge
   ) where
 
-import Control.Monad.State (State, runState)
+import Control.Monad.State (MonadState, State, runState)
 import qualified Control.Monad.State as State
+import Control.Monad.Writer (WriterT, execWriterT)
+import qualified Control.Monad.Writer as Writer
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 
@@ -60,11 +64,12 @@ introduceVariable LinearSyntax.Var { LinearSyntax.varName = LinearSyntax.VarID v
       {varMap = IntMap.insert vid var $ varMap env, varStack = t : varStack env}
   pure var
 
-resolveVariable :: LinearSyntax.Var -> ASM ASMSyntax.Var
+resolveVariable :: MonadState Env m => LinearSyntax.Var -> m ASMSyntax.Var
 resolveVariable LinearSyntax.Var {LinearSyntax.varName = LinearSyntax.VarID vid} =
   State.gets ((IntMap.! vid) . varMap)
 
-resolveVariableAsOperand :: LinearSyntax.Var -> ASM ASMSyntax.Operand
+resolveVariableAsOperand ::
+     MonadState Env m => LinearSyntax.Var -> m ASMSyntax.Operand
 resolveVariableAsOperand v = do
   ASMSyntax.Var {ASMSyntax.varType = t, ASMSyntax.varDisplacement = d} <-
     resolveVariable v
@@ -82,7 +87,7 @@ translateFunctionDef fdef = do
   params <- mapM introduceVariable $ LinearSyntax.funDefParams fdef
   locals <- mapM introduceVariable $ LinearSyntax.funDefLocals fdef
   State.modify $ \env -> env {varStack = []}
-  body <- mapM translateStatement $ LinearSyntax.funDefBody fdef
+  body <- execWriterT $ mapM_ translateStatement $ LinearSyntax.funDefBody fdef
   let saveRBP =
         [ ASMSyntax.StatementPushOnStack opRBP
         , ASMSyntax.StatementAssign opRBP (ASMSyntax.ExprRead opRSP)
@@ -107,41 +112,60 @@ translateFunctionDef fdef = do
       , ASMSyntax.funDefAfterBody = undeclareVars ++ restoreRBP
       }
 
-translateStatement :: LinearSyntax.Statement -> ASM ASMSyntax.Statement
-translateStatement (LinearSyntax.StatementFunctionCall fcall) =
-  ASMSyntax.StatementFunctionCall Nothing <$> translateFunctionCall fcall
+type ASMStatement = WriterT [ASMSyntax.Statement] ASM
+
+addStatement :: ASMSyntax.Statement -> ASMStatement ()
+addStatement s = Writer.tell [s]
+
+translateStatement :: LinearSyntax.Statement -> ASMStatement ()
+translateStatement (LinearSyntax.StatementFunctionCall fcall) = do
+  translateFunctionCall Nothing fcall
 translateStatement (LinearSyntax.StatementAssign v (LinearSyntax.ExprFunctionCall fcall)) =
-  ASMSyntax.StatementFunctionCall <$> (Just <$> resolveVariableAsOperand v) <*>
-  translateFunctionCall fcall
-translateStatement (LinearSyntax.StatementAssign v e) =
-  ASMSyntax.StatementAssign <$> resolveVariableAsOperand v <*> translateExpr e
-translateStatement (LinearSyntax.StatementAssignToPtr p v) =
-  ASMSyntax.StatementAssignToPtr <$> resolveVariableAsOperand p <*>
-  resolveVariableAsOperand v
+  translateFunctionCall (Just v) fcall
+translateStatement (LinearSyntax.StatementAssign v e) = do
+  v' <- resolveVariableAsOperand v
+  e' <- translateExpr e
+  addStatement $ ASMSyntax.StatementAssign v' e'
+translateStatement (LinearSyntax.StatementAssignToPtr p v) = do
+  p' <- resolveVariableAsOperand p
+  v' <- resolveVariableAsOperand v
+  addStatement $ ASMSyntax.StatementAssignToPtr p' v'
 translateStatement (LinearSyntax.StatementReturn Nothing) =
-  pure $ ASMSyntax.StatementReturn Nothing
-translateStatement (LinearSyntax.StatementReturn (Just v)) =
-  (ASMSyntax.StatementReturn . Just) <$> resolveVariableAsOperand v
+  addStatement $ ASMSyntax.StatementReturn Nothing
+translateStatement (LinearSyntax.StatementReturn (Just v)) = do
+  v' <- resolveVariableAsOperand v
+  addStatement $ ASMSyntax.StatementReturn $ Just v'
 translateStatement (LinearSyntax.StatementLabel l) =
-  pure $ ASMSyntax.StatementLabel l
+  addStatement $ ASMSyntax.StatementLabel l
 translateStatement (LinearSyntax.StatementJump l) =
-  pure $ ASMSyntax.StatementJump l
+  addStatement $ ASMSyntax.StatementJump l
 translateStatement (LinearSyntax.StatementJumpIfZero v l) = do
   v' <- resolveVariableAsOperand v
-  pure $ ASMSyntax.StatementJumpIfZero v' l
+  addStatement $ ASMSyntax.StatementJumpIfZero v' l
 
-translateFunctionCall :: LinearSyntax.FunctionCall -> ASM ASMSyntax.FunctionCall
-translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
+translateFunctionCall ::
+     Maybe LinearSyntax.Var -> LinearSyntax.FunctionCall -> ASMStatement ()
+translateFunctionCall mv fcall@LinearSyntax.NativeFunctionCall {} = do
+  mv' <-
+    case mv of
+      Nothing -> pure Nothing
+      Just v -> Just <$> resolveVariableAsOperand v
   args <- mapM resolveVariableAsOperand $ LinearSyntax.nativeFunCallArgs fcall
-  pure $
+  addStatement $
+    ASMSyntax.StatementFunctionCall mv' $
     ASMSyntax.NativeFunctionCall
       { ASMSyntax.nativeFunCallName = LinearSyntax.nativeFunCallName fcall
       , ASMSyntax.nativeFunCallRetType = LinearSyntax.nativeFunCallRetType fcall
       , ASMSyntax.nativeFunCallArgs = args
       }
-translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
+translateFunctionCall mv fcall@LinearSyntax.ForeignFunctionCall {} = do
+  mv' <-
+    case mv of
+      Nothing -> pure Nothing
+      Just v -> Just <$> resolveVariableAsOperand v
   args <- mapM resolveVariableAsOperand $ LinearSyntax.foreignFunCallArgs fcall
-  pure $
+  addStatement $
+    ASMSyntax.StatementFunctionCall mv' $
     ASMSyntax.ForeignFunctionCall
       { ASMSyntax.foreignFunCallName = LinearSyntax.foreignFunCallName fcall
       , ASMSyntax.foreignFunCallRetType =
@@ -149,7 +173,7 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
       , ASMSyntax.foreignFunCallArgs = args
       }
 
-translateExpr :: LinearSyntax.Expr -> ASM ASMSyntax.Expr
+translateExpr :: LinearSyntax.Expr -> ASMStatement ASMSyntax.Expr
 translateExpr (LinearSyntax.ExprFunctionCall _) =
   error "Must've been handled in translateStatement"
 translateExpr (LinearSyntax.ExprVar v) =
