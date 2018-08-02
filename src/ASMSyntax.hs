@@ -16,10 +16,11 @@ module ASMSyntax
   , unOpTypeFromArg
   , Var(..)
   , Register(..)
+  , Pointer(..)
   , Operand(..)
   , operandType
-  , Expr(ExprFunctionCall, ExprRead, ExprPeekStack, ExprDereference,
-     ExprAddressOf, ExprConst, ExprBinOp, ExprUnOp)
+  , Expr(ExprFunctionCall, ExprRead, ExprDereference, ExprConst,
+     ExprBinOp, ExprUnOp)
   , exprType
   , functionCallType
   ) where
@@ -54,14 +55,22 @@ data Register
   = RegisterRSP
   | RegisterRBP
 
+data Pointer = Pointer
+  { pointerType :: VarType
+  , pointerBase :: Maybe Register
+  , pointerDisplacement :: Int64
+  }
+
 data Operand
-  = OperandVar Var
-  | OperandRegister VarType
+  = OperandRegister VarType
                     Register
+  | OperandPointer Pointer
+  | OperandImmediateInt Int64 -- TODO: Reconsider.
 
 operandType :: Operand -> VarType
-operandType (OperandVar v) = varType v
 operandType (OperandRegister t _) = t
+operandType (OperandPointer p) = pointerType p
+operandType (OperandImmediateInt _) = VarTypeInt
 
 data Statement
   = StatementFunctionCall FunctionCall
@@ -71,7 +80,7 @@ data Statement
                          Operand
   | StatementPushOnStack Operand
   | StatementAllocateOnStack VarType
-  | StatementPopFromStack
+  | StatementPopFromStack VarType
   | StatementReturn (Maybe Operand)
   | StatementLabel LabelID
   | StatementJump LabelID
@@ -113,9 +122,7 @@ data Expr = Expr
 data ExprImpl
   = ExprFunctionCallImpl FunctionCall
   | ExprReadImpl Operand
-  | ExprPeekStackImpl
   | ExprDereferenceImpl Operand
-  | ExprAddressOfImpl Var
   | ExprConstImpl ConstID
   | ExprBinOpImpl BinOp
                   Operand
@@ -137,24 +144,12 @@ pattern ExprRead x <- Expr{exprImpl = ExprReadImpl x}
   where ExprRead x
           = Expr{exprType = operandType x, exprImpl = ExprReadImpl x}
 
-pattern ExprPeekStack :: VarType -> Expr
-
-pattern ExprPeekStack vType =
-        Expr{exprType = vType, exprImpl = ExprPeekStackImpl}
-
 pattern ExprDereference :: Operand -> Expr
 
 pattern ExprDereference x <- Expr{exprImpl = ExprDereferenceImpl x}
   where ExprDereference x
           = Expr{exprType = t, exprImpl = ExprDereferenceImpl x}
           where (VarTypePtr t) = operandType x
-
-pattern ExprAddressOf :: Var -> Expr
-
-pattern ExprAddressOf v <- Expr{exprImpl = ExprAddressOfImpl v}
-  where ExprAddressOf v
-          = Expr{exprType = VarTypePtr (varType v),
-                 exprImpl = ExprAddressOfImpl v}
 
 pattern ExprConst :: VarType -> ConstID -> Expr
 
@@ -176,6 +171,5 @@ pattern ExprUnOp op x <- Expr{exprImpl = ExprUnOpImpl op x}
           = Expr{exprType = t, exprImpl = ExprUnOpImpl op x}
           where t = unOpTypeFromArg op $ operandType x
 
-{-# COMPLETE ExprFunctionCall, ExprRead, ExprPeekStack,
-  ExprDereference, ExprAddressOf, ExprConst, ExprBinOp, ExprUnOp
-  :: Expr #-}
+{-# COMPLETE ExprFunctionCall, ExprRead, ExprDereference,
+  ExprConst, ExprBinOp, ExprUnOp :: Expr #-}

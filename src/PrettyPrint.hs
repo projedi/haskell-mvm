@@ -114,9 +114,7 @@ instance PrettyPrintSimple UnOp where
 instance PrettyPrintSimple Expr where
   prettyPrintSimple (ExprFunctionCall fcall) = prettyPrintSimple fcall
   prettyPrintSimple (ExprRead v) = prettyPrintSimple v
-  prettyPrintSimple (ExprPeekStack _) = "peek"
   prettyPrintSimple (ExprDereference p) = "*" ++ prettyPrintSimple p
-  prettyPrintSimple (ExprAddressOf v) = "&" ++ prettyPrintSimple v
   prettyPrintSimple (ExprConst _ c) = show c
   prettyPrintSimple (ExprUnOp op v) =
     prettyPrintSimple op ++ prettyPrintSimple v
@@ -125,12 +123,17 @@ instance PrettyPrintSimple Expr where
     " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er
 
 instance PrettyPrintSimple Operand where
-  prettyPrintSimple (OperandVar v) = prettyPrintSimple v
   prettyPrintSimple (OperandRegister _ r) = prettyPrintSimple r
+  prettyPrintSimple (OperandPointer p) = prettyPrintSimple p
+  prettyPrintSimple (OperandImmediateInt i) = show i
 
 instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"
   prettyPrintSimple RegisterRBP = "RBP"
+
+instance PrettyPrintSimple Pointer where
+  prettyPrintSimple Pointer {pointerBase = mr, pointerDisplacement = d} =
+    "[" ++ (maybe "" ((++ "+") . prettyPrintSimple) mr) ++ show d ++ "]"
 
 instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementFunctionCall fcall) =
@@ -143,7 +146,8 @@ instance PrettyPrintSimple Statement where
     "push " ++ prettyPrintSimple x ++ ";"
   prettyPrintSimple (StatementAllocateOnStack t) =
     "alloc " ++ prettyPrintSimple t ++ ";"
-  prettyPrintSimple StatementPopFromStack = "pop;"
+  prettyPrintSimple (StatementPopFromStack t) =
+    "pop " ++ prettyPrintSimple t ++ ";"
   prettyPrintSimple (StatementReturn Nothing) = "return;"
   prettyPrintSimple (StatementReturn (Just v)) =
     "return " ++ prettyPrintSimple v ++ ";"

@@ -33,6 +33,22 @@ data Env = Env
 
 type ASM = State Env
 
+opRBP :: ASMSyntax.Operand
+opRBP = ASMSyntax.OperandRegister ASMSyntax.VarTypeInt ASMSyntax.RegisterRBP
+
+opRSP :: ASMSyntax.Operand
+opRSP = ASMSyntax.OperandRegister ASMSyntax.VarTypeInt ASMSyntax.RegisterRSP
+
+peekStack :: ASMSyntax.VarType -> ASMSyntax.Expr
+peekStack t =
+  ASMSyntax.ExprRead $
+  ASMSyntax.OperandPointer
+    ASMSyntax.Pointer
+      { ASMSyntax.pointerType = t
+      , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRSP
+      , ASMSyntax.pointerDisplacement = -1
+      }
+
 introduceVariable :: LinearSyntax.Var -> ASM ASMSyntax.Var
 introduceVariable LinearSyntax.Var { LinearSyntax.varName = LinearSyntax.VarID vid
                                    , LinearSyntax.varType = t
@@ -49,7 +65,16 @@ resolveVariable LinearSyntax.Var {LinearSyntax.varName = LinearSyntax.VarID vid}
   State.gets ((IntMap.! vid) . varMap)
 
 resolveVariableAsOperand :: LinearSyntax.Var -> ASM ASMSyntax.Operand
-resolveVariableAsOperand v = ASMSyntax.OperandVar <$> resolveVariable v
+resolveVariableAsOperand v = do
+  ASMSyntax.Var {ASMSyntax.varType = t, ASMSyntax.varDisplacement = d} <-
+    resolveVariable v
+  pure $
+    ASMSyntax.OperandPointer
+      ASMSyntax.Pointer
+        { ASMSyntax.pointerType = t
+        , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
+        , ASMSyntax.pointerDisplacement = d
+        }
 
 translateFunctionDef :: LinearSyntax.FunctionDef -> ASM ASMSyntax.FunctionDef
 translateFunctionDef fdef = do
@@ -59,31 +84,18 @@ translateFunctionDef fdef = do
   State.modify $ \env -> env {varStack = []}
   body <- mapM translateStatement $ LinearSyntax.funDefBody fdef
   let saveRBP =
-        [ ASMSyntax.StatementPushOnStack
-            (ASMSyntax.OperandRegister
-               ASMSyntax.VarTypeInt
-               ASMSyntax.RegisterRBP)
-        , ASMSyntax.StatementAssign
-            (ASMSyntax.OperandRegister
-               ASMSyntax.VarTypeInt
-               ASMSyntax.RegisterRBP)
-            (ASMSyntax.ExprRead
-               (ASMSyntax.OperandRegister
-                  ASMSyntax.VarTypeInt
-                  ASMSyntax.RegisterRSP))
+        [ ASMSyntax.StatementPushOnStack opRBP
+        , ASMSyntax.StatementAssign opRBP (ASMSyntax.ExprRead opRSP)
         ]
   let declareVars =
         map (ASMSyntax.StatementAllocateOnStack . ASMSyntax.varType) $
         (params ++ locals)
   let undeclareVars =
-        map (const ASMSyntax.StatementPopFromStack) $ reverse (params ++ locals)
+        map (ASMSyntax.StatementPopFromStack . ASMSyntax.varType) $
+        reverse (params ++ locals)
   let restoreRBP =
-        [ ASMSyntax.StatementAssign
-            (ASMSyntax.OperandRegister
-               ASMSyntax.VarTypeInt
-               ASMSyntax.RegisterRBP)
-            (ASMSyntax.ExprPeekStack ASMSyntax.VarTypeInt)
-        , ASMSyntax.StatementPopFromStack
+        [ ASMSyntax.StatementAssign opRBP (peekStack ASMSyntax.VarTypeInt)
+        , ASMSyntax.StatementPopFromStack ASMSyntax.VarTypeInt
         ]
   pure $
     ASMSyntax.FunctionDef
@@ -142,8 +154,13 @@ translateExpr (LinearSyntax.ExprVar v) =
   ASMSyntax.ExprRead <$> resolveVariableAsOperand v
 translateExpr (LinearSyntax.ExprDereference v) =
   ASMSyntax.ExprDereference <$> resolveVariableAsOperand v
-translateExpr (LinearSyntax.ExprAddressOf v) =
-  ASMSyntax.ExprAddressOf <$> resolveVariable v
+translateExpr (LinearSyntax.ExprAddressOf v) = do
+  ASMSyntax.Var {ASMSyntax.varDisplacement = d} <- resolveVariable v
+  pure $
+    ASMSyntax.ExprBinOp
+      ASMSyntax.BinPlus
+      opRBP
+      (ASMSyntax.OperandImmediateInt d)
 translateExpr (LinearSyntax.ExprConst t c) = pure $ ASMSyntax.ExprConst t c
 translateExpr (LinearSyntax.ExprBinOp op lhs rhs) =
   ASMSyntax.ExprBinOp op <$> resolveVariableAsOperand lhs <*>
