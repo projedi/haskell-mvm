@@ -362,9 +362,6 @@ evaluateBinOp BinEq = (fromBool .) . (==)
 evaluateBinOp BinLt = (fromBool .) . (<)
 
 evaluate :: Expr -> Execute Value
-evaluate (ExprFunctionCall fcall) = do
-  Just val <- functionCall fcall
-  pure val
 evaluate (ExprRead x) = readOperand x
 evaluate (ExprDereference p) = do
   v <- readOperand p
@@ -402,8 +399,12 @@ executeStatement = do
     executeStatement
 
 execute :: Statement -> ExecuteStatement ()
-execute (StatementFunctionCall fcall) =
-  Trans.lift (functionCall fcall) >> pure ()
+execute (StatementFunctionCall mlhs fcall) = do
+  mres <- Trans.lift $ functionCall fcall
+  case (mlhs, mres) of
+    (Nothing, _) -> pure ()
+    (Just lhs, Just res) -> Trans.lift $ writeOperand lhs res
+    _ -> error "Type mismatch"
 execute (StatementAssign lhs e) = do
   res <- Trans.lift $ evaluate e
   Trans.lift $ writeOperand lhs res

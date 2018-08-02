@@ -112,7 +112,6 @@ instance PrettyPrintSimple UnOp where
   prettyPrintSimple UnIntToFloat = "(double)"
 
 instance PrettyPrintSimple Expr where
-  prettyPrintSimple (ExprFunctionCall fcall) = prettyPrintSimple fcall
   prettyPrintSimple (ExprRead v) = prettyPrintSimple v
   prettyPrintSimple (ExprDereference p) = "*" ++ prettyPrintSimple p
   prettyPrintSimple (ExprConst _ c) = show c
@@ -138,8 +137,10 @@ instance PrettyPrintSimple Pointer where
     "[" ++ (maybe "" ((++ "+") . prettyPrintSimple) mr) ++ show d ++ "]"
 
 instance PrettyPrintSimple Statement where
-  prettyPrintSimple (StatementFunctionCall fcall) =
+  prettyPrintSimple (StatementFunctionCall Nothing fcall) =
     prettyPrintSimple fcall ++ ";"
+  prettyPrintSimple (StatementFunctionCall (Just var) fcall) =
+    prettyPrintSimple var ++ " = " ++ prettyPrintSimple fcall ++ ";"
   prettyPrintSimple (StatementAssign var expr) =
     prettyPrintSimple var ++ " = " ++ prettyPrintSimple expr ++ ";"
   prettyPrintSimple (StatementAssignToPtr ptr var) =

@@ -19,8 +19,7 @@ module ASMSyntax
   , Pointer(..)
   , Operand(..)
   , operandType
-  , Expr(ExprFunctionCall, ExprRead, ExprDereference, ExprConst,
-     ExprBinOp, ExprUnOp)
+  , Expr(ExprRead, ExprDereference, ExprConst, ExprBinOp, ExprUnOp)
   , exprType
   , functionCallType
   ) where
@@ -75,7 +74,8 @@ operandType (OperandPointer p) = pointerType p
 operandType (OperandImmediateInt _) = VarTypeInt
 
 data Statement
-  = StatementFunctionCall FunctionCall
+  = StatementFunctionCall (Maybe Operand)
+                          FunctionCall
   | StatementAssign Operand
                     Expr
   | StatementAssignToPtr Operand
@@ -121,8 +121,7 @@ data Expr = Expr
   }
 
 data ExprImpl
-  = ExprFunctionCallImpl FunctionCall
-  | ExprReadImpl Operand
+  = ExprReadImpl Operand
   | ExprDereferenceImpl Operand
   | ExprConstImpl ConstID
   | ExprBinOpImpl BinOp
@@ -130,14 +129,6 @@ data ExprImpl
                   Operand
   | ExprUnOpImpl UnOp
                  Operand
-
-pattern ExprFunctionCall :: FunctionCall -> Expr
-
-pattern ExprFunctionCall fcall <-
-        Expr{exprImpl = ExprFunctionCallImpl fcall}
-  where ExprFunctionCall fcall
-          = Expr{exprType = t, exprImpl = ExprFunctionCallImpl fcall}
-          where Just t = functionCallType fcall
 
 pattern ExprRead :: Operand -> Expr
 
@@ -172,5 +163,5 @@ pattern ExprUnOp op x <- Expr{exprImpl = ExprUnOpImpl op x}
           = Expr{exprType = t, exprImpl = ExprUnOpImpl op x}
           where t = unOpTypeFromArg op $ operandType x
 
-{-# COMPLETE ExprFunctionCall, ExprRead, ExprDereference,
-  ExprConst, ExprBinOp, ExprUnOp :: Expr #-}
+{-# COMPLETE ExprRead, ExprDereference, ExprConst, ExprBinOp,
+  ExprUnOp :: Expr #-}

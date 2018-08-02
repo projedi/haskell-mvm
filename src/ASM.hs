@@ -109,7 +109,10 @@ translateFunctionDef fdef = do
 
 translateStatement :: LinearSyntax.Statement -> ASM ASMSyntax.Statement
 translateStatement (LinearSyntax.StatementFunctionCall fcall) =
-  ASMSyntax.StatementFunctionCall <$> translateFunctionCall fcall
+  ASMSyntax.StatementFunctionCall Nothing <$> translateFunctionCall fcall
+translateStatement (LinearSyntax.StatementAssign v (LinearSyntax.ExprFunctionCall fcall)) =
+  ASMSyntax.StatementFunctionCall <$> (Just <$> resolveVariableAsOperand v) <*>
+  translateFunctionCall fcall
 translateStatement (LinearSyntax.StatementAssign v e) =
   ASMSyntax.StatementAssign <$> resolveVariableAsOperand v <*> translateExpr e
 translateStatement (LinearSyntax.StatementAssignToPtr p v) =
@@ -147,8 +150,8 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
       }
 
 translateExpr :: LinearSyntax.Expr -> ASM ASMSyntax.Expr
-translateExpr (LinearSyntax.ExprFunctionCall fcall) =
-  ASMSyntax.ExprFunctionCall <$> translateFunctionCall fcall
+translateExpr (LinearSyntax.ExprFunctionCall _) =
+  error "Must've been handled in translateStatement"
 translateExpr (LinearSyntax.ExprVar v) =
   ASMSyntax.ExprRead <$> resolveVariableAsOperand v
 translateExpr (LinearSyntax.ExprDereference v) =
