@@ -124,25 +124,6 @@ popFromStack t = do
   State.modify $ \env ->
     env {regRSP = regRSP env - 1, envStack = List.init (envStack env)}
 
-prepareArgsForCall :: CallingConvention -> [Operand] -> Execute ()
-prepareArgsForCall cc args = do
-  vals <- mapM readOperand args
-  mapM_
-    (pushOnStack . defaultValueFromType)
-    (CallingConvention.funStackToAllocate cc)
-  mapM_ go (zip vals (CallingConvention.funArgValues cc))
-  where
-    go :: (Value, CallingConvention.ArgLocation) -> Execute ()
-    go (val, CallingConvention.ArgLocationRegister _ r) = writeRegister r val
-    go (val, CallingConvention.ArgLocationStack t d) =
-      writePointer
-        Pointer
-          { pointerType = t
-          , pointerBase = Just RegisterRSP
-          , pointerDisplacement = -(d + 1)
-          }
-        val
-
 prepareArgsAtCall :: CallingConvention -> Execute [Value]
 prepareArgsAtCall cc = do
   mapM go (CallingConvention.funArgValues cc)
@@ -156,10 +137,6 @@ prepareArgsAtCall cc = do
           , pointerBase = Just RegisterRBP
           , pointerDisplacement = -(d + 2)
           }
-
-cleanStackAfterCall :: CallingConvention -> Execute ()
-cleanStackAfterCall cc = do
-  mapM_ popFromStack (reverse $ CallingConvention.funStackToAllocate cc)
 
 nativeFunctionCall :: FunctionDef -> CallingConvention -> Execute (Maybe Value)
 nativeFunctionCall fdef cc = do
@@ -221,16 +198,12 @@ functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
             { CallingConvention.funRetType = foreignFunDeclRetType fdecl
             , CallingConvention.funArgTypes = map operandType args
             }
-  prepareArgsForCall cc args
-  res <-
-    foreignFunctionCall
-      (foreignFunDeclRetType fdecl)
-      (foreignFunDeclParams fdecl)
-      (foreignFunDeclHasVarArgs fdecl)
-      cc
-      f
-  cleanStackAfterCall cc
-  pure res
+  foreignFunctionCall
+    (foreignFunDeclRetType fdecl)
+    (foreignFunDeclParams fdecl)
+    (foreignFunDeclHasVarArgs fdecl)
+    cc
+    f
 functionCall NativeFunctionCall { nativeFunCallName = (FunID fid)
                                 , nativeFunCallArgs = args
                                 } = do
@@ -241,10 +214,7 @@ functionCall NativeFunctionCall { nativeFunCallName = (FunID fid)
             { CallingConvention.funRetType = funDefRetType f
             , CallingConvention.funArgTypes = map operandType args
             }
-  prepareArgsForCall cc args
-  res <- nativeFunctionCall f cc
-  cleanStackAfterCall cc
-  pure res
+  nativeFunctionCall f cc
 
 generateAssignments :: [Var] -> [Value] -> Execute ()
 generateAssignments [] [] = pure ()

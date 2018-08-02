@@ -12,6 +12,8 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 
 import qualified ASMSyntax
+import CallingConvention (CallingConvention)
+import qualified CallingConvention
 import qualified LinearSyntax
 
 avenge :: LinearSyntax.Program -> ASMSyntax.Program
@@ -143,6 +145,37 @@ translateStatement (LinearSyntax.StatementJumpIfZero v l) = do
   v' <- resolveVariableAsOperand v
   addStatement $ ASMSyntax.StatementJumpIfZero v' l
 
+prepareArgsForCall ::
+     CallingConvention -> [ASMSyntax.Operand] -> ASMStatement ()
+prepareArgsForCall cc args = do
+  mapM_
+    (addStatement . ASMSyntax.StatementAllocateOnStack)
+    (CallingConvention.funStackToAllocate cc)
+  mapM_ go (zip args (CallingConvention.funArgValues cc))
+  where
+    go :: (ASMSyntax.Operand, CallingConvention.ArgLocation) -> ASMStatement ()
+    go (arg, CallingConvention.ArgLocationRegister _ r) =
+      addStatement $
+      ASMSyntax.StatementAssign
+        (ASMSyntax.OperandRegister (ASMSyntax.operandType arg) r)
+        (ASMSyntax.ExprRead arg)
+    go (arg, CallingConvention.ArgLocationStack t d) =
+      addStatement $
+      ASMSyntax.StatementAssign
+        (ASMSyntax.OperandPointer
+           ASMSyntax.Pointer
+             { ASMSyntax.pointerType = t
+             , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRSP
+             , ASMSyntax.pointerDisplacement = -(d + 1)
+             })
+        (ASMSyntax.ExprRead arg)
+
+cleanStackAfterCall :: CallingConvention -> ASMStatement ()
+cleanStackAfterCall cc =
+  mapM_
+    (addStatement . ASMSyntax.StatementPopFromStack)
+    (reverse $ CallingConvention.funStackToAllocate cc)
+
 translateFunctionCall ::
      Maybe LinearSyntax.Var -> LinearSyntax.FunctionCall -> ASMStatement ()
 translateFunctionCall mv fcall@LinearSyntax.NativeFunctionCall {} = do
@@ -151,6 +184,14 @@ translateFunctionCall mv fcall@LinearSyntax.NativeFunctionCall {} = do
       Nothing -> pure Nothing
       Just v -> Just <$> resolveVariableAsOperand v
   args <- mapM resolveVariableAsOperand $ LinearSyntax.nativeFunCallArgs fcall
+  let cc =
+        CallingConvention.computeCallingConvention
+          CallingConvention.FunctionCall
+            { CallingConvention.funRetType =
+                LinearSyntax.nativeFunCallRetType fcall
+            , CallingConvention.funArgTypes = map ASMSyntax.operandType args
+            }
+  prepareArgsForCall cc args
   addStatement $
     ASMSyntax.StatementFunctionCall mv' $
     ASMSyntax.NativeFunctionCall
@@ -158,12 +199,21 @@ translateFunctionCall mv fcall@LinearSyntax.NativeFunctionCall {} = do
       , ASMSyntax.nativeFunCallRetType = LinearSyntax.nativeFunCallRetType fcall
       , ASMSyntax.nativeFunCallArgs = args
       }
+  cleanStackAfterCall cc
 translateFunctionCall mv fcall@LinearSyntax.ForeignFunctionCall {} = do
   mv' <-
     case mv of
       Nothing -> pure Nothing
       Just v -> Just <$> resolveVariableAsOperand v
   args <- mapM resolveVariableAsOperand $ LinearSyntax.foreignFunCallArgs fcall
+  let cc =
+        CallingConvention.computeCallingConvention
+          CallingConvention.FunctionCall
+            { CallingConvention.funRetType =
+                LinearSyntax.foreignFunCallRetType fcall
+            , CallingConvention.funArgTypes = map ASMSyntax.operandType args
+            }
+  prepareArgsForCall cc args
   addStatement $
     ASMSyntax.StatementFunctionCall mv' $
     ASMSyntax.ForeignFunctionCall
@@ -172,6 +222,7 @@ translateFunctionCall mv fcall@LinearSyntax.ForeignFunctionCall {} = do
           LinearSyntax.foreignFunCallRetType fcall
       , ASMSyntax.foreignFunCallArgs = args
       }
+  cleanStackAfterCall cc
 
 translateExpr :: LinearSyntax.Expr -> ASMStatement ASMSyntax.Expr
 translateExpr (LinearSyntax.ExprFunctionCall _) =
