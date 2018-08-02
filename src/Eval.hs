@@ -124,8 +124,9 @@ popFromStack t = do
   State.modify $ \env ->
     env {regRSP = regRSP env - 1, envStack = List.init (envStack env)}
 
-prepareArgsForCall :: CallingConvention -> [Value] -> Execute ()
-prepareArgsForCall cc vals = do
+prepareArgsForCall :: CallingConvention -> [Operand] -> Execute ()
+prepareArgsForCall cc args = do
+  vals <- mapM readOperand args
   mapM_
     (pushOnStack . defaultValueFromType)
     (CallingConvention.funStackToAllocate cc)
@@ -213,15 +214,14 @@ functionCall :: FunctionCall -> Execute (Maybe Value)
 functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
                                  , foreignFunCallArgs = args
                                  } = do
-  vals <- evaluateArgs args
   Just (fdecl, f) <- State.gets (IntMap.lookup fid . envForeignFunctions)
   let cc =
         CallingConvention.computeCallingConvention
           CallingConvention.FunctionCall
             { CallingConvention.funRetType = foreignFunDeclRetType fdecl
-            , CallingConvention.funArgTypes = map typeof vals
+            , CallingConvention.funArgTypes = map operandType args
             }
-  prepareArgsForCall cc vals
+  prepareArgsForCall cc args
   res <-
     foreignFunctionCall
       (foreignFunDeclRetType fdecl)
@@ -234,15 +234,14 @@ functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
 functionCall NativeFunctionCall { nativeFunCallName = (FunID fid)
                                 , nativeFunCallArgs = args
                                 } = do
-  vals <- evaluateArgs args
   Just f <- State.gets (IntMap.lookup fid . envFunctions)
   let cc =
         CallingConvention.computeCallingConvention
           CallingConvention.FunctionCall
             { CallingConvention.funRetType = funDefRetType f
-            , CallingConvention.funArgTypes = map typeof vals
+            , CallingConvention.funArgTypes = map operandType args
             }
-  prepareArgsForCall cc vals
+  prepareArgsForCall cc args
   res <- nativeFunctionCall f cc
   cleanStackAfterCall cc
   pure res
@@ -256,9 +255,6 @@ generateAssignments (Var {varType = t, varDisplacement = d}:vs) (val:vals) = do
     val
   generateAssignments vs vals
 generateAssignments _ _ = error "Type mismatch"
-
-evaluateArgs :: [Operand] -> Execute [Value]
-evaluateArgs = mapM readOperand
 
 executeFunctionBody :: [Statement] -> Execute (Maybe Value)
 executeFunctionBody [] = pure Nothing
