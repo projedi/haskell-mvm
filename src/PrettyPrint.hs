@@ -121,7 +121,20 @@ instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"
   prettyPrintSimple RegisterRBP = "RBP"
   prettyPrintSimple RegisterRAX = "RAX"
+  prettyPrintSimple RegisterRDI = "RDI"
+  prettyPrintSimple RegisterRSI = "RSI"
+  prettyPrintSimple RegisterRDX = "RDX"
+  prettyPrintSimple RegisterRCX = "RCX"
+  prettyPrintSimple RegisterR8 = "R8"
+  prettyPrintSimple RegisterR9 = "R9"
   prettyPrintSimple RegisterXMM0 = "XMM0"
+  prettyPrintSimple RegisterXMM1 = "XMM1"
+  prettyPrintSimple RegisterXMM2 = "XMM2"
+  prettyPrintSimple RegisterXMM3 = "XMM3"
+  prettyPrintSimple RegisterXMM4 = "XMM4"
+  prettyPrintSimple RegisterXMM5 = "XMM5"
+  prettyPrintSimple RegisterXMM6 = "XMM6"
+  prettyPrintSimple RegisterXMM7 = "XMM7"
 
 instance PrettyPrintSimple Pointer where
   prettyPrintSimple Pointer {pointerBase = mr, pointerDisplacement = d} =

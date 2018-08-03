@@ -26,6 +26,7 @@ data CallingConvention = CallingConvention
   { funRetValue :: Maybe (VarType, Register)
   , funArgValues :: [ArgLocation]
   , funStackToAllocate :: [VarType] -- The top should be the last.
+  , funFloatRegistersUsed :: Int
   }
 
 computeCallingConvention :: FunctionCall -> CallingConvention
@@ -34,9 +35,11 @@ computeCallingConvention fcall =
     { funRetValue = (\t -> (t, putReturnValue t)) <$> funRetType fcall
     , funArgValues = argValues
     , funStackToAllocate = stackToAllocate
+    , funFloatRegistersUsed = floatRegisterUsage
     }
   where
-    (argValues, stackToAllocate) = putArgs $ funArgTypes fcall
+    (argValues, stackToAllocate, floatRegisterUsage) =
+      putArgs $ funArgTypes fcall
 
 putReturnValue :: VarType -> Register
 putReturnValue VarTypeInt = RegisterRAX
@@ -44,17 +47,34 @@ putReturnValue (VarTypePtr _) = RegisterRAX
 putReturnValue VarTypeString = RegisterRAX
 putReturnValue VarTypeFloat = RegisterXMM0
 
-putArgs :: [VarType] -> ([ArgLocation], [VarType])
-putArgs args = (ops, stack finalEnv)
+putArgs :: [VarType] -> ([ArgLocation], [VarType], Int)
+putArgs args = (ops, stack finalEnv, floatUsage finalEnv)
   where
     (ops, finalEnv) =
       runState
         (mapM putArg args)
         Env
-          { availableIntRegisters = []
-          , availableFloatRegisters = []
+          { availableIntRegisters =
+              [ RegisterRDI
+              , RegisterRSI
+              , RegisterRDX
+              , RegisterRCX
+              , RegisterR8
+              , RegisterR9
+              ]
+          , availableFloatRegisters =
+              [ RegisterXMM0
+              , RegisterXMM1
+              , RegisterXMM2
+              , RegisterXMM3
+              , RegisterXMM4
+              , RegisterXMM5
+              , RegisterXMM6
+              , RegisterXMM7
+              ]
           , stack = []
           , nextOffset = 0
+          , floatUsage = 0
           }
 
 type ComputeArg = State Env
@@ -64,6 +84,7 @@ data Env = Env
   , availableFloatRegisters :: [Register]
   , stack :: [VarType]
   , nextOffset :: Int64
+  , floatUsage :: Int
   }
 
 putArg :: VarType -> ComputeArg ArgLocation
@@ -76,7 +97,9 @@ putFloatArg = do
   case regs of
     [] -> putArgOnStack VarTypeFloat
     (r:rs) -> do
-      State.modify (\env -> env {availableFloatRegisters = rs})
+      State.modify
+        (\env ->
+           env {availableFloatRegisters = rs, floatUsage = 1 + floatUsage env})
       pure $ ArgLocationRegister VarTypeFloat r
 
 putIntArg :: VarType -> ComputeArg ArgLocation

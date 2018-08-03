@@ -53,7 +53,20 @@ data Env = Env
   , regRBP :: Int64
   , regRSP :: Int64
   , regRAX :: Value
+  , regRDI :: Value
+  , regRSI :: Value
+  , regRDX :: Value
+  , regRCX :: Value
+  , regR8 :: Value
+  , regR9 :: Value
   , regXMM0 :: Double
+  , regXMM1 :: Double
+  , regXMM2 :: Double
+  , regXMM3 :: Double
+  , regXMM4 :: Double
+  , regXMM5 :: Double
+  , regXMM6 :: Double
+  , regXMM7 :: Double
   }
 
 instance Show Env where
@@ -75,7 +88,20 @@ emptyEnv =
     , regRBP = 0
     , regRSP = 0
     , regRAX = ValueInt 0
+    , regRDI = ValueInt 0
+    , regRSI = ValueInt 0
+    , regRDX = ValueInt 0
+    , regRCX = ValueInt 0
+    , regR8 = ValueInt 0
+    , regR9 = ValueInt 0
     , regXMM0 = 0
+    , regXMM1 = 0
+    , regXMM2 = 0
+    , regXMM3 = 0
+    , regXMM4 = 0
+    , regXMM5 = 0
+    , regXMM6 = 0
+    , regXMM7 = 0
     }
 
 type Execute = ExceptT () (StateT Env IO)
@@ -231,7 +257,20 @@ readRegister :: Register -> Execute Value
 readRegister RegisterRSP = State.gets (ValueInt . regRSP)
 readRegister RegisterRBP = State.gets (ValueInt . regRBP)
 readRegister RegisterRAX = State.gets regRAX
+readRegister RegisterRDI = State.gets regRDI
+readRegister RegisterRSI = State.gets regRSI
+readRegister RegisterRDX = State.gets regRDX
+readRegister RegisterRCX = State.gets regRCX
+readRegister RegisterR8 = State.gets regR8
+readRegister RegisterR9 = State.gets regR9
 readRegister RegisterXMM0 = State.gets (ValueFloat . regXMM0)
+readRegister RegisterXMM1 = State.gets (ValueFloat . regXMM1)
+readRegister RegisterXMM2 = State.gets (ValueFloat . regXMM2)
+readRegister RegisterXMM3 = State.gets (ValueFloat . regXMM3)
+readRegister RegisterXMM4 = State.gets (ValueFloat . regXMM4)
+readRegister RegisterXMM5 = State.gets (ValueFloat . regXMM5)
+readRegister RegisterXMM6 = State.gets (ValueFloat . regXMM6)
+readRegister RegisterXMM7 = State.gets (ValueFloat . regXMM7)
 
 writeRegister :: Register -> Value -> Execute ()
 writeRegister RegisterRSP (ValueInt i) = State.modify $ \env -> env {regRSP = i}
@@ -239,9 +278,36 @@ writeRegister RegisterRSP _ = error "Type mismatch"
 writeRegister RegisterRBP (ValueInt i) = State.modify $ \env -> env {regRBP = i}
 writeRegister RegisterRBP _ = error "Type mismatch"
 writeRegister RegisterRAX v = State.modify $ \env -> env {regRAX = v}
+writeRegister RegisterRDI v = State.modify $ \env -> env {regRDI = v}
+writeRegister RegisterRSI v = State.modify $ \env -> env {regRSI = v}
+writeRegister RegisterRDX v = State.modify $ \env -> env {regRDX = v}
+writeRegister RegisterRCX v = State.modify $ \env -> env {regRCX = v}
+writeRegister RegisterR8 v = State.modify $ \env -> env {regR8 = v}
+writeRegister RegisterR9 v = State.modify $ \env -> env {regR9 = v}
 writeRegister RegisterXMM0 (ValueFloat f) =
   State.modify $ \env -> env {regXMM0 = f}
 writeRegister RegisterXMM0 _ = error "Type mismatch"
+writeRegister RegisterXMM1 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM1 = f}
+writeRegister RegisterXMM1 _ = error "Type mismatch"
+writeRegister RegisterXMM2 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM2 = f}
+writeRegister RegisterXMM2 _ = error "Type mismatch"
+writeRegister RegisterXMM3 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM3 = f}
+writeRegister RegisterXMM3 _ = error "Type mismatch"
+writeRegister RegisterXMM4 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM4 = f}
+writeRegister RegisterXMM4 _ = error "Type mismatch"
+writeRegister RegisterXMM5 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM5 = f}
+writeRegister RegisterXMM5 _ = error "Type mismatch"
+writeRegister RegisterXMM6 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM6 = f}
+writeRegister RegisterXMM6 _ = error "Type mismatch"
+writeRegister RegisterXMM7 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM7 = f}
+writeRegister RegisterXMM7 _ = error "Type mismatch"
 
 readPointer :: Pointer -> Execute Value
 readPointer Pointer {pointerBase = mr, pointerDisplacement = d} = do

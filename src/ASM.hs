@@ -47,6 +47,9 @@ opRBP = ASMSyntax.OperandRegister ASMSyntax.VarTypeInt ASMSyntax.RegisterRBP
 opRSP :: ASMSyntax.Operand
 opRSP = ASMSyntax.OperandRegister ASMSyntax.VarTypeInt ASMSyntax.RegisterRSP
 
+opRAX :: ASMSyntax.VarType -> ASMSyntax.Operand
+opRAX t = ASMSyntax.OperandRegister t ASMSyntax.RegisterRAX
+
 peekStack :: ASMSyntax.VarType -> ASMSyntax.Expr
 peekStack t =
   ASMSyntax.ExprRead $
@@ -178,6 +181,11 @@ prepareArgsForCall cc args = do
     (addStatement . ASMSyntax.StatementAllocateOnStack)
     (CallingConvention.funStackToAllocate cc)
   mapM_ go (zip args (CallingConvention.funArgValues cc))
+  addStatement $
+    ASMSyntax.StatementAssign (opRAX ASMSyntax.VarTypeInt) $
+    ASMSyntax.ExprRead $
+    ASMSyntax.OperandImmediateInt
+      (fromIntegral $ CallingConvention.funFloatRegistersUsed cc)
   where
     go :: (ASMSyntax.Operand, CallingConvention.ArgLocation) -> ASMStatement ()
     go (arg, CallingConvention.ArgLocationRegister _ r) =

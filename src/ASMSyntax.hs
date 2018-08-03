@@ -53,7 +53,20 @@ data Register
   = RegisterRSP
   | RegisterRBP
   | RegisterRAX
+  | RegisterRDI
+  | RegisterRSI
+  | RegisterRDX
+  | RegisterRCX
+  | RegisterR8
+  | RegisterR9
   | RegisterXMM0
+  | RegisterXMM1
+  | RegisterXMM2
+  | RegisterXMM3
+  | RegisterXMM4
+  | RegisterXMM5
+  | RegisterXMM6
+  | RegisterXMM7
 
 data Pointer = Pointer
   { pointerType :: VarType
