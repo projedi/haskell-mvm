@@ -99,13 +99,7 @@ startExecute foreignFuns nativeFuns consts = do
       , envConsts = consts
       }
   let Just mainFun = IntMap.lookup 0 nativeFuns
-  _ <-
-    nativeFunctionCall mainFun $
-    CallingConvention.computeCallingConvention
-      CallingConvention.FunctionCall
-        { CallingConvention.funRetType = Nothing
-        , CallingConvention.funArgTypes = []
-        }
+  _ <- nativeFunctionCall mainFun
   pure ()
   where
     getForeignFun fdecl = do
@@ -138,12 +132,10 @@ prepareArgsAtCall cc = do
           , pointerDisplacement = -(d + 2)
           }
 
-nativeFunctionCall :: FunctionDef -> CallingConvention -> Execute (Maybe Value)
-nativeFunctionCall fdef cc = do
+nativeFunctionCall :: FunctionDef -> Execute (Maybe Value)
+nativeFunctionCall fdef = do
   res <-
     do Nothing <- executeFunctionBody (funDefBeforeBody fdef)
-       vals <- prepareArgsAtCall cc
-       generateAssignments (funDefParams fdef) vals
        mv <- executeFunctionBody (funDefBody fdef)
        Nothing <- executeFunctionBody (funDefAfterBody fdef)
        pure mv
@@ -157,12 +149,18 @@ foreignFunctionCall ::
      Maybe VarType
   -> [VarType]
   -> Bool
-  -> CallingConvention
+  -> [Operand]
   -> ForeignFun
   -> Execute (Maybe Value)
-foreignFunctionCall rettype params hasVarArgs cc fun
+foreignFunctionCall rettype params hasVarArgs args fun
   -- We need to model what happens during nativeFunctionCAll because of prepareArgsAtCall
  = do
+  let cc =
+        CallingConvention.computeCallingConvention
+          CallingConvention.FunctionCall
+            { CallingConvention.funRetType = rettype
+            , CallingConvention.funArgTypes = map operandType args
+            }
   rbp1 <- readRegister RegisterRBP
   pushOnStack rbp1
   rsp1 <- readRegister RegisterRSP
@@ -192,39 +190,15 @@ functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
                                  , foreignFunCallArgs = args
                                  } = do
   Just (fdecl, f) <- State.gets (IntMap.lookup fid . envForeignFunctions)
-  let cc =
-        CallingConvention.computeCallingConvention
-          CallingConvention.FunctionCall
-            { CallingConvention.funRetType = foreignFunDeclRetType fdecl
-            , CallingConvention.funArgTypes = map operandType args
-            }
   foreignFunctionCall
     (foreignFunDeclRetType fdecl)
     (foreignFunDeclParams fdecl)
     (foreignFunDeclHasVarArgs fdecl)
-    cc
+    args
     f
-functionCall NativeFunctionCall { nativeFunCallName = (FunID fid)
-                                , nativeFunCallArgs = args
-                                } = do
+functionCall NativeFunctionCall {nativeFunCallName = (FunID fid)} = do
   Just f <- State.gets (IntMap.lookup fid . envFunctions)
-  let cc =
-        CallingConvention.computeCallingConvention
-          CallingConvention.FunctionCall
-            { CallingConvention.funRetType = funDefRetType f
-            , CallingConvention.funArgTypes = map operandType args
-            }
-  nativeFunctionCall f cc
-
-generateAssignments :: [Var] -> [Value] -> Execute ()
-generateAssignments [] [] = pure ()
-generateAssignments (Var {varType = t, varDisplacement = d}:vs) (val:vals) = do
-  writePointer
-    Pointer
-      {pointerType = t, pointerBase = Just RegisterRBP, pointerDisplacement = d}
-    val
-  generateAssignments vs vals
-generateAssignments _ _ = error "Type mismatch"
+  nativeFunctionCall f
 
 executeFunctionBody :: [Statement] -> Execute (Maybe Value)
 executeFunctionBody [] = pure Nothing

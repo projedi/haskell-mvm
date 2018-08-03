@@ -89,7 +89,16 @@ translateFunctionDef fdef = do
   params <- mapM introduceVariable $ LinearSyntax.funDefParams fdef
   locals <- mapM introduceVariable $ LinearSyntax.funDefLocals fdef
   State.modify $ \env -> env {varStack = []}
-  body <- execWriterT $ mapM_ translateStatement $ LinearSyntax.funDefBody fdef
+  let cc =
+        CallingConvention.computeCallingConvention
+          CallingConvention.FunctionCall
+            { CallingConvention.funRetType = LinearSyntax.funDefRetType fdef
+            , CallingConvention.funArgTypes = map ASMSyntax.varType params
+            }
+  body <-
+    execWriterT $ do
+      prepareArgsAtCall params cc
+      mapM_ translateStatement $ LinearSyntax.funDefBody fdef
   let saveRBP =
         [ ASMSyntax.StatementPushOnStack opRBP
         , ASMSyntax.StatementAssign opRBP (ASMSyntax.ExprRead opRSP)
@@ -175,6 +184,39 @@ cleanStackAfterCall cc =
   mapM_
     (addStatement . ASMSyntax.StatementPopFromStack)
     (reverse $ CallingConvention.funStackToAllocate cc)
+
+prepareArgsAtCall :: [ASMSyntax.Var] -> CallingConvention -> ASMStatement ()
+prepareArgsAtCall params cc = do
+  let vals = map go (CallingConvention.funArgValues cc)
+  generateAssignments params vals
+  where
+    go :: CallingConvention.ArgLocation -> ASMSyntax.Operand
+    go (CallingConvention.ArgLocationRegister t r) =
+      ASMSyntax.OperandRegister t r
+    go (CallingConvention.ArgLocationStack t d) =
+      ASMSyntax.OperandPointer
+        ASMSyntax.Pointer
+          { ASMSyntax.pointerType = t
+          , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
+          , ASMSyntax.pointerDisplacement = -(d + 2)
+          }
+    generateAssignments ::
+         [ASMSyntax.Var] -> [ASMSyntax.Operand] -> ASMStatement ()
+    generateAssignments [] [] = pure ()
+    generateAssignments (ASMSyntax.Var { ASMSyntax.varType = t
+                                       , ASMSyntax.varDisplacement = d
+                                       }:vs) (val:vals) = do
+      addStatement $
+        ASMSyntax.StatementAssign
+          (ASMSyntax.OperandPointer
+             ASMSyntax.Pointer
+               { ASMSyntax.pointerType = t
+               , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
+               , ASMSyntax.pointerDisplacement = d
+               })
+          (ASMSyntax.ExprRead val)
+      generateAssignments vs vals
+    generateAssignments _ _ = error "Type mismatch"
 
 translateFunctionCall ::
      Maybe LinearSyntax.Var -> LinearSyntax.FunctionCall -> ASMStatement ()
