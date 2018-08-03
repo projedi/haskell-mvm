@@ -78,7 +78,7 @@ emptyEnv =
     , regXMM0 = 0
     }
 
-type Execute = ExceptT (Maybe Value) (StateT Env IO)
+type Execute = ExceptT () (StateT Env IO)
 
 runExecute :: Execute () -> IO ()
 runExecute m = do
@@ -132,26 +132,14 @@ prepareArgsAtCall cc = do
           , pointerDisplacement = -(d + 2)
           }
 
-nativeFunctionCall :: FunctionDef -> Execute (Maybe Value)
+nativeFunctionCall :: FunctionDef -> Execute ()
 nativeFunctionCall fdef = do
-  res <-
-    do Nothing <- executeFunctionBody (funDefBeforeBody fdef)
-       mv <- executeFunctionBody (funDefBody fdef)
-       Nothing <- executeFunctionBody (funDefAfterBody fdef)
-       pure mv
-  case (res, funDefRetType fdef) of
-    (Nothing, Nothing) -> pure res
-    (Just val, Just valtype)
-      | typeIs val valtype -> pure $ Just val
-    _ -> error "Type mismatch"
+  executeFunctionBody (funDefBeforeBody fdef)
+  executeFunctionBody (funDefBody fdef)
+  executeFunctionBody (funDefAfterBody fdef)
 
 foreignFunctionCall ::
-     Maybe VarType
-  -> [VarType]
-  -> Bool
-  -> [Operand]
-  -> ForeignFun
-  -> Execute (Maybe Value)
+     Maybe VarType -> [VarType] -> Bool -> [Operand] -> ForeignFun -> Execute ()
 foreignFunctionCall rettype params hasVarArgs args fun
   -- We need to model what happens during nativeFunctionCAll because of prepareArgsAtCall
  = do
@@ -176,7 +164,11 @@ foreignFunctionCall rettype params hasVarArgs args fun
       }
   writeRegister RegisterRBP rbp2
   popFromStack VarTypeInt
-  pure res
+  case (res, CallingConvention.funRetValue cc) of
+    (Nothing, Nothing) -> pure ()
+    (Just r, Just (_, rv)) -> writeRegister rv r
+    _ -> error "Type mismatch"
+  -- TODO: put res where it belongs
   where
     assertVals [] [] = []
     assertVals (vtype:ps) (v:vs)
@@ -185,7 +177,7 @@ foreignFunctionCall rettype params hasVarArgs args fun
       | hasVarArgs = vs
     assertVals _ _ = error "Type mismatch"
 
-functionCall :: FunctionCall -> Execute (Maybe Value)
+functionCall :: FunctionCall -> Execute ()
 functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
                                  , foreignFunCallArgs = args
                                  } = do
@@ -200,14 +192,13 @@ functionCall NativeFunctionCall {nativeFunCallName = (FunID fid)} = do
   Just f <- State.gets (IntMap.lookup fid . envFunctions)
   nativeFunctionCall f
 
-executeFunctionBody :: [Statement] -> Execute (Maybe Value)
-executeFunctionBody [] = pure Nothing
+executeFunctionBody :: [Statement] -> Execute ()
+executeFunctionBody [] = pure ()
 executeFunctionBody ss = do
   prevIP <- State.gets envRIP
   State.modify $ \env -> env {envRIP = 0}
   let instructions = Array.listArray (0, length ss - 1) ss
-  retValue <-
-    (startExecution instructions >> pure Nothing) `Except.catchError` pure
+  retValue <- (startExecution instructions) `Except.catchError` pure
   State.modify (\env -> env {envRIP = prevIP})
   pure retValue
   where
@@ -222,8 +213,8 @@ executeFunctionBody ss = do
       IntMap.insert lid i $ buildLabelMap is
     buildLabelMap (_:is) = buildLabelMap is
 
-functionReturn :: Maybe Value -> Execute ()
-functionReturn = Except.throwError
+functionReturn :: Execute ()
+functionReturn = Except.throwError ()
 
 readConstant :: ConstID -> Execute Value
 readConstant (ConstID cid) = State.gets $ ((IntMap.! cid) . envConsts)
@@ -343,12 +334,7 @@ executeStatement = do
     executeStatement
 
 execute :: Statement -> ExecuteStatement ()
-execute (StatementFunctionCall mlhs fcall) = do
-  mres <- Trans.lift $ functionCall fcall
-  case (mlhs, mres) of
-    (Nothing, _) -> pure ()
-    (Just lhs, Just res) -> Trans.lift $ writeOperand lhs res
-    _ -> error "Type mismatch"
+execute (StatementFunctionCall fcall) = Trans.lift $ functionCall fcall
 execute (StatementAssign lhs e) = do
   res <- Trans.lift $ evaluate e
   Trans.lift $ writeOperand lhs res
@@ -362,10 +348,7 @@ execute (StatementPushOnStack x) = do
 execute (StatementAllocateOnStack t) = do
   Trans.lift $ pushOnStack (defaultValueFromType t)
 execute (StatementPopFromStack t) = Trans.lift $ popFromStack t
-execute (StatementReturn Nothing) = Trans.lift $ functionReturn Nothing
-execute (StatementReturn (Just x)) = do
-  res <- Trans.lift $ readOperand x
-  Trans.lift $ functionReturn (Just res)
+execute StatementReturn = Trans.lift functionReturn
 execute (StatementLabel _) = pure ()
 execute (StatementJump l) = jump l
 execute (StatementJumpIfZero x l) = do

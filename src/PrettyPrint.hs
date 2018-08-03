@@ -137,10 +137,8 @@ instance PrettyPrintSimple Pointer where
     "[" ++ (maybe "" ((++ "+") . prettyPrintSimple) mr) ++ show d ++ "]"
 
 instance PrettyPrintSimple Statement where
-  prettyPrintSimple (StatementFunctionCall Nothing fcall) =
+  prettyPrintSimple (StatementFunctionCall fcall) =
     prettyPrintSimple fcall ++ ";"
-  prettyPrintSimple (StatementFunctionCall (Just var) fcall) =
-    prettyPrintSimple var ++ " = " ++ prettyPrintSimple fcall ++ ";"
   prettyPrintSimple (StatementAssign var expr) =
     prettyPrintSimple var ++ " = " ++ prettyPrintSimple expr ++ ";"
   prettyPrintSimple (StatementAssignToPtr ptr var) =
@@ -151,9 +149,7 @@ instance PrettyPrintSimple Statement where
     "alloc " ++ prettyPrintSimple t ++ ";"
   prettyPrintSimple (StatementPopFromStack t) =
     "pop " ++ prettyPrintSimple t ++ ";"
-  prettyPrintSimple (StatementReturn Nothing) = "return;"
-  prettyPrintSimple (StatementReturn (Just v)) =
-    "return " ++ prettyPrintSimple v ++ ";"
+  prettyPrintSimple StatementReturn = "return;"
   prettyPrintSimple (StatementLabel l) = show l ++ ": nop;"
   prettyPrintSimple (StatementJump l) = "jmp " ++ show l ++ ";"
   prettyPrintSimple (StatementJumpIfZero v l) =

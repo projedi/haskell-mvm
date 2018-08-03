@@ -4,6 +4,8 @@ module ASM
   ( avenge
   ) where
 
+import Control.Monad.Reader (ReaderT, runReaderT)
+import qualified Control.Monad.Reader as Reader
 import Control.Monad.State (MonadState, State, runState)
 import qualified Control.Monad.State as State
 import Control.Monad.Writer (WriterT, execWriterT)
@@ -95,8 +97,10 @@ translateFunctionDef fdef = do
             { CallingConvention.funRetType = LinearSyntax.funDefRetType fdef
             , CallingConvention.funArgTypes = map ASMSyntax.varType params
             }
+  let retValue =
+        (uncurry ASMSyntax.OperandRegister) <$> CallingConvention.funRetValue cc
   body <-
-    execWriterT $ do
+    runASMStatement ConstEnv {retValueLocation = retValue} $ do
       prepareArgsAtCall params cc
       mapM_ translateStatement $ LinearSyntax.funDefBody fdef
   let saveRBP =
@@ -123,16 +127,28 @@ translateFunctionDef fdef = do
       , ASMSyntax.funDefAfterBody = undeclareVars ++ restoreRBP
       }
 
-type ASMStatement = WriterT [ASMSyntax.Statement] ASM
+type ASMStatement = ReaderT ConstEnv (WriterT [ASMSyntax.Statement] ASM)
+
+data ConstEnv = ConstEnv
+  { retValueLocation :: Maybe ASMSyntax.Operand
+  }
+
+runASMStatement :: ConstEnv -> ASMStatement () -> ASM [ASMSyntax.Statement]
+runASMStatement env m = execWriterT $ runReaderT m env
 
 addStatement :: ASMSyntax.Statement -> ASMStatement ()
 addStatement s = Writer.tell [s]
 
 translateStatement :: LinearSyntax.Statement -> ASMStatement ()
 translateStatement (LinearSyntax.StatementFunctionCall fcall) = do
-  translateFunctionCall Nothing fcall
-translateStatement (LinearSyntax.StatementAssign v (LinearSyntax.ExprFunctionCall fcall)) =
-  translateFunctionCall (Just v) fcall
+  _ <- translateFunctionCall fcall
+  pure ()
+translateStatement (LinearSyntax.StatementAssign v (LinearSyntax.ExprFunctionCall fcall)) = do
+  v' <- resolveVariableAsOperand v
+  cc <- translateFunctionCall fcall
+  let (Just retValue) =
+        (uncurry ASMSyntax.OperandRegister) <$> CallingConvention.funRetValue cc
+  addStatement $ ASMSyntax.StatementAssign v' $ ASMSyntax.ExprRead retValue
 translateStatement (LinearSyntax.StatementAssign v e) = do
   v' <- resolveVariableAsOperand v
   e' <- translateExpr e
@@ -141,11 +157,14 @@ translateStatement (LinearSyntax.StatementAssignToPtr p v) = do
   p' <- resolveVariableAsOperand p
   v' <- resolveVariableAsOperand v
   addStatement $ ASMSyntax.StatementAssignToPtr p' v'
-translateStatement (LinearSyntax.StatementReturn Nothing) =
-  addStatement $ ASMSyntax.StatementReturn Nothing
+translateStatement (LinearSyntax.StatementReturn Nothing) = do
+  Nothing <- Reader.asks retValueLocation
+  addStatement ASMSyntax.StatementReturn
 translateStatement (LinearSyntax.StatementReturn (Just v)) = do
   v' <- resolveVariableAsOperand v
-  addStatement $ ASMSyntax.StatementReturn $ Just v'
+  Just rl <- Reader.asks retValueLocation
+  addStatement $ ASMSyntax.StatementAssign rl $ ASMSyntax.ExprRead v'
+  addStatement $ ASMSyntax.StatementReturn
 translateStatement (LinearSyntax.StatementLabel l) =
   addStatement $ ASMSyntax.StatementLabel l
 translateStatement (LinearSyntax.StatementJump l) =
@@ -219,12 +238,8 @@ prepareArgsAtCall params cc = do
     generateAssignments _ _ = error "Type mismatch"
 
 translateFunctionCall ::
-     Maybe LinearSyntax.Var -> LinearSyntax.FunctionCall -> ASMStatement ()
-translateFunctionCall mv fcall@LinearSyntax.NativeFunctionCall {} = do
-  mv' <-
-    case mv of
-      Nothing -> pure Nothing
-      Just v -> Just <$> resolveVariableAsOperand v
+     LinearSyntax.FunctionCall -> ASMStatement CallingConvention
+translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
   args <- mapM resolveVariableAsOperand $ LinearSyntax.nativeFunCallArgs fcall
   let cc =
         CallingConvention.computeCallingConvention
@@ -235,18 +250,15 @@ translateFunctionCall mv fcall@LinearSyntax.NativeFunctionCall {} = do
             }
   prepareArgsForCall cc args
   addStatement $
-    ASMSyntax.StatementFunctionCall mv' $
+    ASMSyntax.StatementFunctionCall $
     ASMSyntax.NativeFunctionCall
       { ASMSyntax.nativeFunCallName = LinearSyntax.nativeFunCallName fcall
       , ASMSyntax.nativeFunCallRetType = LinearSyntax.nativeFunCallRetType fcall
       , ASMSyntax.nativeFunCallArgs = args
       }
   cleanStackAfterCall cc
-translateFunctionCall mv fcall@LinearSyntax.ForeignFunctionCall {} = do
-  mv' <-
-    case mv of
-      Nothing -> pure Nothing
-      Just v -> Just <$> resolveVariableAsOperand v
+  pure cc
+translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
   args <- mapM resolveVariableAsOperand $ LinearSyntax.foreignFunCallArgs fcall
   let cc =
         CallingConvention.computeCallingConvention
@@ -257,7 +269,7 @@ translateFunctionCall mv fcall@LinearSyntax.ForeignFunctionCall {} = do
             }
   prepareArgsForCall cc args
   addStatement $
-    ASMSyntax.StatementFunctionCall mv' $
+    ASMSyntax.StatementFunctionCall $
     ASMSyntax.ForeignFunctionCall
       { ASMSyntax.foreignFunCallName = LinearSyntax.foreignFunCallName fcall
       , ASMSyntax.foreignFunCallRetType =
@@ -265,6 +277,7 @@ translateFunctionCall mv fcall@LinearSyntax.ForeignFunctionCall {} = do
       , ASMSyntax.foreignFunCallArgs = args
       }
   cleanStackAfterCall cc
+  pure cc
 
 translateExpr :: LinearSyntax.Expr -> ASMStatement ASMSyntax.Expr
 translateExpr (LinearSyntax.ExprFunctionCall _) =

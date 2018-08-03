@@ -74,8 +74,7 @@ operandType (OperandPointer p) = pointerType p
 operandType (OperandImmediateInt _) = VarTypeInt
 
 data Statement
-  = StatementFunctionCall (Maybe Operand)
-                          FunctionCall
+  = StatementFunctionCall FunctionCall
   | StatementAssign Operand
                     Expr
   | StatementAssignToPtr Operand
@@ -83,7 +82,7 @@ data Statement
   | StatementPushOnStack Operand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType
-  | StatementReturn (Maybe Operand)
+  | StatementReturn
   | StatementLabel LabelID
   | StatementJump LabelID
   | StatementJumpIfZero Operand

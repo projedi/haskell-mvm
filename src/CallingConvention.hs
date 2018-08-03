@@ -23,7 +23,7 @@ data ArgLocation
                      Int64
 
 data CallingConvention = CallingConvention
-  { funRetValue :: Maybe Register
+  { funRetValue :: Maybe (VarType, Register)
   , funArgValues :: [ArgLocation]
   , funStackToAllocate :: [VarType] -- The top should be the last.
   }
@@ -31,7 +31,7 @@ data CallingConvention = CallingConvention
 computeCallingConvention :: FunctionCall -> CallingConvention
 computeCallingConvention fcall =
   CallingConvention
-    { funRetValue = putReturnValue <$> funRetType fcall
+    { funRetValue = (\t -> (t, putReturnValue t)) <$> funRetType fcall
     , funArgValues = argValues
     , funStackToAllocate = stackToAllocate
     }
