@@ -139,7 +139,7 @@ nativeFunctionCall fdef = do
   executeFunctionBody (funDefAfterBody fdef)
 
 foreignFunctionCall ::
-     Maybe VarType -> [VarType] -> Bool -> [Operand] -> ForeignFun -> Execute ()
+     Maybe VarType -> [VarType] -> Bool -> [VarType] -> ForeignFun -> Execute ()
 foreignFunctionCall rettype params hasVarArgs args fun
   -- We need to model what happens during nativeFunctionCAll because of prepareArgsAtCall
  = do
@@ -147,7 +147,7 @@ foreignFunctionCall rettype params hasVarArgs args fun
         CallingConvention.computeCallingConvention
           CallingConvention.FunctionCall
             { CallingConvention.funRetType = rettype
-            , CallingConvention.funArgTypes = map operandType args
+            , CallingConvention.funArgTypes = args
             }
   rbp1 <- readRegister RegisterRBP
   pushOnStack rbp1
@@ -178,7 +178,7 @@ foreignFunctionCall rettype params hasVarArgs args fun
 
 functionCall :: FunctionCall -> Execute ()
 functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
-                                 , foreignFunCallArgs = args
+                                 , foreignFunCallArgTypes = args
                                  } = do
   Just (fdecl, f) <- State.gets (IntMap.lookup fid . envForeignFunctions)
   foreignFunctionCall

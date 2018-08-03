@@ -58,9 +58,6 @@ printConstants vals =
     ""
     vals
 
-paren :: String -> String
-paren str = "(" ++ str ++ ")"
-
 class PrettyPrintSimple a where
   prettyPrintSimple :: a -> String
 
@@ -74,16 +71,10 @@ instance PrettyPrintSimple LabelID where
   prettyPrintSimple = show
 
 instance PrettyPrintSimple FunctionCall where
-  prettyPrintSimple NativeFunctionCall { nativeFunCallName = funname
-                                       , nativeFunCallArgs = args
-                                       } =
-    prettyPrintSimple funname ++
-    paren (List.intercalate ", " (map prettyPrintSimple args))
-  prettyPrintSimple ForeignFunctionCall { foreignFunCallName = funname
-                                        , foreignFunCallArgs = args
-                                        } =
-    prettyPrintSimple funname ++
-    paren (List.intercalate ", " (map prettyPrintSimple args))
+  prettyPrintSimple NativeFunctionCall {nativeFunCallName = funname} =
+    "call " ++ prettyPrintSimple funname
+  prettyPrintSimple ForeignFunctionCall {foreignFunCallName = funname} =
+    "call foreign " ++ prettyPrintSimple funname
 
 instance PrettyPrintSimple VarType where
   prettyPrintSimple = show
@@ -157,11 +148,6 @@ instance PrettyPrintSimple Statement where
 
 instance PrettyPrintSimple FunctionDef where
   prettyPrintSimple fdef =
-    prettyPrintSimple (funDefRetType fdef) ++
-    " " ++
-    prettyPrintSimple (funDefName fdef) ++
-    paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef))) ++
-    "\n" ++
     "\nbefore {\n" ++
     List.intercalate
       "\n"

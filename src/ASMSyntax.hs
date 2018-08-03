@@ -21,7 +21,6 @@ module ASMSyntax
   , operandType
   , Expr(ExprRead, ExprDereference, ExprConst, ExprBinOp, ExprUnOp)
   , exprType
-  , functionCallType
   ) where
 
 import Data.Int (Int64)
@@ -89,25 +88,16 @@ data Statement
                         LabelID
 
 data FunctionDef = FunctionDef
-  { funDefRetType :: Maybe VarType
-  , funDefName :: FunID
-  , funDefParams :: [Var]
-  , funDefBody :: [Statement]
+  { funDefBody :: [Statement]
   , funDefBeforeBody :: [Statement]
   , funDefAfterBody :: [Statement]
   }
 
 data FunctionCall
-  = NativeFunctionCall { nativeFunCallName :: FunID
-                       , nativeFunCallRetType :: Maybe VarType
-                       , nativeFunCallArgs :: [Operand] }
+  = NativeFunctionCall { nativeFunCallName :: FunID }
   | ForeignFunctionCall { foreignFunCallName :: FunID
                         , foreignFunCallRetType :: Maybe VarType
-                        , foreignFunCallArgs :: [Operand] }
-
-functionCallType :: FunctionCall -> Maybe VarType
-functionCallType NativeFunctionCall {nativeFunCallRetType = rettype} = rettype
-functionCallType ForeignFunctionCall {foreignFunCallRetType = rettype} = rettype
+                        , foreignFunCallArgTypes :: [VarType] }
 
 data Var = Var
   { varType :: VarType

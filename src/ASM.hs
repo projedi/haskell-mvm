@@ -119,10 +119,7 @@ translateFunctionDef fdef = do
         ]
   pure $
     ASMSyntax.FunctionDef
-      { ASMSyntax.funDefRetType = LinearSyntax.funDefRetType fdef
-      , ASMSyntax.funDefName = LinearSyntax.funDefName fdef
-      , ASMSyntax.funDefParams = params
-      , ASMSyntax.funDefBody = body
+      { ASMSyntax.funDefBody = body
       , ASMSyntax.funDefBeforeBody = saveRBP ++ declareVars
       , ASMSyntax.funDefAfterBody = undeclareVars ++ restoreRBP
       }
@@ -252,10 +249,7 @@ translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
   addStatement $
     ASMSyntax.StatementFunctionCall $
     ASMSyntax.NativeFunctionCall
-      { ASMSyntax.nativeFunCallName = LinearSyntax.nativeFunCallName fcall
-      , ASMSyntax.nativeFunCallRetType = LinearSyntax.nativeFunCallRetType fcall
-      , ASMSyntax.nativeFunCallArgs = args
-      }
+      {ASMSyntax.nativeFunCallName = LinearSyntax.nativeFunCallName fcall}
   cleanStackAfterCall cc
   pure cc
 translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
@@ -274,7 +268,7 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
       { ASMSyntax.foreignFunCallName = LinearSyntax.foreignFunCallName fcall
       , ASMSyntax.foreignFunCallRetType =
           LinearSyntax.foreignFunCallRetType fcall
-      , ASMSyntax.foreignFunCallArgs = args
+      , ASMSyntax.foreignFunCallArgTypes = map ASMSyntax.operandType args
       }
   cleanStackAfterCall cc
   pure cc
