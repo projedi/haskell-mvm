@@ -53,9 +53,6 @@ printConstants vals =
 class PrettyPrintSimple a where
   prettyPrintSimple :: a -> String
 
-instance PrettyPrintSimple Var where
-  prettyPrintSimple v = "RBP + " ++ show (varDisplacement v)
-
 instance PrettyPrintSimple FunID where
   prettyPrintSimple = show
 

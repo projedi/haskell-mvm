@@ -14,7 +14,6 @@ module ASMSyntax
   , binOpTypeFromArgs
   , UnOp(..)
   , unOpTypeFromArg
-  , Var(..)
   , Register(..)
   , Pointer(..)
   , Operand(..)
@@ -109,11 +108,6 @@ data FunctionCall
   | ForeignFunctionCall { foreignFunCallName :: FunID
                         , foreignFunCallRetType :: Maybe VarType
                         , foreignFunCallArgTypes :: [VarType] }
-
-data Var = Var
-  { varType :: VarType
-  , varDisplacement :: Int64 -- Displacement from RBP.
-  }
 
 data Expr = Expr
   { exprType :: VarType

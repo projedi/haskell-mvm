@@ -10,6 +10,7 @@ import Control.Monad.State (MonadState, State, runState)
 import qualified Control.Monad.State as State
 import Control.Monad.Writer (MonadWriter, WriterT, execWriterT)
 import qualified Control.Monad.Writer as Writer
+import Data.Int (Int64)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 
@@ -39,8 +40,13 @@ avenge p =
         , funIdToLabelID = IntMap.empty
         }
 
+data Var = Var
+  { varType :: ASMSyntax.VarType
+  , varDisplacement :: Int64 -- Displacement from RBP.
+  }
+
 data Env = Env
-  { varMap :: IntMap ASMSyntax.Var
+  { varMap :: IntMap Var
   , varStack :: [ASMSyntax.VarType]
   , lastLabelID :: ASMSyntax.LabelID
   , funIdToLabelID :: IntMap ASMSyntax.LabelID
@@ -75,26 +81,25 @@ peekStack t =
       , ASMSyntax.pointerDisplacement = -1
       }
 
-introduceVariable :: LinearSyntax.Var -> ASM ASMSyntax.Var
+introduceVariable :: LinearSyntax.Var -> ASM Var
 introduceVariable LinearSyntax.Var { LinearSyntax.varName = LinearSyntax.VarID vid
                                    , LinearSyntax.varType = t
                                    } = do
   d <- State.gets (fromIntegral . length . varStack)
-  let var = ASMSyntax.Var {ASMSyntax.varType = t, ASMSyntax.varDisplacement = d}
+  let var = Var {varType = t, varDisplacement = d}
   State.modify $ \env ->
     env
       {varMap = IntMap.insert vid var $ varMap env, varStack = t : varStack env}
   pure var
 
-resolveVariable :: MonadState Env m => LinearSyntax.Var -> m ASMSyntax.Var
+resolveVariable :: MonadState Env m => LinearSyntax.Var -> m Var
 resolveVariable LinearSyntax.Var {LinearSyntax.varName = LinearSyntax.VarID vid} =
   State.gets ((IntMap.! vid) . varMap)
 
 resolveVariableAsOperand ::
      MonadState Env m => LinearSyntax.Var -> m ASMSyntax.Operand
 resolveVariableAsOperand v = do
-  ASMSyntax.Var {ASMSyntax.varType = t, ASMSyntax.varDisplacement = d} <-
-    resolveVariable v
+  Var {varType = t, varDisplacement = d} <- resolveVariable v
   pure $
     ASMSyntax.OperandPointer
       ASMSyntax.Pointer
@@ -129,7 +134,7 @@ translateFunctionDef fdef = do
         CallingConvention.computeCallingConvention
           CallingConvention.FunctionCall
             { CallingConvention.funRetType = LinearSyntax.funDefRetType fdef
-            , CallingConvention.funArgTypes = map ASMSyntax.varType params
+            , CallingConvention.funArgTypes = map varType params
             }
   let retValue =
         (uncurry ASMSyntax.OperandRegister) <$> CallingConvention.funRetValue cc
@@ -143,12 +148,12 @@ translateFunctionDef fdef = do
     addStatement $ ASMSyntax.StatementPushOnStack opRBP
     addStatement $ ASMSyntax.StatementAssign opRBP (ASMSyntax.ExprRead opRSP)
     mapM_
-      (addStatement . ASMSyntax.StatementAllocateOnStack . ASMSyntax.varType)
+      (addStatement . ASMSyntax.StatementAllocateOnStack . varType)
       stackVars
     prepareArgsAtCall params cc
     mapM_ translateStatement $ LinearSyntax.funDefBody fdef
     addStatement $ ASMSyntax.StatementLabel epilogueLbl
-    mapM_ (addStatement . ASMSyntax.StatementPopFromStack . ASMSyntax.varType) $
+    mapM_ (addStatement . ASMSyntax.StatementPopFromStack . varType) $
       reverse stackVars
     addStatement $
       ASMSyntax.StatementAssign opRBP (peekStack ASMSyntax.VarTypeInt)
@@ -242,7 +247,7 @@ cleanStackAfterCall cc =
     (addStatement . ASMSyntax.StatementPopFromStack)
     (reverse $ CallingConvention.funStackToAllocate cc)
 
-prepareArgsAtCall :: [ASMSyntax.Var] -> CallingConvention -> ASMStatement ()
+prepareArgsAtCall :: [Var] -> CallingConvention -> ASMStatement ()
 prepareArgsAtCall params cc = do
   let vals = map go (CallingConvention.funArgValues cc)
   generateAssignments params vals
@@ -257,12 +262,9 @@ prepareArgsAtCall params cc = do
           , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
           , ASMSyntax.pointerDisplacement = -(d + 3)
           }
-    generateAssignments ::
-         [ASMSyntax.Var] -> [ASMSyntax.Operand] -> ASMStatement ()
+    generateAssignments :: [Var] -> [ASMSyntax.Operand] -> ASMStatement ()
     generateAssignments [] [] = pure ()
-    generateAssignments (ASMSyntax.Var { ASMSyntax.varType = t
-                                       , ASMSyntax.varDisplacement = d
-                                       }:vs) (val:vals) = do
+    generateAssignments (Var {varType = t, varDisplacement = d}:vs) (val:vals) = do
       addStatement $
         ASMSyntax.StatementAssign
           (ASMSyntax.OperandPointer
@@ -323,7 +325,7 @@ translateExpr (LinearSyntax.ExprVar v) =
 translateExpr (LinearSyntax.ExprDereference v) =
   ASMSyntax.ExprDereference <$> resolveVariableAsOperand v
 translateExpr (LinearSyntax.ExprAddressOf v) = do
-  ASMSyntax.Var {ASMSyntax.varDisplacement = d} <- resolveVariable v
+  Var {varDisplacement = d} <- resolveVariable v
   pure $
     ASMSyntax.ExprBinOp
       ASMSyntax.BinPlus
