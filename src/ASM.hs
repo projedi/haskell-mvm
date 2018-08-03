@@ -8,7 +8,7 @@ import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Control.Monad.Reader as Reader
 import Control.Monad.State (MonadState, State, runState)
 import qualified Control.Monad.State as State
-import Control.Monad.Writer (WriterT, execWriterT)
+import Control.Monad.Writer (MonadWriter, WriterT, execWriterT)
 import qualified Control.Monad.Writer as Writer
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -21,25 +21,40 @@ import qualified LinearSyntax
 avenge :: LinearSyntax.Program -> ASMSyntax.Program
 avenge p =
   ASMSyntax.Program
-    { ASMSyntax.programFunctions = fs
+    { ASMSyntax.programCode = ASMSyntax.FunctionDef code
     , ASMSyntax.programLibraries = LinearSyntax.programLibraries p
     , ASMSyntax.programForeignFunctions = LinearSyntax.programForeignFunctions p
     , ASMSyntax.programConstants = LinearSyntax.programConstants p
     , ASMSyntax.programLastFunID = LinearSyntax.programLastFunID p
     , ASMSyntax.programLastConstID = LinearSyntax.programLastConstID p
-    , ASMSyntax.programLastLabelID = LinearSyntax.programLastLabelID p
+    , ASMSyntax.programLastLabelID = lastLabelID finalEnv
     }
   where
-    (fs, _) =
-      runState (mapM translateFunctionDef (LinearSyntax.programFunctions p)) $
-      Env {varMap = IntMap.empty, varStack = []}
+    (code, finalEnv) =
+      runState (execWriterT (translateCode (LinearSyntax.programFunctions p))) $
+      Env
+        { varMap = IntMap.empty
+        , varStack = []
+        , lastLabelID = LinearSyntax.programLastLabelID p
+        , funIdToLabelID = IntMap.empty
+        }
 
 data Env = Env
   { varMap :: IntMap ASMSyntax.Var
   , varStack :: [ASMSyntax.VarType]
+  , lastLabelID :: ASMSyntax.LabelID
+  , funIdToLabelID :: IntMap ASMSyntax.LabelID
   }
 
-type ASM = State Env
+type ASM = WriterT [ASMSyntax.Statement] (State Env)
+
+nextLabel :: MonadState Env m => m ASMSyntax.LabelID
+nextLabel = do
+  lbl <- State.gets (inc . lastLabelID)
+  State.modify $ \env -> env {lastLabelID = lbl}
+  pure lbl
+  where
+    inc (ASMSyntax.LabelID lid) = ASMSyntax.LabelID (lid + 1)
 
 opRBP :: ASMSyntax.Operand
 opRBP = ASMSyntax.OperandRegister ASMSyntax.VarTypeInt ASMSyntax.RegisterRBP
@@ -88,7 +103,23 @@ resolveVariableAsOperand v = do
         , ASMSyntax.pointerDisplacement = d
         }
 
-translateFunctionDef :: LinearSyntax.FunctionDef -> ASM ASMSyntax.FunctionDef
+translateCode :: IntMap LinearSyntax.FunctionDef -> ASM ()
+translateCode fs = do
+  let fids = IntMap.keys fs
+  let generateLabelForFunID fid = do
+        l <- nextLabel
+        pure (fid, l)
+  fidLabelMap <- mapM generateLabelForFunID fids
+  let funMap = IntMap.fromList fidLabelMap
+  State.modify $ \env -> env {funIdToLabelID = funMap}
+  addStatement $
+    ASMSyntax.StatementFunctionCall $
+    ASMSyntax.NativeFunctionCall
+      {ASMSyntax.nativeFunCallName = funMap IntMap.! 0}
+  addStatement $ ASMSyntax.StatementReturn
+  mapM_ translateFunctionDef fs
+
+translateFunctionDef :: LinearSyntax.FunctionDef -> ASM ()
 translateFunctionDef fdef = do
   State.modify $ \env -> env {varStack = []}
   params <- mapM introduceVariable $ LinearSyntax.funDefParams fdef
@@ -102,40 +133,40 @@ translateFunctionDef fdef = do
             }
   let retValue =
         (uncurry ASMSyntax.OperandRegister) <$> CallingConvention.funRetValue cc
-  body <-
-    runASMStatement
-      ConstEnv {retValueLocation = retValue, allocatedStack = params ++ locals} $ do
-      addStatement $ ASMSyntax.StatementPushOnStack opRBP
-      addStatement $ ASMSyntax.StatementAssign opRBP (ASMSyntax.ExprRead opRSP)
-      stackVars <- Reader.asks allocatedStack
-      mapM_
-        (addStatement . ASMSyntax.StatementAllocateOnStack . ASMSyntax.varType)
-        stackVars
-      prepareArgsAtCall params cc
-      mapM_ translateStatement $ LinearSyntax.funDefBody fdef
-      functionEpilogue
-  pure $ ASMSyntax.FunctionDef {ASMSyntax.funDefBody = body}
+  epilogueLbl <- nextLabel
+  runASMStatement
+    ConstEnv {retValueLocation = retValue, epilogueLabel = epilogueLbl} $ do
+    let (LinearSyntax.FunID fid) = LinearSyntax.funDefName fdef
+    funLbl <- State.gets ((IntMap.! fid) . funIdToLabelID)
+    addStatement $ ASMSyntax.StatementLabel funLbl
+    let stackVars = params ++ locals
+    addStatement $ ASMSyntax.StatementPushOnStack opRBP
+    addStatement $ ASMSyntax.StatementAssign opRBP (ASMSyntax.ExprRead opRSP)
+    mapM_
+      (addStatement . ASMSyntax.StatementAllocateOnStack . ASMSyntax.varType)
+      stackVars
+    prepareArgsAtCall params cc
+    mapM_ translateStatement $ LinearSyntax.funDefBody fdef
+    addStatement $ ASMSyntax.StatementLabel epilogueLbl
+    mapM_ (addStatement . ASMSyntax.StatementPopFromStack . ASMSyntax.varType) $
+      reverse stackVars
+    addStatement $
+      ASMSyntax.StatementAssign opRBP (peekStack ASMSyntax.VarTypeInt)
+    addStatement $ ASMSyntax.StatementPopFromStack ASMSyntax.VarTypeInt
+    addStatement $ ASMSyntax.StatementReturn
 
-functionEpilogue :: ASMStatement ()
-functionEpilogue = do
-  stackVars <- Reader.asks allocatedStack
-  mapM_ (addStatement . ASMSyntax.StatementPopFromStack . ASMSyntax.varType) $
-    reverse stackVars
-  addStatement $
-    ASMSyntax.StatementAssign opRBP (peekStack ASMSyntax.VarTypeInt)
-  addStatement $ ASMSyntax.StatementPopFromStack ASMSyntax.VarTypeInt
-
-type ASMStatement = ReaderT ConstEnv (WriterT [ASMSyntax.Statement] ASM)
+type ASMStatement = ReaderT ConstEnv ASM
 
 data ConstEnv = ConstEnv
   { retValueLocation :: Maybe ASMSyntax.Operand
-  , allocatedStack :: [ASMSyntax.Var]
+  , epilogueLabel :: ASMSyntax.LabelID
   }
 
-runASMStatement :: ConstEnv -> ASMStatement () -> ASM [ASMSyntax.Statement]
-runASMStatement env m = execWriterT $ runReaderT m env
+runASMStatement :: ConstEnv -> ASMStatement a -> ASM a
+runASMStatement env m = runReaderT m env
 
-addStatement :: ASMSyntax.Statement -> ASMStatement ()
+addStatement ::
+     MonadWriter [ASMSyntax.Statement] m => ASMSyntax.Statement -> m ()
 addStatement s = Writer.tell [s]
 
 translateStatement :: LinearSyntax.Statement -> ASMStatement ()
@@ -158,13 +189,14 @@ translateStatement (LinearSyntax.StatementAssignToPtr p v) = do
   addStatement $ ASMSyntax.StatementAssignToPtr p' v'
 translateStatement (LinearSyntax.StatementReturn Nothing) = do
   Nothing <- Reader.asks retValueLocation
-  functionEpilogue
-  addStatement ASMSyntax.StatementReturn
+  lbl <- Reader.asks epilogueLabel
+  addStatement $ ASMSyntax.StatementJump lbl
 translateStatement (LinearSyntax.StatementReturn (Just v)) = do
   v' <- resolveVariableAsOperand v
   Just rl <- Reader.asks retValueLocation
   addStatement $ ASMSyntax.StatementAssign rl $ ASMSyntax.ExprRead v'
-  functionEpilogue
+  lbl <- Reader.asks epilogueLabel
+  addStatement $ ASMSyntax.StatementJump lbl
   addStatement $ ASMSyntax.StatementReturn
 translateStatement (LinearSyntax.StatementLabel l) =
   addStatement $ ASMSyntax.StatementLabel l
@@ -223,7 +255,7 @@ prepareArgsAtCall params cc = do
         ASMSyntax.Pointer
           { ASMSyntax.pointerType = t
           , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
-          , ASMSyntax.pointerDisplacement = -(d + 2)
+          , ASMSyntax.pointerDisplacement = -(d + 3)
           }
     generateAssignments ::
          [ASMSyntax.Var] -> [ASMSyntax.Operand] -> ASMStatement ()
@@ -255,10 +287,11 @@ translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
             , CallingConvention.funArgTypes = map ASMSyntax.operandType args
             }
   prepareArgsForCall cc args
+  let (LinearSyntax.FunID fid) = LinearSyntax.nativeFunCallName fcall
+  flbl <- State.gets ((IntMap.! fid) . funIdToLabelID)
   addStatement $
     ASMSyntax.StatementFunctionCall $
-    ASMSyntax.NativeFunctionCall
-      {ASMSyntax.nativeFunCallName = LinearSyntax.nativeFunCallName fcall}
+    ASMSyntax.NativeFunctionCall {ASMSyntax.nativeFunCallName = flbl}
   cleanStackAfterCall cc
   pure cc
 translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do

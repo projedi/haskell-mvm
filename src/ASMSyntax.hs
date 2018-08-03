@@ -40,7 +40,7 @@ import LinearSyntax
 import Value (Value)
 
 data Program = Program
-  { programFunctions :: IntMap FunctionDef
+  { programCode :: FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
   , programConstants :: IntMap Value
@@ -105,7 +105,7 @@ data FunctionDef = FunctionDef
   }
 
 data FunctionCall
-  = NativeFunctionCall { nativeFunCallName :: FunID }
+  = NativeFunctionCall { nativeFunCallName :: LabelID }
   | ForeignFunctionCall { foreignFunCallName :: FunID
                         , foreignFunCallRetType :: Maybe VarType
                         , foreignFunCallArgTypes :: [VarType] }

@@ -3,8 +3,6 @@ module Eval
   ) where
 
 import Control.Monad (forM, forM_, unless, when)
-import Control.Monad.Except (ExceptT, runExceptT)
-import qualified Control.Monad.Except as Except
 import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Control.Monad.Reader as Reader
 import Control.Monad.State (StateT, runStateT)
@@ -40,7 +38,7 @@ eval p = do
   runExecute $
     startExecute
       (programForeignFunctions p)
-      (programFunctions p)
+      (programCode p)
       (programConstants p)
   forM_ libhandles dlclose
 
@@ -48,8 +46,8 @@ data Env = Env
   { envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   , envFunctions :: IntMap FunctionDef
   , envConsts :: IntMap Value
-  , envRIP :: Int
   , envStack :: [Value]
+  , regRIP :: Int
   , regRBP :: Int64
   , regRSP :: Int64
   , regRAX :: Value
@@ -72,7 +70,7 @@ data Env = Env
 instance Show Env where
   show env =
     "rip = " ++
-    show (envRIP env) ++
+    show (regRIP env) ++
     ", rbp = " ++
     show (regRBP env) ++
     ", rsp = " ++ show (regRSP env) ++ ", stack = " ++ show (envStack env)
@@ -83,7 +81,7 @@ emptyEnv =
     { envForeignFunctions = IntMap.empty
     , envFunctions = IntMap.empty
     , envConsts = IntMap.empty
-    , envRIP = 0
+    , regRIP = 0
     , envStack = []
     , regRBP = 0
     , regRSP = 0
@@ -104,29 +102,19 @@ emptyEnv =
     , regXMM7 = 0
     }
 
-type Execute = ExceptT () (StateT Env IO)
+type Execute = StateT Env IO
 
 runExecute :: Execute () -> IO ()
 runExecute m = do
-  _ <- runStateT (runExceptT m) emptyEnv
+  _ <- runStateT m emptyEnv
   pure ()
 
 startExecute ::
-     IntMap ForeignFunctionDecl
-  -> IntMap FunctionDef
-  -> IntMap Value
-  -> Execute ()
-startExecute foreignFuns nativeFuns consts = do
+     IntMap ForeignFunctionDecl -> FunctionDef -> IntMap Value -> Execute ()
+startExecute foreignFuns code consts = do
   funs <- mapM getForeignFun foreignFuns
-  State.modify $ \env ->
-    env
-      { envForeignFunctions = funs
-      , envFunctions = nativeFuns
-      , envConsts = consts
-      }
-  let Just mainFun = IntMap.lookup 0 nativeFuns
-  _ <- nativeFunctionCall mainFun
-  pure ()
+  State.modify $ \env -> env {envForeignFunctions = funs, envConsts = consts}
+  executeFunctionBody (funDefBody code)
   where
     getForeignFun fdecl = do
       Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
@@ -155,11 +143,8 @@ prepareArgsAtCall cc = do
         Pointer
           { pointerType = t
           , pointerBase = Just RegisterRBP
-          , pointerDisplacement = -(d + 2)
+          , pointerDisplacement = -(d + 3)
           }
-
-nativeFunctionCall :: FunctionDef -> Execute ()
-nativeFunctionCall fdef = executeFunctionBody (funDefBody fdef)
 
 foreignFunctionCall ::
      Maybe VarType -> [VarType] -> Bool -> [VarType] -> ForeignFun -> Execute ()
@@ -172,6 +157,8 @@ foreignFunctionCall rettype params hasVarArgs args fun
             { CallingConvention.funRetType = rettype
             , CallingConvention.funArgTypes = args
             }
+  ip <- State.gets regRIP
+  pushOnStack (ValueInt $ fromIntegral ip)
   rbp1 <- readRegister RegisterRBP
   pushOnStack rbp1
   rsp1 <- readRegister RegisterRSP
@@ -187,6 +174,7 @@ foreignFunctionCall rettype params hasVarArgs args fun
       }
   writeRegister RegisterRBP rbp2
   popFromStack VarTypeInt
+  popFromStack VarTypeInt
   case (res, CallingConvention.funRetValue cc) of
     (Nothing, Nothing) -> pure ()
     (Just r, Just (_, rv)) -> writeRegister rv r
@@ -199,30 +187,30 @@ foreignFunctionCall rettype params hasVarArgs args fun
       | hasVarArgs = vs
     assertVals _ _ = error "Type mismatch"
 
-functionCall :: FunctionCall -> Execute ()
+functionCall :: FunctionCall -> ExecuteStatement ()
 functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
                                  , foreignFunCallArgTypes = args
                                  } = do
   Just (fdecl, f) <- State.gets (IntMap.lookup fid . envForeignFunctions)
-  foreignFunctionCall
-    (foreignFunDeclRetType fdecl)
-    (foreignFunDeclParams fdecl)
-    (foreignFunDeclHasVarArgs fdecl)
-    args
-    f
-functionCall NativeFunctionCall {nativeFunCallName = (FunID fid)} = do
-  Just f <- State.gets (IntMap.lookup fid . envFunctions)
-  nativeFunctionCall f
+  Trans.lift $
+    foreignFunctionCall
+      (foreignFunDeclRetType fdecl)
+      (foreignFunDeclParams fdecl)
+      (foreignFunDeclHasVarArgs fdecl)
+      args
+      f
+functionCall NativeFunctionCall {nativeFunCallName = lbl} = do
+  ip <- State.gets regRIP
+  Trans.lift $ pushOnStack (ValueInt $ fromIntegral ip)
+  jump lbl
 
 executeFunctionBody :: [Statement] -> Execute ()
 executeFunctionBody [] = pure ()
 executeFunctionBody ss = do
-  prevIP <- State.gets envRIP
-  State.modify $ \env -> env {envRIP = 0}
+  State.modify $ \env -> env {regRIP = 0}
   let instructions = Array.listArray (0, length ss - 1) ss
-  retValue <- (startExecution instructions) `Except.catchError` pure
-  State.modify (\env -> env {envRIP = prevIP})
-  pure retValue
+  pushOnStack (ValueInt (-2))
+  startExecution instructions
   where
     startExecution instructions =
       runReaderT executeStatement $
@@ -234,9 +222,6 @@ executeFunctionBody ss = do
     buildLabelMap ((i, StatementLabel (LabelID lid)):is) =
       IntMap.insert lid i $ buildLabelMap is
     buildLabelMap (_:is) = buildLabelMap is
-
-functionReturn :: Execute ()
-functionReturn = Except.throwError ()
 
 readConstant :: ConstID -> Execute Value
 readConstant (ConstID cid) = State.gets $ ((IntMap.! cid) . envConsts)
@@ -381,21 +366,34 @@ type ExecuteStatement = ReaderT ConstEnv Execute
 jump :: LabelID -> ExecuteStatement ()
 jump (LabelID lid) = do
   ip <- Reader.asks ((IntMap.! lid) . constEnvLabelMap)
-  State.modify $ \env -> env {envRIP = ip - 1}
+  State.modify $ \env -> env {regRIP = ip - 1}
 
 executeStatement :: ExecuteStatement ()
 executeStatement = do
-  ipBefore <- State.gets envRIP
+  ipBefore <- State.gets regRIP
   arr <- Reader.asks constEnvInstructions
   execute (arr Array.! ipBefore)
-  ipAfter <- State.gets envRIP
+  ipAfter <- State.gets regRIP
   let nextIP = ipAfter + 1
-  when (nextIP <= snd (Array.bounds arr)) $ do
-    State.modify $ \env -> env {envRIP = nextIP}
+  when (nextIP <= snd (Array.bounds arr) && nextIP >= fst (Array.bounds arr)) $ do
+    State.modify $ \env -> env {regRIP = nextIP}
     executeStatement
 
+functionReturn :: ExecuteStatement ()
+functionReturn = do
+  ValueInt ip <-
+    Trans.lift $
+    readPointer $
+    Pointer
+      { pointerType = VarTypeInt
+      , pointerBase = Just RegisterRSP
+      , pointerDisplacement = -1
+      }
+  Trans.lift $ popFromStack VarTypeInt -- popping RIP
+  State.modify $ \env -> env {regRIP = fromIntegral ip}
+
 execute :: Statement -> ExecuteStatement ()
-execute (StatementFunctionCall fcall) = Trans.lift $ functionCall fcall
+execute (StatementFunctionCall fcall) = functionCall fcall
 execute (StatementAssign lhs e) = do
   res <- Trans.lift $ evaluate e
   Trans.lift $ writeOperand lhs res
@@ -409,7 +407,7 @@ execute (StatementPushOnStack x) = do
 execute (StatementAllocateOnStack t) = do
   Trans.lift $ pushOnStack (defaultValueFromType t)
 execute (StatementPopFromStack t) = Trans.lift $ popFromStack t
-execute StatementReturn = Trans.lift functionReturn
+execute StatementReturn = functionReturn
 execute (StatementLabel _) = pure ()
 execute (StatementJump l) = jump l
 execute (StatementJumpIfZero x l) = do
