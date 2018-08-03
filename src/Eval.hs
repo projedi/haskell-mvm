@@ -3,8 +3,6 @@ module Eval
   ) where
 
 import Control.Monad (forM, forM_, unless, when)
-import Control.Monad.Except (ExceptT, runExceptT)
-import qualified Control.Monad.Except as Except
 import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Control.Monad.Reader as Reader
 import Control.Monad.State (StateT, runStateT)
@@ -104,11 +102,11 @@ emptyEnv =
     , regXMM7 = 0
     }
 
-type Execute = ExceptT () (StateT Env IO)
+type Execute = StateT Env IO
 
 runExecute :: Execute () -> IO ()
 runExecute m = do
-  _ <- runStateT (runExceptT m) emptyEnv
+  _ <- runStateT m emptyEnv
   pure ()
 
 startExecute ::
@@ -226,9 +224,8 @@ executeFunctionBody ss = do
   prevIP <- State.gets regRIP
   State.modify $ \env -> env {regRIP = 0}
   let instructions = Array.listArray (0, length ss - 1) ss
-  retValue <- (startExecution instructions) `Except.catchError` pure
+  startExecution instructions
   State.modify (\env -> env {regRIP = prevIP})
-  pure retValue
   where
     startExecution instructions =
       runReaderT executeStatement $
@@ -240,11 +237,6 @@ executeFunctionBody ss = do
     buildLabelMap ((i, StatementLabel (LabelID lid)):is) =
       IntMap.insert lid i $ buildLabelMap is
     buildLabelMap (_:is) = buildLabelMap is
-
-functionReturn :: Execute ()
-functionReturn = do
-  popFromStack VarTypeInt -- popping RIP
-  Except.throwError ()
 
 readConstant :: ConstID -> Execute Value
 readConstant (ConstID cid) = State.gets $ ((IntMap.! cid) . envConsts)
@@ -402,6 +394,11 @@ executeStatement = do
     State.modify $ \env -> env {regRIP = nextIP}
     executeStatement
 
+functionReturn :: ExecuteStatement ()
+functionReturn = do
+  Trans.lift $ popFromStack VarTypeInt -- popping RIP
+  -- TODO: Jump to RIP.
+
 execute :: Statement -> ExecuteStatement ()
 execute (StatementFunctionCall fcall) = Trans.lift $ functionCall fcall
 execute (StatementAssign lhs e) = do
@@ -417,7 +414,7 @@ execute (StatementPushOnStack x) = do
 execute (StatementAllocateOnStack t) = do
   Trans.lift $ pushOnStack (defaultValueFromType t)
 execute (StatementPopFromStack t) = Trans.lift $ popFromStack t
-execute StatementReturn = Trans.lift functionReturn
+execute StatementReturn = functionReturn
 execute (StatementLabel _) = pure ()
 execute (StatementJump l) = jump l
 execute (StatementJumpIfZero x l) = do
