@@ -168,7 +168,6 @@ foreignFunctionCall rettype params hasVarArgs args fun
     (Nothing, Nothing) -> pure ()
     (Just r, Just (_, rv)) -> writeRegister rv r
     _ -> error "Type mismatch"
-  -- TODO: put res where it belongs
   where
     assertVals [] [] = []
     assertVals (vtype:ps) (v:vs)
