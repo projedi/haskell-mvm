@@ -155,11 +155,14 @@ prepareArgsAtCall cc = do
         Pointer
           { pointerType = t
           , pointerBase = Just RegisterRBP
-          , pointerDisplacement = -(d + 2)
+          , pointerDisplacement = -(d + 3)
           }
 
 nativeFunctionCall :: FunctionDef -> Execute ()
-nativeFunctionCall fdef = executeFunctionBody (funDefBody fdef)
+nativeFunctionCall fdef = do
+  ip <- State.gets regRIP
+  pushOnStack (ValueInt $ fromIntegral ip)
+  executeFunctionBody (funDefBody fdef)
 
 foreignFunctionCall ::
      Maybe VarType -> [VarType] -> Bool -> [VarType] -> ForeignFun -> Execute ()
@@ -172,6 +175,8 @@ foreignFunctionCall rettype params hasVarArgs args fun
             { CallingConvention.funRetType = rettype
             , CallingConvention.funArgTypes = args
             }
+  ip <- State.gets regRIP
+  pushOnStack (ValueInt $ fromIntegral ip)
   rbp1 <- readRegister RegisterRBP
   pushOnStack rbp1
   rsp1 <- readRegister RegisterRSP
@@ -186,6 +191,7 @@ foreignFunctionCall rettype params hasVarArgs args fun
       , pointerDisplacement = -1
       }
   writeRegister RegisterRBP rbp2
+  popFromStack VarTypeInt
   popFromStack VarTypeInt
   case (res, CallingConvention.funRetValue cc) of
     (Nothing, Nothing) -> pure ()
@@ -236,7 +242,9 @@ executeFunctionBody ss = do
     buildLabelMap (_:is) = buildLabelMap is
 
 functionReturn :: Execute ()
-functionReturn = Except.throwError ()
+functionReturn = do
+  popFromStack VarTypeInt -- popping RIP
+  Except.throwError ()
 
 readConstant :: ConstID -> Execute Value
 readConstant (ConstID cid) = State.gets $ ((IntMap.! cid) . envConsts)

@@ -223,7 +223,7 @@ prepareArgsAtCall params cc = do
         ASMSyntax.Pointer
           { ASMSyntax.pointerType = t
           , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
-          , ASMSyntax.pointerDisplacement = -(d + 2)
+          , ASMSyntax.pointerDisplacement = -(d + 3)
           }
     generateAssignments ::
          [ASMSyntax.Var] -> [ASMSyntax.Operand] -> ASMStatement ()
