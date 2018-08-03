@@ -48,8 +48,8 @@ data Env = Env
   { envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   , envFunctions :: IntMap FunctionDef
   , envConsts :: IntMap Value
-  , envRIP :: Int
   , envStack :: [Value]
+  , regRIP :: Int
   , regRBP :: Int64
   , regRSP :: Int64
   , regRAX :: Value
@@ -72,7 +72,7 @@ data Env = Env
 instance Show Env where
   show env =
     "rip = " ++
-    show (envRIP env) ++
+    show (regRIP env) ++
     ", rbp = " ++
     show (regRBP env) ++
     ", rsp = " ++ show (regRSP env) ++ ", stack = " ++ show (envStack env)
@@ -83,7 +83,7 @@ emptyEnv =
     { envForeignFunctions = IntMap.empty
     , envFunctions = IntMap.empty
     , envConsts = IntMap.empty
-    , envRIP = 0
+    , regRIP = 0
     , envStack = []
     , regRBP = 0
     , regRSP = 0
@@ -217,11 +217,11 @@ functionCall NativeFunctionCall {nativeFunCallName = (FunID fid)} = do
 executeFunctionBody :: [Statement] -> Execute ()
 executeFunctionBody [] = pure ()
 executeFunctionBody ss = do
-  prevIP <- State.gets envRIP
-  State.modify $ \env -> env {envRIP = 0}
+  prevIP <- State.gets regRIP
+  State.modify $ \env -> env {regRIP = 0}
   let instructions = Array.listArray (0, length ss - 1) ss
   retValue <- (startExecution instructions) `Except.catchError` pure
-  State.modify (\env -> env {envRIP = prevIP})
+  State.modify (\env -> env {regRIP = prevIP})
   pure retValue
   where
     startExecution instructions =
@@ -381,17 +381,17 @@ type ExecuteStatement = ReaderT ConstEnv Execute
 jump :: LabelID -> ExecuteStatement ()
 jump (LabelID lid) = do
   ip <- Reader.asks ((IntMap.! lid) . constEnvLabelMap)
-  State.modify $ \env -> env {envRIP = ip - 1}
+  State.modify $ \env -> env {regRIP = ip - 1}
 
 executeStatement :: ExecuteStatement ()
 executeStatement = do
-  ipBefore <- State.gets envRIP
+  ipBefore <- State.gets regRIP
   arr <- Reader.asks constEnvInstructions
   execute (arr Array.! ipBefore)
-  ipAfter <- State.gets envRIP
+  ipAfter <- State.gets regRIP
   let nextIP = ipAfter + 1
   when (nextIP <= snd (Array.bounds arr)) $ do
-    State.modify $ \env -> env {envRIP = nextIP}
+    State.modify $ \env -> env {regRIP = nextIP}
     executeStatement
 
 execute :: Statement -> ExecuteStatement ()
