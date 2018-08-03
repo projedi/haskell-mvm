@@ -52,7 +52,7 @@ data Env = Env
   , envStack :: [Value]
   , regRBP :: Int64
   , regRSP :: Int64
-  , regRAX :: Int64
+  , regRAX :: Value
   , regXMM0 :: Double
   }
 
@@ -74,7 +74,7 @@ emptyEnv =
     , envStack = []
     , regRBP = 0
     , regRSP = 0
-    , regRAX = 0
+    , regRAX = ValueInt 0
     , regXMM0 = 0
     }
 
@@ -234,7 +234,7 @@ writeToPtr _ _ = error "Type mismatch"
 readRegister :: Register -> Execute Value
 readRegister RegisterRSP = State.gets (ValueInt . regRSP)
 readRegister RegisterRBP = State.gets (ValueInt . regRBP)
-readRegister RegisterRAX = State.gets (ValueInt . regRAX)
+readRegister RegisterRAX = State.gets regRAX
 readRegister RegisterXMM0 = State.gets (ValueFloat . regXMM0)
 
 writeRegister :: Register -> Value -> Execute ()
@@ -242,8 +242,7 @@ writeRegister RegisterRSP (ValueInt i) = State.modify $ \env -> env {regRSP = i}
 writeRegister RegisterRSP _ = error "Type mismatch"
 writeRegister RegisterRBP (ValueInt i) = State.modify $ \env -> env {regRBP = i}
 writeRegister RegisterRBP _ = error "Type mismatch"
-writeRegister RegisterRAX (ValueInt i) = State.modify $ \env -> env {regRAX = i}
-writeRegister RegisterRAX _ = error "Type mismatch"
+writeRegister RegisterRAX v = State.modify $ \env -> env {regRAX = v}
 writeRegister RegisterXMM0 (ValueFloat f) =
   State.modify $ \env -> env {regXMM0 = f}
 writeRegister RegisterXMM0 _ = error "Type mismatch"
