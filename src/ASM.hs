@@ -100,31 +100,33 @@ translateFunctionDef fdef = do
   let retValue =
         (uncurry ASMSyntax.OperandRegister) <$> CallingConvention.funRetValue cc
   body <-
-    runASMStatement ConstEnv {retValueLocation = retValue} $ do
+    runASMStatement
+      ConstEnv {retValueLocation = retValue, allocatedStack = params ++ locals} $ do
       addStatement $ ASMSyntax.StatementPushOnStack opRBP
       addStatement $ ASMSyntax.StatementAssign opRBP (ASMSyntax.ExprRead opRSP)
+      stackVars <- Reader.asks allocatedStack
       mapM_
         (addStatement . ASMSyntax.StatementAllocateOnStack . ASMSyntax.varType)
-        (params ++ locals)
+        stackVars
       prepareArgsAtCall params cc
       mapM_ translateStatement $ LinearSyntax.funDefBody fdef
-  let undeclareVars =
-        map (ASMSyntax.StatementPopFromStack . ASMSyntax.varType) $
-        reverse (params ++ locals)
-  let restoreRBP =
-        [ ASMSyntax.StatementAssign opRBP (peekStack ASMSyntax.VarTypeInt)
-        , ASMSyntax.StatementPopFromStack ASMSyntax.VarTypeInt
-        ]
-  pure $
-    ASMSyntax.FunctionDef
-      { ASMSyntax.funDefBody = body
-      , ASMSyntax.funDefAfterBody = undeclareVars ++ restoreRBP
-      }
+      functionEpilogue
+  pure $ ASMSyntax.FunctionDef {ASMSyntax.funDefBody = body}
+
+functionEpilogue :: ASMStatement ()
+functionEpilogue = do
+  stackVars <- Reader.asks allocatedStack
+  mapM_ (addStatement . ASMSyntax.StatementPopFromStack . ASMSyntax.varType) $
+    reverse stackVars
+  addStatement $
+    ASMSyntax.StatementAssign opRBP (peekStack ASMSyntax.VarTypeInt)
+  addStatement $ ASMSyntax.StatementPopFromStack ASMSyntax.VarTypeInt
 
 type ASMStatement = ReaderT ConstEnv (WriterT [ASMSyntax.Statement] ASM)
 
 data ConstEnv = ConstEnv
   { retValueLocation :: Maybe ASMSyntax.Operand
+  , allocatedStack :: [ASMSyntax.Var]
   }
 
 runASMStatement :: ConstEnv -> ASMStatement () -> ASM [ASMSyntax.Statement]
@@ -153,11 +155,13 @@ translateStatement (LinearSyntax.StatementAssignToPtr p v) = do
   addStatement $ ASMSyntax.StatementAssignToPtr p' v'
 translateStatement (LinearSyntax.StatementReturn Nothing) = do
   Nothing <- Reader.asks retValueLocation
+  functionEpilogue
   addStatement ASMSyntax.StatementReturn
 translateStatement (LinearSyntax.StatementReturn (Just v)) = do
   v' <- resolveVariableAsOperand v
   Just rl <- Reader.asks retValueLocation
   addStatement $ ASMSyntax.StatementAssign rl $ ASMSyntax.ExprRead v'
+  functionEpilogue
   addStatement $ ASMSyntax.StatementReturn
 translateStatement (LinearSyntax.StatementLabel l) =
   addStatement $ ASMSyntax.StatementLabel l

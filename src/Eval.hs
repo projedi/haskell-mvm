@@ -133,9 +133,7 @@ prepareArgsAtCall cc = do
           }
 
 nativeFunctionCall :: FunctionDef -> Execute ()
-nativeFunctionCall fdef = do
-  executeFunctionBody (funDefBody fdef)
-  executeFunctionBody (funDefAfterBody fdef)
+nativeFunctionCall fdef = executeFunctionBody (funDefBody fdef)
 
 foreignFunctionCall ::
      Maybe VarType -> [VarType] -> Bool -> [VarType] -> ForeignFun -> Execute ()

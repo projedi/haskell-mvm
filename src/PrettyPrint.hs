@@ -150,11 +150,6 @@ instance PrettyPrintSimple FunctionDef where
   prettyPrintSimple fdef =
     "\n{\n" ++
     List.intercalate "\n" (map (indent . prettyPrintSimple) (funDefBody fdef)) ++
-    "\n}" ++
-    "\nafter {\n" ++
-    List.intercalate
-      "\n"
-      (map (indent . prettyPrintSimple) (funDefAfterBody fdef)) ++
     "\n}"
     where
       indent :: String -> String
