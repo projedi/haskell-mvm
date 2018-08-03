@@ -148,11 +148,6 @@ instance PrettyPrintSimple Statement where
 
 instance PrettyPrintSimple FunctionDef where
   prettyPrintSimple fdef =
-    "\nbefore {\n" ++
-    List.intercalate
-      "\n"
-      (map (indent . prettyPrintSimple) (funDefBeforeBody fdef)) ++
-    "\n}" ++
     "\n{\n" ++
     List.intercalate "\n" (map (indent . prettyPrintSimple) (funDefBody fdef)) ++
     "\n}" ++

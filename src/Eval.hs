@@ -134,7 +134,6 @@ prepareArgsAtCall cc = do
 
 nativeFunctionCall :: FunctionDef -> Execute ()
 nativeFunctionCall fdef = do
-  executeFunctionBody (funDefBeforeBody fdef)
   executeFunctionBody (funDefBody fdef)
   executeFunctionBody (funDefAfterBody fdef)
 

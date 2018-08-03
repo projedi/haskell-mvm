@@ -89,7 +89,6 @@ data Statement
 
 data FunctionDef = FunctionDef
   { funDefBody :: [Statement]
-  , funDefBeforeBody :: [Statement]
   , funDefAfterBody :: [Statement]
   }
 

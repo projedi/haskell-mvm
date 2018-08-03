@@ -101,15 +101,13 @@ translateFunctionDef fdef = do
         (uncurry ASMSyntax.OperandRegister) <$> CallingConvention.funRetValue cc
   body <-
     runASMStatement ConstEnv {retValueLocation = retValue} $ do
+      addStatement $ ASMSyntax.StatementPushOnStack opRBP
+      addStatement $ ASMSyntax.StatementAssign opRBP (ASMSyntax.ExprRead opRSP)
+      mapM_
+        (addStatement . ASMSyntax.StatementAllocateOnStack . ASMSyntax.varType)
+        (params ++ locals)
       prepareArgsAtCall params cc
       mapM_ translateStatement $ LinearSyntax.funDefBody fdef
-  let saveRBP =
-        [ ASMSyntax.StatementPushOnStack opRBP
-        , ASMSyntax.StatementAssign opRBP (ASMSyntax.ExprRead opRSP)
-        ]
-  let declareVars =
-        map (ASMSyntax.StatementAllocateOnStack . ASMSyntax.varType) $
-        (params ++ locals)
   let undeclareVars =
         map (ASMSyntax.StatementPopFromStack . ASMSyntax.varType) $
         reverse (params ++ locals)
@@ -120,7 +118,6 @@ translateFunctionDef fdef = do
   pure $
     ASMSyntax.FunctionDef
       { ASMSyntax.funDefBody = body
-      , ASMSyntax.funDefBeforeBody = saveRBP ++ declareVars
       , ASMSyntax.funDefAfterBody = undeclareVars ++ restoreRBP
       }
 
