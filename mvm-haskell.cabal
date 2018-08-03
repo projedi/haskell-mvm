@@ -18,6 +18,7 @@ library
   exposed-modules:     Lib
                      , ASM
                      , ASMSyntax
+                     , CallingConvention
                      , Eval
                      , EvalSimplified
                      , ForeignEval

@@ -58,9 +58,6 @@ printConstants vals =
     ""
     vals
 
-paren :: String -> String
-paren str = "(" ++ str ++ ")"
-
 class PrettyPrintSimple a where
   prettyPrintSimple :: a -> String
 
@@ -74,16 +71,10 @@ instance PrettyPrintSimple LabelID where
   prettyPrintSimple = show
 
 instance PrettyPrintSimple FunctionCall where
-  prettyPrintSimple NativeFunctionCall { nativeFunCallName = funname
-                                       , nativeFunCallArgs = args
-                                       } =
-    prettyPrintSimple funname ++
-    paren (List.intercalate ", " (map prettyPrintSimple args))
-  prettyPrintSimple ForeignFunctionCall { foreignFunCallName = funname
-                                        , foreignFunCallArgs = args
-                                        } =
-    prettyPrintSimple funname ++
-    paren (List.intercalate ", " (map prettyPrintSimple args))
+  prettyPrintSimple NativeFunctionCall {nativeFunCallName = funname} =
+    "call " ++ prettyPrintSimple funname
+  prettyPrintSimple ForeignFunctionCall {foreignFunCallName = funname} =
+    "call foreign " ++ prettyPrintSimple funname
 
 instance PrettyPrintSimple VarType where
   prettyPrintSimple = show
@@ -112,11 +103,8 @@ instance PrettyPrintSimple UnOp where
   prettyPrintSimple UnIntToFloat = "(double)"
 
 instance PrettyPrintSimple Expr where
-  prettyPrintSimple (ExprFunctionCall fcall) = prettyPrintSimple fcall
   prettyPrintSimple (ExprRead v) = prettyPrintSimple v
-  prettyPrintSimple (ExprPeekStack _) = "peek"
   prettyPrintSimple (ExprDereference p) = "*" ++ prettyPrintSimple p
-  prettyPrintSimple (ExprAddressOf v) = "&" ++ prettyPrintSimple v
   prettyPrintSimple (ExprConst _ c) = show c
   prettyPrintSimple (ExprUnOp op v) =
     prettyPrintSimple op ++ prettyPrintSimple v
@@ -125,12 +113,32 @@ instance PrettyPrintSimple Expr where
     " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er
 
 instance PrettyPrintSimple Operand where
-  prettyPrintSimple (OperandVar v) = prettyPrintSimple v
   prettyPrintSimple (OperandRegister _ r) = prettyPrintSimple r
+  prettyPrintSimple (OperandPointer p) = prettyPrintSimple p
+  prettyPrintSimple (OperandImmediateInt i) = show i
 
 instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"
   prettyPrintSimple RegisterRBP = "RBP"
+  prettyPrintSimple RegisterRAX = "RAX"
+  prettyPrintSimple RegisterRDI = "RDI"
+  prettyPrintSimple RegisterRSI = "RSI"
+  prettyPrintSimple RegisterRDX = "RDX"
+  prettyPrintSimple RegisterRCX = "RCX"
+  prettyPrintSimple RegisterR8 = "R8"
+  prettyPrintSimple RegisterR9 = "R9"
+  prettyPrintSimple RegisterXMM0 = "XMM0"
+  prettyPrintSimple RegisterXMM1 = "XMM1"
+  prettyPrintSimple RegisterXMM2 = "XMM2"
+  prettyPrintSimple RegisterXMM3 = "XMM3"
+  prettyPrintSimple RegisterXMM4 = "XMM4"
+  prettyPrintSimple RegisterXMM5 = "XMM5"
+  prettyPrintSimple RegisterXMM6 = "XMM6"
+  prettyPrintSimple RegisterXMM7 = "XMM7"
+
+instance PrettyPrintSimple Pointer where
+  prettyPrintSimple Pointer {pointerBase = mr, pointerDisplacement = d} =
+    "[" ++ (maybe "" ((++ "+") . prettyPrintSimple) mr) ++ show d ++ "]"
 
 instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementFunctionCall fcall) =
@@ -143,10 +151,9 @@ instance PrettyPrintSimple Statement where
     "push " ++ prettyPrintSimple x ++ ";"
   prettyPrintSimple (StatementAllocateOnStack t) =
     "alloc " ++ prettyPrintSimple t ++ ";"
-  prettyPrintSimple StatementPopFromStack = "pop;"
-  prettyPrintSimple (StatementReturn Nothing) = "return;"
-  prettyPrintSimple (StatementReturn (Just v)) =
-    "return " ++ prettyPrintSimple v ++ ";"
+  prettyPrintSimple (StatementPopFromStack t) =
+    "pop " ++ prettyPrintSimple t ++ ";"
+  prettyPrintSimple StatementReturn = "return;"
   prettyPrintSimple (StatementLabel l) = show l ++ ": nop;"
   prettyPrintSimple (StatementJump l) = "jmp " ++ show l ++ ";"
   prettyPrintSimple (StatementJumpIfZero v l) =
@@ -154,26 +161,8 @@ instance PrettyPrintSimple Statement where
 
 instance PrettyPrintSimple FunctionDef where
   prettyPrintSimple fdef =
-    prettyPrintSimple (funDefRetType fdef) ++
-    " " ++
-    prettyPrintSimple (funDefName fdef) ++
-    paren (List.intercalate ", " (map prettyPrintSimple (funDefParams fdef))) ++
-    "\n" ++
-    List.intercalate
-      "\n"
-      (map (\v -> "local " ++ prettyPrintSimple v) (funDefLocals fdef)) ++
-    "\nbefore {\n" ++
-    List.intercalate
-      "\n"
-      (map (indent . prettyPrintSimple) (funDefBeforeBody fdef)) ++
-    "\n}" ++
     "\n{\n" ++
     List.intercalate "\n" (map (indent . prettyPrintSimple) (funDefBody fdef)) ++
-    "\n}" ++
-    "\nafter {\n" ++
-    List.intercalate
-      "\n"
-      (map (indent . prettyPrintSimple) (funDefAfterBody fdef)) ++
     "\n}"
     where
       indent :: String -> String

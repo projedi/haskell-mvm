@@ -19,8 +19,17 @@ import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
 import ASMSyntax
+import CallingConvention (CallingConvention)
+import qualified CallingConvention
 import ForeignEval
 import Value
+
+typesMatch :: VarType -> VarType -> Bool
+typesMatch lhs rhs
+  | lhs == rhs = True
+typesMatch VarTypeInt (VarTypePtr _) = True
+typesMatch (VarTypePtr _) VarTypeInt = True
+typesMatch _ _ = False
 
 eval :: Program -> IO ()
 eval p = do
@@ -43,7 +52,30 @@ data Env = Env
   , envStack :: [Value]
   , regRBP :: Int64
   , regRSP :: Int64
+  , regRAX :: Value
+  , regRDI :: Value
+  , regRSI :: Value
+  , regRDX :: Value
+  , regRCX :: Value
+  , regR8 :: Value
+  , regR9 :: Value
+  , regXMM0 :: Double
+  , regXMM1 :: Double
+  , regXMM2 :: Double
+  , regXMM3 :: Double
+  , regXMM4 :: Double
+  , regXMM5 :: Double
+  , regXMM6 :: Double
+  , regXMM7 :: Double
   }
+
+instance Show Env where
+  show env =
+    "rip = " ++
+    show (envRIP env) ++
+    ", rbp = " ++
+    show (regRBP env) ++
+    ", rsp = " ++ show (regRSP env) ++ ", stack = " ++ show (envStack env)
 
 emptyEnv :: Env
 emptyEnv =
@@ -55,35 +87,24 @@ emptyEnv =
     , envStack = []
     , regRBP = 0
     , regRSP = 0
+    , regRAX = ValueInt 0
+    , regRDI = ValueInt 0
+    , regRSI = ValueInt 0
+    , regRDX = ValueInt 0
+    , regRCX = ValueInt 0
+    , regR8 = ValueInt 0
+    , regR9 = ValueInt 0
+    , regXMM0 = 0
+    , regXMM1 = 0
+    , regXMM2 = 0
+    , regXMM3 = 0
+    , regXMM4 = 0
+    , regXMM5 = 0
+    , regXMM6 = 0
+    , regXMM7 = 0
     }
 
-readVariableFromEnv :: Env -> Var -> Value
-readVariableFromEnv env Var {varDisplacement = d} =
-  (envStack env) !! fromIntegral (regRBP env + d)
-
-writeVariableToEnv :: Env -> Var -> Value -> Env
-writeVariableToEnv env Var {varDisplacement = d} val =
-  let (before, _:after) =
-        List.splitAt (fromIntegral (regRBP env + d)) $ envStack env
-   in env {envStack = before ++ [val] ++ after}
-
-readConstantFromEnv :: Env -> ConstID -> Value
-readConstantFromEnv env (ConstID cid) = (envConsts env) IntMap.! cid
-
-dereferenceInEnv :: Env -> Value -> Value
-dereferenceInEnv env (ValueInt d) = (envStack env) !! (fromIntegral d)
-dereferenceInEnv _ _ = error "Type mismatch"
-
-addressOfInEnv :: Env -> Var -> Value
-addressOfInEnv env Var {varDisplacement = d} = ValueInt (d + regRBP env)
-
-writeToPtrInEnv :: Env -> Value -> Value -> Env
-writeToPtrInEnv env (ValueInt d) val =
-  let (stackBefore, _:stackAfter) = List.splitAt (fromIntegral d) $ envStack env
-   in env {envStack = stackBefore ++ [val] ++ stackAfter}
-writeToPtrInEnv _ _ _ = error "Type mismatch"
-
-type Execute = ExceptT (Maybe Value) (StateT Env IO)
+type Execute = ExceptT () (StateT Env IO)
 
 runExecute :: Execute () -> IO ()
 runExecute m = do
@@ -104,7 +125,7 @@ startExecute foreignFuns nativeFuns consts = do
       , envConsts = consts
       }
   let Just mainFun = IntMap.lookup 0 nativeFuns
-  _ <- nativeFunctionCall mainFun []
+  _ <- nativeFunctionCall mainFun
   pure ()
   where
     getForeignFun fdecl = do
@@ -116,37 +137,60 @@ pushOnStack v =
   State.modify $ \env ->
     env {regRSP = regRSP env + 1, envStack = envStack env ++ [v]}
 
-peekStack :: Execute Value
-peekStack = State.gets (List.last . envStack)
-
-popFromStack :: Execute ()
-popFromStack =
+popFromStack :: VarType -> Execute ()
+popFromStack t = do
+  v <- State.gets (List.last . envStack)
+  unless (typesMatch (typeof v) t) $ error "Type mismatch"
   State.modify $ \env ->
     env {regRSP = regRSP env - 1, envStack = List.init (envStack env)}
 
-nativeFunctionCall :: FunctionDef -> [Value] -> Execute (Maybe Value)
-nativeFunctionCall fdef vals = do
-  res <-
-    do Nothing <- executeFunctionBody (funDefBeforeBody fdef)
-       generateAssignments (funDefParams fdef) vals
-       mv <- executeFunctionBody (funDefBody fdef)
-       Nothing <- executeFunctionBody (funDefAfterBody fdef)
-       pure mv
-  case (res, funDefRetType fdef) of
-    (Nothing, Nothing) -> pure res
-    (Just val, Just valtype)
-      | typeIs val valtype -> pure $ Just val
-    _ -> error "Type mismatch"
+prepareArgsAtCall :: CallingConvention -> Execute [Value]
+prepareArgsAtCall cc = do
+  mapM go (CallingConvention.funArgValues cc)
+  where
+    go :: CallingConvention.ArgLocation -> Execute Value
+    go (CallingConvention.ArgLocationRegister _ r) = readRegister r
+    go (CallingConvention.ArgLocationStack t d) =
+      readPointer
+        Pointer
+          { pointerType = t
+          , pointerBase = Just RegisterRBP
+          , pointerDisplacement = -(d + 2)
+          }
+
+nativeFunctionCall :: FunctionDef -> Execute ()
+nativeFunctionCall fdef = executeFunctionBody (funDefBody fdef)
 
 foreignFunctionCall ::
-     Maybe VarType
-  -> [VarType]
-  -> Bool
-  -> [Value]
-  -> ForeignFun
-  -> Execute (Maybe Value)
-foreignFunctionCall rettype params hasVarArgs vals fun =
-  Trans.liftIO $ call fun rettype (assertVals params vals)
+     Maybe VarType -> [VarType] -> Bool -> [VarType] -> ForeignFun -> Execute ()
+foreignFunctionCall rettype params hasVarArgs args fun
+  -- We need to model what happens during nativeFunctionCAll because of prepareArgsAtCall
+ = do
+  let cc =
+        CallingConvention.computeCallingConvention
+          CallingConvention.FunctionCall
+            { CallingConvention.funRetType = rettype
+            , CallingConvention.funArgTypes = args
+            }
+  rbp1 <- readRegister RegisterRBP
+  pushOnStack rbp1
+  rsp1 <- readRegister RegisterRSP
+  writeRegister RegisterRBP rsp1
+  vals <- prepareArgsAtCall cc
+  res <- Trans.liftIO $ call fun rettype (assertVals params vals)
+  rbp2 <-
+    readPointer $
+    Pointer
+      { pointerType = VarTypeInt
+      , pointerBase = Just RegisterRSP
+      , pointerDisplacement = -1
+      }
+  writeRegister RegisterRBP rbp2
+  popFromStack VarTypeInt
+  case (res, CallingConvention.funRetValue cc) of
+    (Nothing, Nothing) -> pure ()
+    (Just r, Just (_, rv)) -> writeRegister rv r
+    _ -> error "Type mismatch"
   where
     assertVals [] [] = []
     assertVals (vtype:ps) (v:vs)
@@ -155,43 +199,28 @@ foreignFunctionCall rettype params hasVarArgs vals fun =
       | hasVarArgs = vs
     assertVals _ _ = error "Type mismatch"
 
-functionCall :: FunctionCall -> Execute (Maybe Value)
+functionCall :: FunctionCall -> Execute ()
 functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
-                                 , foreignFunCallArgs = args
+                                 , foreignFunCallArgTypes = args
                                  } = do
-  vals <- evaluateArgs args
   Just (fdecl, f) <- State.gets (IntMap.lookup fid . envForeignFunctions)
   foreignFunctionCall
     (foreignFunDeclRetType fdecl)
     (foreignFunDeclParams fdecl)
     (foreignFunDeclHasVarArgs fdecl)
-    vals
+    args
     f
-functionCall NativeFunctionCall { nativeFunCallName = (FunID fid)
-                                , nativeFunCallArgs = args
-                                } = do
-  vals <- evaluateArgs args
+functionCall NativeFunctionCall {nativeFunCallName = (FunID fid)} = do
   Just f <- State.gets (IntMap.lookup fid . envFunctions)
-  nativeFunctionCall f vals
+  nativeFunctionCall f
 
-generateAssignments :: [Var] -> [Value] -> Execute ()
-generateAssignments [] [] = pure ()
-generateAssignments (v:vs) (val:vals) = do
-  writeVariable v val
-  generateAssignments vs vals
-generateAssignments _ _ = error "Type mismatch"
-
-evaluateArgs :: [Operand] -> Execute [Value]
-evaluateArgs = mapM readOperand
-
-executeFunctionBody :: [Statement] -> Execute (Maybe Value)
-executeFunctionBody [] = pure Nothing
+executeFunctionBody :: [Statement] -> Execute ()
+executeFunctionBody [] = pure ()
 executeFunctionBody ss = do
   prevIP <- State.gets envRIP
   State.modify $ \env -> env {envRIP = 0}
   let instructions = Array.listArray (0, length ss - 1) ss
-  retValue <-
-    (startExecution instructions >> pure Nothing) `Except.catchError` pure
+  retValue <- (startExecution instructions) `Except.catchError` pure
   State.modify (\env -> env {envRIP = prevIP})
   pure retValue
   where
@@ -206,44 +235,99 @@ executeFunctionBody ss = do
       IntMap.insert lid i $ buildLabelMap is
     buildLabelMap (_:is) = buildLabelMap is
 
-functionReturn :: Maybe Value -> Execute ()
-functionReturn = Except.throwError
-
-readVariable :: Var -> Execute Value
-readVariable v = State.gets $ \env -> readVariableFromEnv env v
-
-writeVariable :: Var -> Value -> Execute ()
-writeVariable v val = State.modify $ \env -> writeVariableToEnv env v val
+functionReturn :: Execute ()
+functionReturn = Except.throwError ()
 
 readConstant :: ConstID -> Execute Value
-readConstant name = State.gets $ \env -> readConstantFromEnv env name
-
-addressOf :: Var -> Execute Value
-addressOf v = State.gets $ \env -> addressOfInEnv env v
+readConstant (ConstID cid) = State.gets $ ((IntMap.! cid) . envConsts)
 
 dereference :: Value -> Execute Value
-dereference ptr = State.gets $ \env -> dereferenceInEnv env ptr
+dereference (ValueInt d) = State.gets ((!! (fromIntegral d)) . envStack)
+dereference _ = error "Type mismatch"
 
 writeToPtr :: Value -> Value -> Execute ()
-writeToPtr ptr val = State.modify $ \env -> writeToPtrInEnv env ptr val
+writeToPtr (ValueInt d) val = do
+  (before, target:after) <-
+    State.gets (List.splitAt (fromIntegral d) . envStack)
+  unless (typesMatch (typeof target) (typeof val)) $ error "Type mismatch"
+  State.modify $ \env -> env {envStack = before ++ [val] ++ after}
+writeToPtr _ _ = error "Type mismatch"
 
 readRegister :: Register -> Execute Value
 readRegister RegisterRSP = State.gets (ValueInt . regRSP)
 readRegister RegisterRBP = State.gets (ValueInt . regRBP)
+readRegister RegisterRAX = State.gets regRAX
+readRegister RegisterRDI = State.gets regRDI
+readRegister RegisterRSI = State.gets regRSI
+readRegister RegisterRDX = State.gets regRDX
+readRegister RegisterRCX = State.gets regRCX
+readRegister RegisterR8 = State.gets regR8
+readRegister RegisterR9 = State.gets regR9
+readRegister RegisterXMM0 = State.gets (ValueFloat . regXMM0)
+readRegister RegisterXMM1 = State.gets (ValueFloat . regXMM1)
+readRegister RegisterXMM2 = State.gets (ValueFloat . regXMM2)
+readRegister RegisterXMM3 = State.gets (ValueFloat . regXMM3)
+readRegister RegisterXMM4 = State.gets (ValueFloat . regXMM4)
+readRegister RegisterXMM5 = State.gets (ValueFloat . regXMM5)
+readRegister RegisterXMM6 = State.gets (ValueFloat . regXMM6)
+readRegister RegisterXMM7 = State.gets (ValueFloat . regXMM7)
 
 writeRegister :: Register -> Value -> Execute ()
 writeRegister RegisterRSP (ValueInt i) = State.modify $ \env -> env {regRSP = i}
 writeRegister RegisterRSP _ = error "Type mismatch"
 writeRegister RegisterRBP (ValueInt i) = State.modify $ \env -> env {regRBP = i}
 writeRegister RegisterRBP _ = error "Type mismatch"
+writeRegister RegisterRAX v = State.modify $ \env -> env {regRAX = v}
+writeRegister RegisterRDI v = State.modify $ \env -> env {regRDI = v}
+writeRegister RegisterRSI v = State.modify $ \env -> env {regRSI = v}
+writeRegister RegisterRDX v = State.modify $ \env -> env {regRDX = v}
+writeRegister RegisterRCX v = State.modify $ \env -> env {regRCX = v}
+writeRegister RegisterR8 v = State.modify $ \env -> env {regR8 = v}
+writeRegister RegisterR9 v = State.modify $ \env -> env {regR9 = v}
+writeRegister RegisterXMM0 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM0 = f}
+writeRegister RegisterXMM0 _ = error "Type mismatch"
+writeRegister RegisterXMM1 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM1 = f}
+writeRegister RegisterXMM1 _ = error "Type mismatch"
+writeRegister RegisterXMM2 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM2 = f}
+writeRegister RegisterXMM2 _ = error "Type mismatch"
+writeRegister RegisterXMM3 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM3 = f}
+writeRegister RegisterXMM3 _ = error "Type mismatch"
+writeRegister RegisterXMM4 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM4 = f}
+writeRegister RegisterXMM4 _ = error "Type mismatch"
+writeRegister RegisterXMM5 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM5 = f}
+writeRegister RegisterXMM5 _ = error "Type mismatch"
+writeRegister RegisterXMM6 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM6 = f}
+writeRegister RegisterXMM6 _ = error "Type mismatch"
+writeRegister RegisterXMM7 (ValueFloat f) =
+  State.modify $ \env -> env {regXMM7 = f}
+writeRegister RegisterXMM7 _ = error "Type mismatch"
+
+readPointer :: Pointer -> Execute Value
+readPointer Pointer {pointerBase = mr, pointerDisplacement = d} = do
+  b <- maybe (pure $ ValueInt 0) readRegister mr
+  dereference $ b + ValueInt d
+
+writePointer :: Pointer -> Value -> Execute ()
+writePointer Pointer {pointerBase = mr, pointerDisplacement = d} val = do
+  b <- maybe (pure $ ValueInt 0) readRegister mr
+  writeToPtr (b + ValueInt d) val
 
 readOperand :: Operand -> Execute Value
-readOperand (OperandVar v) = readVariable v
 readOperand (OperandRegister _ r) = readRegister r
+readOperand (OperandPointer p) = readPointer p
+readOperand (OperandImmediateInt i) = pure $ ValueInt i
 
 writeOperand :: Operand -> Value -> Execute ()
-writeOperand (OperandVar v) val = writeVariable v val
 writeOperand (OperandRegister _ r) val = writeRegister r val
+writeOperand (OperandPointer p) val = writePointer p val
+writeOperand (OperandImmediateInt _) _ = error "Type mismatch"
 
 evaluateUnOp :: UnOp -> (Value -> Value)
 evaluateUnOp UnNeg = negate
@@ -274,12 +358,7 @@ evaluateBinOp BinEq = (fromBool .) . (==)
 evaluateBinOp BinLt = (fromBool .) . (<)
 
 evaluate :: Expr -> Execute Value
-evaluate (ExprFunctionCall fcall) = do
-  Just val <- functionCall fcall
-  pure val
 evaluate (ExprRead x) = readOperand x
-evaluate (ExprPeekStack _) = peekStack
-evaluate (ExprAddressOf v) = addressOf v
 evaluate (ExprDereference p) = do
   v <- readOperand p
   dereference v
@@ -316,8 +395,7 @@ executeStatement = do
     executeStatement
 
 execute :: Statement -> ExecuteStatement ()
-execute (StatementFunctionCall fcall) =
-  Trans.lift (functionCall fcall) >> pure ()
+execute (StatementFunctionCall fcall) = Trans.lift $ functionCall fcall
 execute (StatementAssign lhs e) = do
   res <- Trans.lift $ evaluate e
   Trans.lift $ writeOperand lhs res
@@ -328,13 +406,10 @@ execute (StatementAssignToPtr ptr rhs) = do
 execute (StatementPushOnStack x) = do
   res <- Trans.lift $ readOperand x
   Trans.lift $ pushOnStack res
-execute (StatementAllocateOnStack v) = do
-  Trans.lift $ pushOnStack (defaultValueFromType v)
-execute StatementPopFromStack = Trans.lift popFromStack
-execute (StatementReturn Nothing) = Trans.lift $ functionReturn Nothing
-execute (StatementReturn (Just x)) = do
-  res <- Trans.lift $ readOperand x
-  Trans.lift $ functionReturn (Just res)
+execute (StatementAllocateOnStack t) = do
+  Trans.lift $ pushOnStack (defaultValueFromType t)
+execute (StatementPopFromStack t) = Trans.lift $ popFromStack t
+execute StatementReturn = Trans.lift functionReturn
 execute (StatementLabel _) = pure ()
 execute (StatementJump l) = jump l
 execute (StatementJumpIfZero x l) = do
