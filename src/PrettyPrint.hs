@@ -17,7 +17,7 @@ prettyPrint p =
     [ printLibs $ programLibraries p
     , printForeignFunctions $ programForeignFunctions p
     , printConstants $ programConstants p
-    , printFunctions $ programFunctions p
+    , prettyPrintSimple $ programCode p
     ]
 
 printLibs :: [String] -> String
@@ -41,14 +41,6 @@ printForeignFun fdecl =
   (if foreignFunDeclHasVarArgs fdecl
      then " + varargs"
      else "")
-
-printFunctions :: IntMap FunctionDef -> String
-printFunctions funs =
-  "Functions: " ++
-  IntMap.foldrWithKey
-    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ prettyPrintSimple val)
-    ""
-    funs
 
 printConstants :: IntMap Value -> String
 printConstants vals =
@@ -160,10 +152,8 @@ instance PrettyPrintSimple Statement where
     "jz (" ++ prettyPrintSimple v ++ ") " ++ show l ++ ";"
 
 instance PrettyPrintSimple FunctionDef where
-  prettyPrintSimple fdef =
-    "\n{\n" ++
-    List.intercalate "\n" (map (indent . prettyPrintSimple) (funDefBody fdef)) ++
-    "\n}"
+  prettyPrintSimple FunctionDef {funDefBody = body} =
+    "Code:\n" ++ List.intercalate "\n" (map printLine (zip [0 ..] body))
     where
-      indent :: String -> String
-      indent = ("  " ++)
+      printLine :: (Int, Statement) -> String
+      printLine (line, stmt) = show line ++ ": " ++ prettyPrintSimple stmt

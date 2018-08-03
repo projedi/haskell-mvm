@@ -38,7 +38,7 @@ eval p = do
   runExecute $
     startExecute
       (programForeignFunctions p)
-      (programFunctions p)
+      (programCode p)
       (programConstants p)
   forM_ libhandles dlclose
 
@@ -110,21 +110,11 @@ runExecute m = do
   pure ()
 
 startExecute ::
-     IntMap ForeignFunctionDecl
-  -> IntMap FunctionDef
-  -> IntMap Value
-  -> Execute ()
-startExecute foreignFuns nativeFuns consts = do
+     IntMap ForeignFunctionDecl -> FunctionDef -> IntMap Value -> Execute ()
+startExecute foreignFuns code consts = do
   funs <- mapM getForeignFun foreignFuns
-  State.modify $ \env ->
-    env
-      { envForeignFunctions = funs
-      , envFunctions = nativeFuns
-      , envConsts = consts
-      }
-  let Just mainFun = IntMap.lookup 0 nativeFuns
-  _ <- nativeFunctionCall mainFun
-  pure ()
+  State.modify $ \env -> env {envForeignFunctions = funs, envConsts = consts}
+  executeFunctionBody (funDefBody code)
   where
     getForeignFun fdecl = do
       Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
@@ -155,12 +145,6 @@ prepareArgsAtCall cc = do
           , pointerBase = Just RegisterRBP
           , pointerDisplacement = -(d + 3)
           }
-
-nativeFunctionCall :: FunctionDef -> Execute ()
-nativeFunctionCall fdef = do
-  ip <- State.gets regRIP
-  pushOnStack (ValueInt $ fromIntegral ip)
-  executeFunctionBody (funDefBody fdef)
 
 foreignFunctionCall ::
      Maybe VarType -> [VarType] -> Bool -> [VarType] -> ForeignFun -> Execute ()
@@ -203,29 +187,30 @@ foreignFunctionCall rettype params hasVarArgs args fun
       | hasVarArgs = vs
     assertVals _ _ = error "Type mismatch"
 
-functionCall :: FunctionCall -> Execute ()
+functionCall :: FunctionCall -> ExecuteStatement ()
 functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
                                  , foreignFunCallArgTypes = args
                                  } = do
   Just (fdecl, f) <- State.gets (IntMap.lookup fid . envForeignFunctions)
-  foreignFunctionCall
-    (foreignFunDeclRetType fdecl)
-    (foreignFunDeclParams fdecl)
-    (foreignFunDeclHasVarArgs fdecl)
-    args
-    f
-functionCall NativeFunctionCall {nativeFunCallName = (FunID fid)} = do
-  Just f <- State.gets (IntMap.lookup fid . envFunctions)
-  nativeFunctionCall f
+  Trans.lift $
+    foreignFunctionCall
+      (foreignFunDeclRetType fdecl)
+      (foreignFunDeclParams fdecl)
+      (foreignFunDeclHasVarArgs fdecl)
+      args
+      f
+functionCall NativeFunctionCall {nativeFunCallName = lbl} = do
+  ip <- State.gets regRIP
+  Trans.lift $ pushOnStack (ValueInt $ fromIntegral ip)
+  jump lbl
 
 executeFunctionBody :: [Statement] -> Execute ()
 executeFunctionBody [] = pure ()
 executeFunctionBody ss = do
-  prevIP <- State.gets regRIP
   State.modify $ \env -> env {regRIP = 0}
   let instructions = Array.listArray (0, length ss - 1) ss
+  pushOnStack (ValueInt (-2))
   startExecution instructions
-  State.modify (\env -> env {regRIP = prevIP})
   where
     startExecution instructions =
       runReaderT executeStatement $
@@ -390,17 +375,25 @@ executeStatement = do
   execute (arr Array.! ipBefore)
   ipAfter <- State.gets regRIP
   let nextIP = ipAfter + 1
-  when (nextIP <= snd (Array.bounds arr)) $ do
+  when (nextIP <= snd (Array.bounds arr) && nextIP >= fst (Array.bounds arr)) $ do
     State.modify $ \env -> env {regRIP = nextIP}
     executeStatement
 
 functionReturn :: ExecuteStatement ()
 functionReturn = do
+  ValueInt ip <-
+    Trans.lift $
+    readPointer $
+    Pointer
+      { pointerType = VarTypeInt
+      , pointerBase = Just RegisterRSP
+      , pointerDisplacement = -1
+      }
   Trans.lift $ popFromStack VarTypeInt -- popping RIP
-  -- TODO: Jump to RIP.
+  State.modify $ \env -> env {regRIP = fromIntegral ip}
 
 execute :: Statement -> ExecuteStatement ()
-execute (StatementFunctionCall fcall) = Trans.lift $ functionCall fcall
+execute (StatementFunctionCall fcall) = functionCall fcall
 execute (StatementAssign lhs e) = do
   res <- Trans.lift $ evaluate e
   Trans.lift $ writeOperand lhs res
