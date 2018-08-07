@@ -14,12 +14,11 @@ module ASMSyntax
   , binOpTypeFromArgs
   , UnOp(..)
   , unOpTypeFromArg
-  , Var(..)
   , Register(..)
   , Pointer(..)
   , Operand(..)
   , operandType
-  , Expr(ExprRead, ExprDereference, ExprConst, ExprBinOp, ExprUnOp)
+  , Expr(ExprConst, ExprBinOp, ExprUnOp)
   , exprType
   ) where
 
@@ -87,10 +86,9 @@ operandType (OperandImmediateInt _) = VarTypeInt
 
 data Statement
   = StatementFunctionCall FunctionCall
+  | StatementExpr Expr -- stores result in RAX
   | StatementAssign Operand
-                    Expr
-  | StatementAssignToPtr Operand
-                         Operand
+                    Operand
   | StatementPushOnStack Operand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType
@@ -110,38 +108,18 @@ data FunctionCall
                         , foreignFunCallRetType :: Maybe VarType
                         , foreignFunCallArgTypes :: [VarType] }
 
-data Var = Var
-  { varType :: VarType
-  , varDisplacement :: Int64 -- Displacement from RBP.
-  }
-
 data Expr = Expr
   { exprType :: VarType
   , exprImpl :: ExprImpl
   }
 
 data ExprImpl
-  = ExprReadImpl Operand
-  | ExprDereferenceImpl Operand
-  | ExprConstImpl ConstID
+  = ExprConstImpl ConstID
   | ExprBinOpImpl BinOp
                   Operand
                   Operand
   | ExprUnOpImpl UnOp
                  Operand
-
-pattern ExprRead :: Operand -> Expr
-
-pattern ExprRead x <- Expr{exprImpl = ExprReadImpl x}
-  where ExprRead x
-          = Expr{exprType = operandType x, exprImpl = ExprReadImpl x}
-
-pattern ExprDereference :: Operand -> Expr
-
-pattern ExprDereference x <- Expr{exprImpl = ExprDereferenceImpl x}
-  where ExprDereference x
-          = Expr{exprType = t, exprImpl = ExprDereferenceImpl x}
-          where (VarTypePtr t) = operandType x
 
 pattern ExprConst :: VarType -> ConstID -> Expr
 
@@ -163,5 +141,4 @@ pattern ExprUnOp op x <- Expr{exprImpl = ExprUnOpImpl op x}
           = Expr{exprType = t, exprImpl = ExprUnOpImpl op x}
           where t = unOpTypeFromArg op $ operandType x
 
-{-# COMPLETE ExprRead, ExprDereference, ExprConst, ExprBinOp,
-  ExprUnOp :: Expr #-}
+{-# COMPLETE ExprConst, ExprBinOp, ExprUnOp :: Expr #-}

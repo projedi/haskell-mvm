@@ -53,9 +53,6 @@ printConstants vals =
 class PrettyPrintSimple a where
   prettyPrintSimple :: a -> String
 
-instance PrettyPrintSimple Var where
-  prettyPrintSimple v = "RBP + " ++ show (varDisplacement v)
-
 instance PrettyPrintSimple FunID where
   prettyPrintSimple = show
 
@@ -95,8 +92,6 @@ instance PrettyPrintSimple UnOp where
   prettyPrintSimple UnIntToFloat = "(double)"
 
 instance PrettyPrintSimple Expr where
-  prettyPrintSimple (ExprRead v) = prettyPrintSimple v
-  prettyPrintSimple (ExprDereference p) = "*" ++ prettyPrintSimple p
   prettyPrintSimple (ExprConst _ c) = show c
   prettyPrintSimple (ExprUnOp op v) =
     prettyPrintSimple op ++ prettyPrintSimple v
@@ -135,10 +130,9 @@ instance PrettyPrintSimple Pointer where
 instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementFunctionCall fcall) =
     prettyPrintSimple fcall ++ ";"
-  prettyPrintSimple (StatementAssign var expr) =
-    prettyPrintSimple var ++ " = " ++ prettyPrintSimple expr ++ ";"
-  prettyPrintSimple (StatementAssignToPtr ptr var) =
-    "*" ++ prettyPrintSimple ptr ++ " = " ++ prettyPrintSimple var ++ ";"
+  prettyPrintSimple (StatementExpr expr) = prettyPrintSimple expr ++ ";"
+  prettyPrintSimple (StatementAssign lhs rhs) =
+    prettyPrintSimple lhs ++ " = " ++ prettyPrintSimple rhs ++ ";"
   prettyPrintSimple (StatementPushOnStack x) =
     "push " ++ prettyPrintSimple x ++ ";"
   prettyPrintSimple (StatementAllocateOnStack t) =

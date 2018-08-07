@@ -343,10 +343,6 @@ evaluateBinOp BinEq = (fromBool .) . (==)
 evaluateBinOp BinLt = (fromBool .) . (<)
 
 evaluate :: Expr -> Execute Value
-evaluate (ExprRead x) = readOperand x
-evaluate (ExprDereference p) = do
-  v <- readOperand p
-  dereference v
 evaluate (ExprConst _ c) = readConstant c
 evaluate (ExprUnOp op x) = evaluateUnOp op <$> readOperand x
 evaluate (ExprBinOp op lhs rhs) =
@@ -394,13 +390,12 @@ functionReturn = do
 
 execute :: Statement -> ExecuteStatement ()
 execute (StatementFunctionCall fcall) = functionCall fcall
-execute (StatementAssign lhs e) = do
+execute (StatementExpr e) = do
   res <- Trans.lift $ evaluate e
-  Trans.lift $ writeOperand lhs res
-execute (StatementAssignToPtr ptr rhs) = do
+  Trans.lift $ writeRegister RegisterRAX res
+execute (StatementAssign lhs rhs) = do
   res <- Trans.lift $ readOperand rhs
-  v <- Trans.lift $ readOperand ptr
-  Trans.lift $ writeToPtr v res
+  Trans.lift $ writeOperand lhs res
 execute (StatementPushOnStack x) = do
   res <- Trans.lift $ readOperand x
   Trans.lift $ pushOnStack res
