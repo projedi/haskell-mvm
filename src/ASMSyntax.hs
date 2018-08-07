@@ -3,7 +3,7 @@
 module ASMSyntax
   ( Program(..)
   , FunID(..)
-  , ConstID(..)
+  , StringID(..)
   , LabelID(..)
   , VarType(..)
   , Statement(..)
@@ -20,6 +20,8 @@ module ASMSyntax
   , operandType
   , Expr(ExprConst, ExprBinOp, ExprUnOp)
   , exprType
+  , Immediate(..)
+  , immediateType
   ) where
 
 import Data.Int (Int64)
@@ -27,24 +29,25 @@ import Data.IntMap (IntMap)
 
 import LinearSyntax
   ( BinOp(..)
-  , ConstID(..)
   , ForeignFunctionDecl(..)
   , FunID(..)
+  , Immediate(..)
   , LabelID(..)
+  , StringID(..)
   , UnOp(..)
   , VarType(..)
   , binOpTypeFromArgs
+  , immediateType
   , unOpTypeFromArg
   )
-import Value (Value)
 
 data Program = Program
   { programCode :: FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
-  , programConstants :: IntMap Value
+  , programStrings :: IntMap String
   , programLastFunID :: FunID
-  , programLastConstID :: ConstID
+  , programLastStringID :: StringID
   , programLastLabelID :: LabelID
   }
 
@@ -114,17 +117,18 @@ data Expr = Expr
   }
 
 data ExprImpl
-  = ExprConstImpl ConstID
+  = ExprConstImpl Immediate
   | ExprBinOpImpl BinOp
                   Operand
                   Operand
   | ExprUnOpImpl UnOp
                  Operand
 
-pattern ExprConst :: VarType -> ConstID -> Expr
+pattern ExprConst :: Immediate -> Expr
 
-pattern ExprConst cType cid =
-        Expr{exprType = cType, exprImpl = ExprConstImpl cid}
+pattern ExprConst imm <- Expr{exprImpl = ExprConstImpl imm}
+  where ExprConst imm
+          = Expr{exprType = immediateType imm, exprImpl = ExprConstImpl imm}
 
 pattern ExprBinOp :: BinOp -> Operand -> Operand -> Expr
 

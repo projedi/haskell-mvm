@@ -9,14 +9,13 @@ import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
 import SimplifiedSyntax
-import Value (Value)
 
 prettyPrint :: Program -> String
 prettyPrint p =
   unlines
     [ printLibs $ programLibraries p
     , printForeignFunctions $ programForeignFunctions p
-    , printConstants $ programConstants p
+    , printStrings $ programStrings p
     , printVariables $ programVariables p
     , printFunctions $ programFunctions p
     ]
@@ -52,9 +51,9 @@ printFunctions funs =
     ""
     funs
 
-printConstants :: IntMap Value -> String
-printConstants vals =
-  "Constants: " ++
+printStrings :: IntMap String -> String
+printStrings vals =
+  "Strings: " ++
   IntMap.foldrWithKey
     (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ show val)
     ""
@@ -119,7 +118,7 @@ prettyPrintExpr _ (ExprFunctionCall fcall) = prettyPrintSimple fcall
 prettyPrintExpr _ (ExprVar _ varName) = prettyPrintSimple varName
 prettyPrintExpr _ (ExprDereference _ varName) = "*" ++ prettyPrintSimple varName
 prettyPrintExpr _ (ExprAddressOf _ varName) = "&" ++ prettyPrintSimple varName
-prettyPrintExpr _ (ExprConst _ c) = show c
+prettyPrintExpr _ (ExprConst c) = prettyPrintSimple c
 prettyPrintExpr n (ExprUnOp op e) =
   parenIfNeeded n (unOpPrec op) $
   prettyPrintUnOp op ++ prettyPrintExpr (unOpPrec op) e
@@ -159,6 +158,11 @@ instance PrettyPrintSimple VarType where
 instance PrettyPrintSimple (Maybe VarType) where
   prettyPrintSimple (Just vtype) = prettyPrintSimple vtype
   prettyPrintSimple Nothing = "void"
+
+instance PrettyPrintSimple Immediate where
+  prettyPrintSimple (ImmediateInt i) = show i
+  prettyPrintSimple (ImmediateFloat f) = show f
+  prettyPrintSimple (ImmediateString s) = show s
 
 indent :: Int -> String -> String
 indent 0 str = str

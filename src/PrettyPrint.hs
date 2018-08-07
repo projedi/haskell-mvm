@@ -9,14 +9,13 @@ import qualified Data.IntMap as IntMap
 import qualified Data.List as List
 
 import ASMSyntax
-import Value (Value)
 
 prettyPrint :: Program -> String
 prettyPrint p =
   unlines
     [ printLibs $ programLibraries p
     , printForeignFunctions $ programForeignFunctions p
-    , printConstants $ programConstants p
+    , printStrings $ programStrings p
     , prettyPrintSimple $ programCode p
     ]
 
@@ -42,9 +41,9 @@ printForeignFun fdecl =
      then " + varargs"
      else "")
 
-printConstants :: IntMap Value -> String
-printConstants vals =
-  "Constants: " ++
+printStrings :: IntMap String -> String
+printStrings vals =
+  "Strings: " ++
   IntMap.foldrWithKey
     (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ show val)
     ""
@@ -92,7 +91,7 @@ instance PrettyPrintSimple UnOp where
   prettyPrintSimple UnIntToFloat = "(double)"
 
 instance PrettyPrintSimple Expr where
-  prettyPrintSimple (ExprConst _ c) = show c
+  prettyPrintSimple (ExprConst c) = prettyPrintSimple c
   prettyPrintSimple (ExprUnOp op v) =
     prettyPrintSimple op ++ prettyPrintSimple v
   prettyPrintSimple (ExprBinOp op el er) =
@@ -151,3 +150,8 @@ instance PrettyPrintSimple FunctionDef where
     where
       printLine :: (Int, Statement) -> String
       printLine (line, stmt) = show line ++ ": " ++ prettyPrintSimple stmt
+
+instance PrettyPrintSimple Immediate where
+  prettyPrintSimple (ImmediateInt i) = show i
+  prettyPrintSimple (ImmediateFloat f) = show f
+  prettyPrintSimple (ImmediateString s) = show s

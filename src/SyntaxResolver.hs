@@ -17,7 +17,6 @@ import qualified Data.Map as Map
 
 import qualified PreSyntax
 import qualified ResolvedSyntax
-import Value (Value(..))
 import qualified VarUsageResolver
 
 resolve :: PreSyntax.Program -> ResolvedSyntax.Program
@@ -26,11 +25,11 @@ resolve p =
     { ResolvedSyntax.programLibraries = PreSyntax.programLibraries p
     , ResolvedSyntax.programFunctions = nativeFuns
     , ResolvedSyntax.programForeignFunctions = foreignFuns
-    , ResolvedSyntax.programConstants = consts finalEnv
+    , ResolvedSyntax.programStrings = strings finalEnv
     , ResolvedSyntax.programVariables = vars finalEnv
     , ResolvedSyntax.programLastFunID = lastFun finalEnv
     , ResolvedSyntax.programLastVarID = lastVar finalEnv
-    , ResolvedSyntax.programLastConstID = lastConst finalEnv
+    , ResolvedSyntax.programLastStringID = lastString finalEnv
     }
   where
     mainFunDecl =
@@ -83,10 +82,10 @@ data Function
 data Env = Env
   { vars :: IntMap ResolvedSyntax.VarType
   , funs :: IntMap (PreSyntax.FunctionDecl, Maybe Function)
-  , consts :: IntMap Value
+  , strings :: IntMap String
   , lastVar :: ResolvedSyntax.VarID
   , lastFun :: ResolvedSyntax.FunID
-  , lastConst :: ResolvedSyntax.ConstID
+  , lastString :: ResolvedSyntax.StringID
   , layers :: [Layer]
   }
 
@@ -95,10 +94,10 @@ emptyEnv =
   Env
     { vars = IntMap.empty
     , funs = IntMap.empty
-    , consts = IntMap.empty
+    , strings = IntMap.empty
     , lastVar = ResolvedSyntax.VarID (-1)
     , lastFun = ResolvedSyntax.FunID (-1)
-    , lastConst = ResolvedSyntax.ConstID (-1)
+    , lastString = ResolvedSyntax.StringID (-1)
     , layers = [emptyLayer]
     }
 
@@ -196,16 +195,16 @@ findFunctionInEnv env fname =
       (Just (_, mf)) = IntMap.lookup fid (funs env)
    in (f, mf)
 
-introduceConstInEnv :: Env -> Value -> (ResolvedSyntax.ConstID, Env)
-introduceConstInEnv env val =
-  let (ResolvedSyntax.ConstID cid) = inc $ lastConst env
-      (Nothing, consts') =
-        IntMap.insertLookupWithKey (\_ v _ -> v) cid val (consts env)
-   in ( ResolvedSyntax.ConstID cid
-      , env {lastConst = ResolvedSyntax.ConstID cid, consts = consts'})
+introduceStringInEnv :: Env -> String -> (ResolvedSyntax.StringID, Env)
+introduceStringInEnv env val =
+  let (ResolvedSyntax.StringID sid) = inc $ lastString env
+      (Nothing, strings') =
+        IntMap.insertLookupWithKey (\_ v _ -> v) sid val (strings env)
+   in ( ResolvedSyntax.StringID sid
+      , env {lastString = ResolvedSyntax.StringID sid, strings = strings'})
   where
-    inc (ResolvedSyntax.ConstID lastConstID) =
-      ResolvedSyntax.ConstID (lastConstID + 1)
+    inc (ResolvedSyntax.StringID lastStringID) =
+      ResolvedSyntax.StringID (lastStringID + 1)
 
 data ResolverLog = ResolverLog
   { locals :: [ResolvedSyntax.VarDecl]
@@ -285,10 +284,10 @@ findFunction fname = do
   env <- State.get
   pure $ findFunctionInEnv env fname
 
-introduceConst :: Value -> Resolver ResolvedSyntax.ConstID
-introduceConst val = do
+introduceString :: String -> Resolver ResolvedSyntax.StringID
+introduceString val = do
   env <- State.get
-  let (cid, env') = introduceConstInEnv env val
+  let (cid, env') = introduceStringInEnv env val
   State.put env'
   pure cid
 
@@ -418,7 +417,6 @@ resolveFor vname eFrom eTo s = do
   withLayer $ do
     vCur <- newVariable ResolvedSyntax.VarTypeInt
     vTo <- newVariable ResolvedSyntax.VarTypeInt
-    incrConst <- introduceConst (ValueInt 1)
     let expr =
           ResolvedSyntax.ExprNot
             (ResolvedSyntax.ExprLt
@@ -431,7 +429,7 @@ resolveFor vname eFrom eTo s = do
               vCur
               (ResolvedSyntax.ExprPlus
                  (ResolvedSyntax.ExprVar vCur)
-                 (ResolvedSyntax.ExprConst incrConst))
+                 (ResolvedSyntax.ExprConst (ResolvedSyntax.ImmediateInt 1)))
           ]
         block' = ResolvedSyntax.Block {ResolvedSyntax.blockStatements = stmts}
     pure $
@@ -470,11 +468,12 @@ resolveExpr (PreSyntax.ExprFunctionCall fcall) =
 resolveExpr (PreSyntax.ExprVar vname) =
   ResolvedSyntax.ExprVar <$> resolveVariable vname
 resolveExpr (PreSyntax.ExprInt i) =
-  ResolvedSyntax.ExprConst <$> introduceConst (ValueInt i)
+  pure $ ResolvedSyntax.ExprConst $ ResolvedSyntax.ImmediateInt i
 resolveExpr (PreSyntax.ExprFloat f) =
-  ResolvedSyntax.ExprConst <$> introduceConst (ValueFloat f)
+  pure $ ResolvedSyntax.ExprConst $ ResolvedSyntax.ImmediateFloat f
 resolveExpr (PreSyntax.ExprString s) =
-  ResolvedSyntax.ExprConst <$> introduceConst (ValueString $ Right s)
+  (ResolvedSyntax.ExprConst . ResolvedSyntax.ImmediateString) <$>
+  introduceString s
 resolveExpr (PreSyntax.ExprNeg e) = ResolvedSyntax.ExprNeg <$> resolveExpr e
 resolveExpr (PreSyntax.ExprPlus lhs rhs) =
   ResolvedSyntax.ExprPlus <$> resolveExpr lhs <*> resolveExpr rhs

@@ -4,7 +4,7 @@ module LinearSyntax
   ( Program(..)
   , VarID(..)
   , FunID(..)
-  , ConstID(..)
+  , StringID(..)
   , LabelID(..)
   , VarType(..)
   , Statement(..)
@@ -16,6 +16,8 @@ module LinearSyntax
   , UnOp(..)
   , unOpTypeFromArg
   , Var(..)
+  , Immediate(..)
+  , immediateType
   , Expr(ExprFunctionCall, ExprVar, ExprDereference, ExprAddressOf,
      ExprConst, ExprBinOp, ExprUnOp)
   , exprType
@@ -26,16 +28,17 @@ import Data.IntMap (IntMap)
 
 import SimplifiedSyntax
   ( BinOp(..)
-  , ConstID(..)
   , ForeignFunctionDecl(..)
   , FunID(..)
+  , Immediate(..)
+  , StringID(..)
   , UnOp(..)
   , VarID(..)
   , VarType(..)
   , binOpTypeFromArgs
+  , immediateType
   , unOpTypeFromArg
   )
-import Value (Value)
 
 newtype LabelID =
   LabelID Int
@@ -47,11 +50,11 @@ data Program = Program
   { programFunctions :: IntMap FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
-  , programConstants :: IntMap Value
+  , programStrings :: IntMap String
   , programVariables :: IntMap VarType
   , programLastFunID :: FunID
   , programLastVarID :: VarID
-  , programLastConstID :: ConstID
+  , programLastStringID :: StringID
   , programLastLabelID :: LabelID
   }
 
@@ -102,7 +105,7 @@ data ExprImpl
   | ExprVarImpl Var
   | ExprDereferenceImpl Var
   | ExprAddressOfImpl Var
-  | ExprConstImpl ConstID
+  | ExprConstImpl Immediate
   | ExprBinOpImpl BinOp
                   Var
                   Var
@@ -137,10 +140,11 @@ pattern ExprAddressOf v <- Expr{exprImpl = ExprAddressOfImpl v}
           = Expr{exprType = VarTypePtr (varType v),
                  exprImpl = ExprAddressOfImpl v}
 
-pattern ExprConst :: VarType -> ConstID -> Expr
+pattern ExprConst :: Immediate -> Expr
 
-pattern ExprConst vType cid =
-        Expr{exprType = vType, exprImpl = ExprConstImpl cid}
+pattern ExprConst imm <- Expr{exprImpl = ExprConstImpl imm}
+  where ExprConst imm
+          = Expr{exprType = immediateType imm, exprImpl = ExprConstImpl imm}
 
 pattern ExprBinOp :: BinOp -> Var -> Var -> Expr
 

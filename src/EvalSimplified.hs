@@ -29,7 +29,7 @@ eval p = do
     startExecute
       (programForeignFunctions p)
       (programFunctions p)
-      (programConstants p)
+      (programStrings p)
       (programVariables p)
   forM_ libhandles dlclose
 
@@ -68,7 +68,7 @@ data Env = Env
   { envLayers :: [Layer]
   , envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   , envFunctions :: IntMap FunctionDef
-  , envConsts :: IntMap Value
+  , envStrings :: IntMap String
   , envVarTypes :: IntMap VarType
   }
 
@@ -78,7 +78,7 @@ emptyEnv =
     { envLayers = []
     , envForeignFunctions = IntMap.empty
     , envFunctions = IntMap.empty
-    , envConsts = IntMap.empty
+    , envStrings = IntMap.empty
     , envVarTypes = IntMap.empty
     }
 
@@ -111,9 +111,6 @@ addVariableToEnv env@Env {envLayers = curlayer:otherlayers} vname vtype =
     Nothing -> Nothing
     Just l' -> Just (env {envLayers = l' : otherlayers})
 addVariableToEnv _ _ _ = error "Env broke"
-
-readConstantFromEnv :: Env -> ConstID -> Maybe Value
-readConstantFromEnv env (ConstID cid) = IntMap.lookup cid (envConsts env)
 
 splitLayersInEnv :: Env -> LayerID -> ([Layer], Layer, [Layer])
 splitLayersInEnv Env {envLayers = ls} lid =
@@ -179,16 +176,16 @@ runExecute m = do
 startExecute ::
      IntMap ForeignFunctionDecl
   -> IntMap FunctionDef
-  -> IntMap Value
+  -> IntMap String
   -> IntMap VarType
   -> Execute ()
-startExecute foreignFuns nativeFuns consts vars = do
+startExecute foreignFuns nativeFuns strings vars = do
   funs <- mapM getForeignFun foreignFuns
   State.modify $ \env ->
     env
       { envForeignFunctions = funs
       , envFunctions = nativeFuns
-      , envConsts = consts
+      , envStrings = strings
       , envVarTypes = vars
       }
   let Just mainFun = IntMap.lookup 0 nativeFuns
@@ -292,11 +289,12 @@ writeVariable name val = do
   let Just env' = writeVariableToEnv env name val
   State.put env'
 
-readConstant :: ConstID -> Execute Value
-readConstant name = do
-  env <- State.get
-  let Just val = readConstantFromEnv env name
-  pure val
+readImmediate :: Immediate -> Execute Value
+readImmediate (ImmediateInt i) = pure $ ValueInt i
+readImmediate (ImmediateFloat f) = pure $ ValueFloat f
+readImmediate (ImmediateString (StringID sid)) = do
+  val <- State.gets ((IntMap.! sid) . envStrings)
+  pure $ ValueString $ Right val
 
 addressOf :: VarID -> Execute Value
 addressOf name = do
@@ -353,7 +351,7 @@ evaluate (ExprAddressOf _ vname) = addressOf vname
 evaluate (ExprDereference _ vname) = do
   v <- readVariable vname
   dereference v
-evaluate (ExprConst _ c) = readConstant c
+evaluate (ExprConst imm) = readImmediate imm
 evaluate (ExprUnOp op e) = evaluateUnOp op <$> evaluate e
 evaluate (ExprBinOp op el er) = evaluateBinOp op <$> evaluate el <*> evaluate er
 

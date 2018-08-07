@@ -25,9 +25,9 @@ avenge p =
     { ASMSyntax.programCode = ASMSyntax.FunctionDef code
     , ASMSyntax.programLibraries = LinearSyntax.programLibraries p
     , ASMSyntax.programForeignFunctions = LinearSyntax.programForeignFunctions p
-    , ASMSyntax.programConstants = LinearSyntax.programConstants p
+    , ASMSyntax.programStrings = LinearSyntax.programStrings p
     , ASMSyntax.programLastFunID = LinearSyntax.programLastFunID p
-    , ASMSyntax.programLastConstID = LinearSyntax.programLastConstID p
+    , ASMSyntax.programLastStringID = LinearSyntax.programLastStringID p
     , ASMSyntax.programLastLabelID = lastLabelID finalEnv
     }
   where
@@ -353,8 +353,8 @@ translateExpr (LinearSyntax.ExprAddressOf v) = do
           opRBP
           (ASMSyntax.OperandImmediateInt d)
   addStatement $ ASMSyntax.StatementExpr e'
-translateExpr (LinearSyntax.ExprConst t c) = do
-  let e' = ASMSyntax.ExprConst t c
+translateExpr (LinearSyntax.ExprConst c) = do
+  let e' = ASMSyntax.ExprConst c
   addStatement $ ASMSyntax.StatementExpr e'
 translateExpr (LinearSyntax.ExprBinOp op lhs rhs) = do
   e' <-

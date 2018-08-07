@@ -13,8 +13,6 @@ import qualified Data.IntMap as IntMap
 
 import qualified ResolvedSyntax
 import qualified TypedSyntax
-import Value (Value)
-import qualified Value
 
 typeCheck :: ResolvedSyntax.Program -> TypedSyntax.Program
 typeCheck p =
@@ -22,18 +20,17 @@ typeCheck p =
     { TypedSyntax.programFunctions = fs
     , TypedSyntax.programLibraries = ResolvedSyntax.programLibraries p
     , TypedSyntax.programForeignFunctions = envForeignFunctions finalEnv
-    , TypedSyntax.programConstants = envConsts finalEnv
+    , TypedSyntax.programStrings = ResolvedSyntax.programStrings p
     , TypedSyntax.programVariables = ResolvedSyntax.programVariables p
     , TypedSyntax.programLastFunID = ResolvedSyntax.programLastFunID p
     , TypedSyntax.programLastVarID = ResolvedSyntax.programLastVarID p
-    , TypedSyntax.programLastConstID = ResolvedSyntax.programLastConstID p
+    , TypedSyntax.programLastStringID = ResolvedSyntax.programLastStringID p
     }
   where
     startEnv =
       Env
         { envFuns = ResolvedSyntax.programFunctions p
         , envForeignFunctions = ResolvedSyntax.programForeignFunctions p
-        , envConsts = ResolvedSyntax.programConstants p
         }
     (fs, finalEnv) = runTypeChecker p startEnv
 
@@ -45,7 +42,6 @@ data ConstEnv = ConstEnv
 data Env = Env
   { envFuns :: IntMap ResolvedSyntax.FunctionDef
   , envForeignFunctions :: IntMap ResolvedSyntax.ForeignFunctionDecl
-  , envConsts :: IntMap Value
   }
 
 type TypeChecker = ReaderT ConstEnv (State Env)
@@ -196,9 +192,7 @@ typecheckExpr (ResolvedSyntax.ExprFunctionCall fcall) =
 typecheckExpr (ResolvedSyntax.ExprVar v) = do
   Just t <- getVariableType v
   pure $ TypedSyntax.ExprVar t v
-typecheckExpr (ResolvedSyntax.ExprConst (TypedSyntax.ConstID cid)) = do
-  Just v <- State.gets (IntMap.lookup cid . envConsts)
-  pure $ TypedSyntax.ExprConst (Value.typeof v) (TypedSyntax.ConstID cid)
+typecheckExpr (ResolvedSyntax.ExprConst imm) = pure $ TypedSyntax.ExprConst imm
 typecheckExpr (ResolvedSyntax.ExprNeg e) =
   TypedSyntax.ExprUnOp TypedSyntax.UnNeg <$> typecheckExpr e
 typecheckExpr (ResolvedSyntax.ExprPlus lhs rhs) =

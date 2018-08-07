@@ -36,16 +36,12 @@ eval p = do
       Right h <- dlopen l
       pure h
   runExecute $
-    startExecute
-      (programForeignFunctions p)
-      (programCode p)
-      (programConstants p)
+    startExecute (programForeignFunctions p) (programCode p) (programStrings p)
   forM_ libhandles dlclose
 
 data Env = Env
   { envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
-  , envFunctions :: IntMap FunctionDef
-  , envConsts :: IntMap Value
+  , envStrings :: IntMap String
   , envStack :: [Value]
   , regRIP :: Int
   , regRBP :: Int64
@@ -79,8 +75,7 @@ emptyEnv :: Env
 emptyEnv =
   Env
     { envForeignFunctions = IntMap.empty
-    , envFunctions = IntMap.empty
-    , envConsts = IntMap.empty
+    , envStrings = IntMap.empty
     , regRIP = 0
     , envStack = []
     , regRBP = 0
@@ -110,10 +105,10 @@ runExecute m = do
   pure ()
 
 startExecute ::
-     IntMap ForeignFunctionDecl -> FunctionDef -> IntMap Value -> Execute ()
-startExecute foreignFuns code consts = do
+     IntMap ForeignFunctionDecl -> FunctionDef -> IntMap String -> Execute ()
+startExecute foreignFuns code strings = do
   funs <- mapM getForeignFun foreignFuns
-  State.modify $ \env -> env {envForeignFunctions = funs, envConsts = consts}
+  State.modify $ \env -> env {envForeignFunctions = funs, envStrings = strings}
   executeFunctionBody (funDefBody code)
   where
     getForeignFun fdecl = do
@@ -223,8 +218,12 @@ executeFunctionBody ss = do
       IntMap.insert lid i $ buildLabelMap is
     buildLabelMap (_:is) = buildLabelMap is
 
-readConstant :: ConstID -> Execute Value
-readConstant (ConstID cid) = State.gets $ ((IntMap.! cid) . envConsts)
+readImmediate :: Immediate -> Execute Value
+readImmediate (ImmediateInt i) = pure $ ValueInt i
+readImmediate (ImmediateFloat f) = pure $ ValueFloat f
+readImmediate (ImmediateString (StringID sid)) = do
+  s <- State.gets $ ((IntMap.! sid) . envStrings)
+  pure $ ValueString $ Right s
 
 dereference :: Value -> Execute Value
 dereference (ValueInt d) = State.gets ((!! (fromIntegral d)) . envStack)
@@ -343,7 +342,7 @@ evaluateBinOp BinEq = (fromBool .) . (==)
 evaluateBinOp BinLt = (fromBool .) . (<)
 
 evaluate :: Expr -> Execute Value
-evaluate (ExprConst _ c) = readConstant c
+evaluate (ExprConst imm) = readImmediate imm
 evaluate (ExprUnOp op x) = evaluateUnOp op <$> readOperand x
 evaluate (ExprBinOp op lhs rhs) =
   evaluateBinOp op <$> readOperand lhs <*> readOperand rhs
