@@ -60,9 +60,9 @@ instance PrettyPrintSimple LabelID where
 
 instance PrettyPrintSimple FunctionCall where
   prettyPrintSimple NativeFunctionCall {nativeFunCallName = funname} =
-    "call " ++ prettyPrintSimple funname
+    prettyPrintSimple funname
   prettyPrintSimple ForeignFunctionCall {foreignFunCallName = funname} =
-    "call foreign " ++ prettyPrintSimple funname
+    prettyPrintSimple funname
 
 instance PrettyPrintSimple VarType where
   prettyPrintSimple = show
@@ -72,36 +72,20 @@ instance PrettyPrintSimple (Maybe VarType) where
   prettyPrintSimple Nothing = "void"
 
 instance PrettyPrintSimple BinOp where
-  prettyPrintSimple BinPlus = "+"
-  prettyPrintSimple BinMinus = "-"
-  prettyPrintSimple BinTimes = "*"
-  prettyPrintSimple BinDiv = "/"
-  prettyPrintSimple BinMod = "%"
-  prettyPrintSimple BinBitAnd = "&"
-  prettyPrintSimple BinBitOr = "|"
-  prettyPrintSimple BinBitXor = "^"
-  prettyPrintSimple BinAnd = "&&"
-  prettyPrintSimple BinOr = "||"
-  prettyPrintSimple BinEq = "=="
-  prettyPrintSimple BinLt = "<"
+  prettyPrintSimple BinPlusFloat = "+"
+  prettyPrintSimple BinMinusFloat = "-"
+  prettyPrintSimple BinTimesFloat = "*"
+  prettyPrintSimple BinDivFloat = "/"
+  prettyPrintSimple BinEqFloat = "=="
+  prettyPrintSimple BinLtFloat = "<"
 
 instance PrettyPrintSimple UnOp where
-  prettyPrintSimple UnNeg = "-"
-  prettyPrintSimple UnNot = "!"
+  prettyPrintSimple UnNegFloat = "-"
   prettyPrintSimple UnIntToFloat = "(double)"
-
-instance PrettyPrintSimple Expr where
-  prettyPrintSimple (ExprConst c) = prettyPrintSimple c
-  prettyPrintSimple (ExprUnOp op v) =
-    prettyPrintSimple op ++ prettyPrintSimple v
-  prettyPrintSimple (ExprBinOp op el er) =
-    prettyPrintSimple el ++
-    " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er
 
 instance PrettyPrintSimple Operand where
   prettyPrintSimple (OperandRegister _ r) = prettyPrintSimple r
   prettyPrintSimple (OperandPointer p) = prettyPrintSimple p
-  prettyPrintSimple (OperandImmediateInt i) = show i
 
 instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"
@@ -127,22 +111,46 @@ instance PrettyPrintSimple Pointer where
     "[" ++ (maybe "" ((++ "+") . prettyPrintSimple) mr) ++ show d ++ "]"
 
 instance PrettyPrintSimple Statement where
-  prettyPrintSimple (StatementFunctionCall fcall) =
-    prettyPrintSimple fcall ++ ";"
-  prettyPrintSimple (StatementExpr expr) = prettyPrintSimple expr ++ ";"
-  prettyPrintSimple (StatementAssign lhs rhs) =
-    prettyPrintSimple lhs ++ " = " ++ prettyPrintSimple rhs ++ ";"
+  prettyPrintSimple (InstructionCALL fcall) = "CALL " ++ prettyPrintSimple fcall
+  prettyPrintSimple (StatementBinOp op el er) =
+    prettyPrintSimple el ++
+    " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er ++ ";"
+  prettyPrintSimple (StatementUnOp op v) =
+    prettyPrintSimple op ++ prettyPrintSimple v ++ ";"
+  prettyPrintSimple (InstructionCMP lhs rhs) =
+    "CMP " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionSetZ v) = "SETZ " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionSetNZ v) = "SETNZ " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionSetS v) = "SETS " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionMOV lhs rhs) =
+    "MOV " ++
+    prettyPrintSimple lhs ++
+    " " ++ either prettyPrintSimple prettyPrintSimple rhs
   prettyPrintSimple (StatementPushOnStack x) =
     "push " ++ prettyPrintSimple x ++ ";"
   prettyPrintSimple (StatementAllocateOnStack t) =
     "alloc " ++ prettyPrintSimple t ++ ";"
   prettyPrintSimple (StatementPopFromStack t) =
     "pop " ++ prettyPrintSimple t ++ ";"
-  prettyPrintSimple StatementReturn = "return;"
-  prettyPrintSimple (StatementLabel l) = show l ++ ": nop;"
-  prettyPrintSimple (StatementJump l) = "jmp " ++ show l ++ ";"
-  prettyPrintSimple (StatementJumpIfZero v l) =
-    "jz (" ++ prettyPrintSimple v ++ ") " ++ show l ++ ";"
+  prettyPrintSimple InstructionRET = "RET"
+  prettyPrintSimple (InstructionLabelledNOP l) = show l ++ ": NOP"
+  prettyPrintSimple (InstructionJMP l) = "JMP " ++ show l
+  prettyPrintSimple (InstructionJZ l) = "JZ " ++ show l
+  prettyPrintSimple (InstructionNEG v) = "NEG " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionAND lhs rhs) =
+    "AND " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionXOR lhs rhs) =
+    "XOR " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionOR lhs rhs) =
+    "OR " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionADD lhs rhs) =
+    "ADD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionSUB lhs rhs) =
+    "SUB " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionIDIV v) = "IDIV " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionIMUL lhs rhs) =
+    "IMUL " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple InstructionCQO = "CQO"
 
 instance PrettyPrintSimple FunctionDef where
   prettyPrintSimple FunctionDef {funDefBody = body} =
