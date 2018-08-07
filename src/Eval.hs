@@ -343,9 +343,6 @@ evaluateBinOp BinEq = (fromBool .) . (==)
 evaluateBinOp BinLt = (fromBool .) . (<)
 
 evaluate :: Expr -> Execute Value
-evaluate (ExprDereference p) = do
-  v <- readOperand p
-  dereference v
 evaluate (ExprConst _ c) = readConstant c
 evaluate (ExprUnOp op x) = evaluateUnOp op <$> readOperand x
 evaluate (ExprBinOp op lhs rhs) =

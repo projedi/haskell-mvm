@@ -71,6 +71,9 @@ opRSP = ASMSyntax.OperandRegister ASMSyntax.VarTypeInt ASMSyntax.RegisterRSP
 opRAX :: ASMSyntax.VarType -> ASMSyntax.Operand
 opRAX t = ASMSyntax.OperandRegister t ASMSyntax.RegisterRAX
 
+opRCX :: ASMSyntax.VarType -> ASMSyntax.Operand
+opRCX t = ASMSyntax.OperandRegister t ASMSyntax.RegisterRCX
+
 peekStack :: ASMSyntax.VarType -> ASMSyntax.Operand
 peekStack t =
   ASMSyntax.OperandPointer
@@ -331,8 +334,17 @@ translateExpr (LinearSyntax.ExprVar v) = do
   v' <- resolveVariableAsOperand v
   addStatement $ ASMSyntax.StatementAssign (opRAX (ASMSyntax.operandType v')) v'
 translateExpr (LinearSyntax.ExprDereference v) = do
-  e' <- ASMSyntax.ExprDereference <$> resolveVariableAsOperand v
-  addStatement $ ASMSyntax.StatementExpr e'
+  v' <- resolveVariableAsOperand v
+  addStatement $ ASMSyntax.StatementAssign (opRCX (ASMSyntax.operandType v')) v'
+  addStatement $
+    ASMSyntax.StatementAssign
+      (opRAX (ASMSyntax.operandType v'))
+      (ASMSyntax.OperandPointer
+         ASMSyntax.Pointer
+           { ASMSyntax.pointerBase = Just ASMSyntax.RegisterRCX
+           , ASMSyntax.pointerDisplacement = 0
+           , ASMSyntax.pointerType = ASMSyntax.operandType v'
+           })
 translateExpr (LinearSyntax.ExprAddressOf v) = do
   Var {varDisplacement = d} <- resolveVariable v
   let e' =
