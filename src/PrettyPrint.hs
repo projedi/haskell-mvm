@@ -135,8 +135,6 @@ instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementExpr expr) = prettyPrintSimple expr ++ ";"
   prettyPrintSimple (StatementAssign lhs rhs) =
     prettyPrintSimple lhs ++ " = " ++ prettyPrintSimple rhs ++ ";"
-  prettyPrintSimple (StatementAssignToPtr ptr var) =
-    "*" ++ prettyPrintSimple ptr ++ " = " ++ prettyPrintSimple var ++ ";"
   prettyPrintSimple (StatementPushOnStack x) =
     "push " ++ prettyPrintSimple x ++ ";"
   prettyPrintSimple (StatementAllocateOnStack t) =

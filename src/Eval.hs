@@ -400,10 +400,6 @@ execute (StatementExpr e) = do
 execute (StatementAssign lhs rhs) = do
   res <- Trans.lift $ readOperand rhs
   Trans.lift $ writeOperand lhs res
-execute (StatementAssignToPtr ptr rhs) = do
-  res <- Trans.lift $ readOperand rhs
-  v <- Trans.lift $ readOperand ptr
-  Trans.lift $ writeToPtr v res
 execute (StatementPushOnStack x) = do
   res <- Trans.lift $ readOperand x
   Trans.lift $ pushOnStack res

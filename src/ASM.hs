@@ -190,8 +190,13 @@ translateStatement (LinearSyntax.StatementAssign v e) = do
   addStatement $ ASMSyntax.StatementAssign v' (opRAX (ASMSyntax.operandType v'))
 translateStatement (LinearSyntax.StatementAssignToPtr p v) = do
   p' <- resolveVariableAsOperand p
+  addStatement $ ASMSyntax.StatementExpr $ ASMSyntax.ExprRead p'
   v' <- resolveVariableAsOperand v
-  addStatement $ ASMSyntax.StatementAssignToPtr p' v'
+  addStatement $ ASMSyntax.StatementAssign (ASMSyntax.OperandPointer ASMSyntax.Pointer{
+    ASMSyntax.pointerType = ASMSyntax.operandType v',
+    ASMSyntax.pointerBase = Just ASMSyntax.RegisterRAX,
+    ASMSyntax.pointerDisplacement = 0
+  }) v'
 translateStatement (LinearSyntax.StatementReturn Nothing) = do
   Nothing <- Reader.asks retValueLocation
   lbl <- Reader.asks epilogueLabel

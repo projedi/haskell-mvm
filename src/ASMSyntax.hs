@@ -89,8 +89,6 @@ data Statement
   | StatementExpr Expr -- stores result in RAX
   | StatementAssign Operand
                     Operand
-  | StatementAssignToPtr Operand
-                         Operand
   | StatementPushOnStack Operand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType
