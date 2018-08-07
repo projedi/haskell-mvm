@@ -184,19 +184,22 @@ translateStatement (LinearSyntax.StatementAssign v (LinearSyntax.ExprFunctionCal
         (uncurry ASMSyntax.OperandRegister) <$> CallingConvention.funRetValue cc
   addStatement $ ASMSyntax.StatementAssign v' retValue
 translateStatement (LinearSyntax.StatementAssign v e) = do
+  translateExpr e
   v' <- resolveVariableAsOperand v
-  e' <- translateExpr e
-  addStatement $ ASMSyntax.StatementExpr e'
   addStatement $ ASMSyntax.StatementAssign v' (opRAX (ASMSyntax.operandType v'))
 translateStatement (LinearSyntax.StatementAssignToPtr p v) = do
   p' <- resolveVariableAsOperand p
-  addStatement $ ASMSyntax.StatementExpr $ ASMSyntax.ExprRead p'
+  addStatement $ ASMSyntax.StatementAssign (opRAX ASMSyntax.VarTypeInt) p'
   v' <- resolveVariableAsOperand v
-  addStatement $ ASMSyntax.StatementAssign (ASMSyntax.OperandPointer ASMSyntax.Pointer{
-    ASMSyntax.pointerType = ASMSyntax.operandType v',
-    ASMSyntax.pointerBase = Just ASMSyntax.RegisterRAX,
-    ASMSyntax.pointerDisplacement = 0
-  }) v'
+  addStatement $
+    ASMSyntax.StatementAssign
+      (ASMSyntax.OperandPointer
+         ASMSyntax.Pointer
+           { ASMSyntax.pointerType = ASMSyntax.operandType v'
+           , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRAX
+           , ASMSyntax.pointerDisplacement = 0
+           })
+      v'
 translateStatement (LinearSyntax.StatementReturn Nothing) = do
   Nothing <- Reader.asks retValueLocation
   lbl <- Reader.asks epilogueLabel
@@ -321,23 +324,31 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
   cleanStackAfterCall cc
   pure cc
 
-translateExpr :: LinearSyntax.Expr -> ASMStatement ASMSyntax.Expr
+translateExpr :: LinearSyntax.Expr -> ASMStatement ()
 translateExpr (LinearSyntax.ExprFunctionCall _) =
   error "Must've been handled in translateStatement"
-translateExpr (LinearSyntax.ExprVar v) =
-  ASMSyntax.ExprRead <$> resolveVariableAsOperand v
-translateExpr (LinearSyntax.ExprDereference v) =
-  ASMSyntax.ExprDereference <$> resolveVariableAsOperand v
+translateExpr (LinearSyntax.ExprVar v) = do
+  v' <- resolveVariableAsOperand v
+  addStatement $ ASMSyntax.StatementAssign (opRAX (ASMSyntax.operandType v')) v'
+translateExpr (LinearSyntax.ExprDereference v) = do
+  e' <- ASMSyntax.ExprDereference <$> resolveVariableAsOperand v
+  addStatement $ ASMSyntax.StatementExpr e'
 translateExpr (LinearSyntax.ExprAddressOf v) = do
   Var {varDisplacement = d} <- resolveVariable v
-  pure $
-    ASMSyntax.ExprBinOp
-      ASMSyntax.BinPlus
-      opRBP
-      (ASMSyntax.OperandImmediateInt d)
-translateExpr (LinearSyntax.ExprConst t c) = pure $ ASMSyntax.ExprConst t c
-translateExpr (LinearSyntax.ExprBinOp op lhs rhs) =
-  ASMSyntax.ExprBinOp op <$> resolveVariableAsOperand lhs <*>
-  resolveVariableAsOperand rhs
-translateExpr (LinearSyntax.ExprUnOp op v) =
-  ASMSyntax.ExprUnOp op <$> resolveVariableAsOperand v
+  let e' =
+        ASMSyntax.ExprBinOp
+          ASMSyntax.BinPlus
+          opRBP
+          (ASMSyntax.OperandImmediateInt d)
+  addStatement $ ASMSyntax.StatementExpr e'
+translateExpr (LinearSyntax.ExprConst t c) = do
+  let e' = ASMSyntax.ExprConst t c
+  addStatement $ ASMSyntax.StatementExpr e'
+translateExpr (LinearSyntax.ExprBinOp op lhs rhs) = do
+  e' <-
+    ASMSyntax.ExprBinOp op <$> resolveVariableAsOperand lhs <*>
+    resolveVariableAsOperand rhs
+  addStatement $ ASMSyntax.StatementExpr e'
+translateExpr (LinearSyntax.ExprUnOp op v) = do
+  e' <- ASMSyntax.ExprUnOp op <$> resolveVariableAsOperand v
+  addStatement $ ASMSyntax.StatementExpr e'

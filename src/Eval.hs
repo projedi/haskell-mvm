@@ -343,7 +343,6 @@ evaluateBinOp BinEq = (fromBool .) . (==)
 evaluateBinOp BinLt = (fromBool .) . (<)
 
 evaluate :: Expr -> Execute Value
-evaluate (ExprRead x) = readOperand x
 evaluate (ExprDereference p) = do
   v <- readOperand p
   dereference v

@@ -18,7 +18,7 @@ module ASMSyntax
   , Pointer(..)
   , Operand(..)
   , operandType
-  , Expr(ExprRead, ExprDereference, ExprConst, ExprBinOp, ExprUnOp)
+  , Expr(ExprDereference, ExprConst, ExprBinOp, ExprUnOp)
   , exprType
   ) where
 
@@ -114,20 +114,13 @@ data Expr = Expr
   }
 
 data ExprImpl
-  = ExprReadImpl Operand
-  | ExprDereferenceImpl Operand
+  = ExprDereferenceImpl Operand
   | ExprConstImpl ConstID
   | ExprBinOpImpl BinOp
                   Operand
                   Operand
   | ExprUnOpImpl UnOp
                  Operand
-
-pattern ExprRead :: Operand -> Expr
-
-pattern ExprRead x <- Expr{exprImpl = ExprReadImpl x}
-  where ExprRead x
-          = Expr{exprType = operandType x, exprImpl = ExprReadImpl x}
 
 pattern ExprDereference :: Operand -> Expr
 
@@ -156,5 +149,5 @@ pattern ExprUnOp op x <- Expr{exprImpl = ExprUnOpImpl op x}
           = Expr{exprType = t, exprImpl = ExprUnOpImpl op x}
           where t = unOpTypeFromArg op $ operandType x
 
-{-# COMPLETE ExprRead, ExprDereference, ExprConst, ExprBinOp,
-  ExprUnOp :: Expr #-}
+{-# COMPLETE ExprDereference, ExprConst, ExprBinOp, ExprUnOp
+  :: Expr #-}

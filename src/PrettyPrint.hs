@@ -92,7 +92,6 @@ instance PrettyPrintSimple UnOp where
   prettyPrintSimple UnIntToFloat = "(double)"
 
 instance PrettyPrintSimple Expr where
-  prettyPrintSimple (ExprRead v) = prettyPrintSimple v
   prettyPrintSimple (ExprDereference p) = "*" ++ prettyPrintSimple p
   prettyPrintSimple (ExprConst _ c) = show c
   prettyPrintSimple (ExprUnOp op v) =
