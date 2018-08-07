@@ -12,16 +12,15 @@ import qualified Data.IntMap as IntMap
 
 import qualified SimplifiedSyntax
 import qualified TypedSyntax
-import Value (Value(..))
 
 data Env = Env
   { vars :: IntMap SimplifiedSyntax.VarType
   , funs :: IntMap TypedSyntax.FunctionDef
   , foreignFuns :: IntMap SimplifiedSyntax.ForeignFunctionDecl
-  , consts :: IntMap Value
+  , strings :: IntMap String
   , lastFunID :: SimplifiedSyntax.FunID
   , lastVarID :: SimplifiedSyntax.VarID
-  , lastConstID :: SimplifiedSyntax.ConstID
+  , lastStringID :: SimplifiedSyntax.StringID
   , printfFunID :: SimplifiedSyntax.FunID
   }
 
@@ -36,10 +35,10 @@ simplify p =
     , foreignFuns =
         IntMap.map simplifyForeignFunctionDecl $
         TypedSyntax.programForeignFunctions p
-    , consts = TypedSyntax.programConstants p
+    , strings = TypedSyntax.programStrings p
     , lastFunID = TypedSyntax.programLastFunID p
     , lastVarID = TypedSyntax.programLastVarID p
-    , lastConstID = TypedSyntax.programLastConstID p
+    , lastStringID = TypedSyntax.programLastStringID p
     , printfFunID = SimplifiedSyntax.FunID (-1)
     }
 
@@ -53,11 +52,11 @@ simplifyProgram p = do
       { SimplifiedSyntax.programFunctions = fs
       , SimplifiedSyntax.programLibraries = TypedSyntax.programLibraries p
       , SimplifiedSyntax.programForeignFunctions = foreignFuns finalEnv
-      , SimplifiedSyntax.programConstants = consts finalEnv
+      , SimplifiedSyntax.programStrings = strings finalEnv
       , SimplifiedSyntax.programVariables = vars finalEnv
       , SimplifiedSyntax.programLastFunID = lastFunID finalEnv
       , SimplifiedSyntax.programLastVarID = lastVarID finalEnv
-      , SimplifiedSyntax.programLastConstID = lastConstID finalEnv
+      , SimplifiedSyntax.programLastStringID = lastStringID finalEnv
       }
 
 printfDecl :: SimplifiedSyntax.FunID -> SimplifiedSyntax.ForeignFunctionDecl
@@ -204,21 +203,20 @@ simplifyStatement (TypedSyntax.StatementReturn (Just expr)) =
 generatePrintfArgs ::
      [SimplifiedSyntax.Expr] -> FunctionBodySimplifier [SimplifiedSyntax.Expr]
 generatePrintfArgs args = do
-  newConstID@(SimplifiedSyntax.ConstID cid) <- State.gets (inc . lastConstID)
+  newStringID@(SimplifiedSyntax.StringID sid) <- State.gets (inc . lastStringID)
   State.modify $ \env ->
     env
-      { lastConstID = newConstID
-      , consts = IntMap.insert cid printfFormatString $ consts env
+      { lastStringID = newStringID
+      , strings = IntMap.insert sid printfFormatString $ strings env
       }
   pure $
-    (SimplifiedSyntax.ExprConst SimplifiedSyntax.VarTypeString newConstID) :
+    (SimplifiedSyntax.ExprConst $ SimplifiedSyntax.ImmediateString newStringID) :
     args
   where
-    inc :: SimplifiedSyntax.ConstID -> SimplifiedSyntax.ConstID
-    inc (SimplifiedSyntax.ConstID cid) = SimplifiedSyntax.ConstID (cid + 1)
+    inc :: SimplifiedSyntax.StringID -> SimplifiedSyntax.StringID
+    inc (SimplifiedSyntax.StringID sid) = SimplifiedSyntax.StringID (sid + 1)
     printfFormatString =
-      ValueString $
-      Right $ concatMap (formatStringArg . SimplifiedSyntax.exprType) args
+      concatMap (formatStringArg . SimplifiedSyntax.exprType) args
     formatStringArg SimplifiedSyntax.VarTypeInt = "%ld"
     formatStringArg SimplifiedSyntax.VarTypeFloat = "%g"
     formatStringArg SimplifiedSyntax.VarTypeString = "%s"
@@ -272,7 +270,7 @@ simplifyExpr (TypedSyntax.ExprVar t v) =
     v
     (pure . SimplifiedSyntax.ExprDereference t)
     (pure . SimplifiedSyntax.ExprVar t)
-simplifyExpr (TypedSyntax.ExprConst t c) = pure $ SimplifiedSyntax.ExprConst t c
+simplifyExpr (TypedSyntax.ExprConst c) = pure $ SimplifiedSyntax.ExprConst c
 simplifyExpr (TypedSyntax.ExprBinOp op lhs rhs) =
   simplifyBinOp op <$> simplifyExpr lhs <*> simplifyExpr rhs
 simplifyExpr (TypedSyntax.ExprUnOp op arg) =

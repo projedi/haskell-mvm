@@ -4,7 +4,7 @@ module TypedSyntax
   ( Program(..)
   , VarID(..)
   , FunID(..)
-  , ConstID(..)
+  , StringID(..)
   , VarType(..)
   , VarDecl(..)
   , Block(..)
@@ -16,6 +16,8 @@ module TypedSyntax
   , binOpTypeFromArgs
   , UnOp(..)
   , unOpTypeFromArg
+  , Immediate(..)
+  , immediateType
   , Expr(ExprFunctionCall, ExprVar, ExprConst, ExprBinOp, ExprUnOp)
   , exprType
   , functionCallType
@@ -24,24 +26,24 @@ module TypedSyntax
 import Data.IntMap (IntMap)
 
 import ResolvedSyntax
-  ( ConstID(..)
-  , ForeignFunctionDecl(..)
+  ( ForeignFunctionDecl(..)
   , FunID(..)
+  , Immediate(..)
+  , StringID(..)
   , VarDecl(..)
   , VarID(..)
   , VarType(..)
   )
-import Value (Value)
 
 data Program = Program
   { programFunctions :: IntMap FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
-  , programConstants :: IntMap Value
+  , programStrings :: IntMap String
   , programVariables :: IntMap VarType
   , programLastFunID :: FunID
   , programLastVarID :: VarID
-  , programLastConstID :: ConstID
+  , programLastStringID :: StringID
   }
 
 newtype Block = Block
@@ -151,12 +153,17 @@ data Expr = Expr
 data ExprImpl
   = ExprFunctionCallImpl FunctionCall
   | ExprVarImpl VarID
-  | ExprConstImpl ConstID
+  | ExprConstImpl Immediate
   | ExprBinOpImpl BinOp
                   Expr
                   Expr
   | ExprUnOpImpl UnOp
                  Expr
+
+immediateType :: Immediate -> VarType
+immediateType (ImmediateInt _) = VarTypeInt
+immediateType (ImmediateFloat _) = VarTypeFloat
+immediateType (ImmediateString _) = VarTypeString
 
 pattern ExprFunctionCall :: FunctionCall -> Expr
 
@@ -171,10 +178,11 @@ pattern ExprVar :: VarType -> VarID -> Expr
 pattern ExprVar vType v =
         Expr{exprType = vType, exprImpl = ExprVarImpl v}
 
-pattern ExprConst :: VarType -> ConstID -> Expr
+pattern ExprConst :: Immediate -> Expr
 
-pattern ExprConst vType cid =
-        Expr{exprType = vType, exprImpl = ExprConstImpl cid}
+pattern ExprConst imm <- Expr{exprImpl = ExprConstImpl imm}
+  where ExprConst imm
+          = Expr{exprType = immediateType imm, exprImpl = ExprConstImpl imm}
 
 pattern ExprBinOp :: BinOp -> Expr -> Expr -> Expr
 

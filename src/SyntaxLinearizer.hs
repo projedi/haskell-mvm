@@ -21,11 +21,11 @@ linearize p =
     , LinearSyntax.programLibraries = SimplifiedSyntax.programLibraries p
     , LinearSyntax.programForeignFunctions =
         SimplifiedSyntax.programForeignFunctions p
-    , LinearSyntax.programConstants = SimplifiedSyntax.programConstants p
+    , LinearSyntax.programStrings = SimplifiedSyntax.programStrings p
     , LinearSyntax.programVariables = vars finalEnv
     , LinearSyntax.programLastFunID = SimplifiedSyntax.programLastFunID p
     , LinearSyntax.programLastVarID = lastVarID finalEnv
-    , LinearSyntax.programLastConstID = SimplifiedSyntax.programLastConstID p
+    , LinearSyntax.programLastStringID = SimplifiedSyntax.programLastStringID p
     , LinearSyntax.programLastLabelID = lastLabelID finalEnv
     }
   where
@@ -185,8 +185,8 @@ linearizeExprImpl (SimplifiedSyntax.ExprDereference t v) =
 linearizeExprImpl (SimplifiedSyntax.ExprAddressOf (LinearSyntax.VarTypePtr t) v) =
   pure $ LinearSyntax.ExprAddressOf (LinearSyntax.Var v t)
 linearizeExprImpl (SimplifiedSyntax.ExprAddressOf _ _) = error "Type mismatch"
-linearizeExprImpl (SimplifiedSyntax.ExprConst t c) =
-  pure $ LinearSyntax.ExprConst t c
+linearizeExprImpl (SimplifiedSyntax.ExprConst c) =
+  pure $ LinearSyntax.ExprConst c
 linearizeExprImpl (SimplifiedSyntax.ExprBinOp op lhs rhs) = do
   lhsV <- linearizeExpr lhs
   rhsV <- linearizeExpr rhs

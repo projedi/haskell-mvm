@@ -4,7 +4,7 @@ module SimplifiedSyntax
   ( Program(..)
   , VarID(..)
   , FunID(..)
-  , ConstID(..)
+  , StringID(..)
   , VarType(..)
   , VarDecl(..)
   , Block(..)
@@ -16,6 +16,8 @@ module SimplifiedSyntax
   , binOpTypeFromArgs
   , UnOp(..)
   , unOpTypeFromArg
+  , Immediate(..)
+  , immediateType
   , Expr(ExprFunctionCall, ExprVar, ExprDereference, ExprAddressOf,
      ExprConst, ExprBinOp, ExprUnOp)
   , exprType
@@ -24,18 +26,25 @@ module SimplifiedSyntax
 
 import Data.IntMap (IntMap)
 
-import TypedSyntax (ConstID(..), FunID(..), VarDecl(..), VarID(..), VarType(..))
-import Value (Value)
+import TypedSyntax
+  ( FunID(..)
+  , Immediate(..)
+  , StringID(..)
+  , VarDecl(..)
+  , VarID(..)
+  , VarType(..)
+  , immediateType
+  )
 
 data Program = Program
   { programFunctions :: IntMap FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
-  , programConstants :: IntMap Value
+  , programStrings :: IntMap String
   , programVariables :: IntMap VarType
   , programLastFunID :: FunID
   , programLastVarID :: VarID
-  , programLastConstID :: ConstID
+  , programLastStringID :: StringID
   }
 
 newtype Block = Block
@@ -154,7 +163,7 @@ data ExprImpl
   | ExprVarImpl VarID
   | ExprDereferenceImpl VarID
   | ExprAddressOfImpl VarID
-  | ExprConstImpl ConstID
+  | ExprConstImpl Immediate
   | ExprBinOpImpl BinOp
                   Expr
                   Expr
@@ -184,10 +193,11 @@ pattern ExprAddressOf :: VarType -> VarID -> Expr
 pattern ExprAddressOf vType v =
         Expr{exprType = vType, exprImpl = ExprAddressOfImpl v}
 
-pattern ExprConst :: VarType -> ConstID -> Expr
+pattern ExprConst :: Immediate -> Expr
 
-pattern ExprConst vType cid =
-        Expr{exprType = vType, exprImpl = ExprConstImpl cid}
+pattern ExprConst imm <- Expr{exprImpl = ExprConstImpl imm}
+  where ExprConst imm
+          = Expr{exprType = immediateType imm, exprImpl = ExprConstImpl imm}
 
 pattern ExprBinOp :: BinOp -> Expr -> Expr -> Expr
 

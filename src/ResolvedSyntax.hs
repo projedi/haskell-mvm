@@ -2,7 +2,7 @@ module ResolvedSyntax
   ( Program(..)
   , VarID(..)
   , FunID(..)
-  , ConstID(..)
+  , StringID(..)
   , VarType(..)
   , VarDecl(..)
   , Block(..)
@@ -10,23 +10,24 @@ module ResolvedSyntax
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
+  , Immediate(..)
   , Expr(..)
   ) where
 
+import Data.Int (Int64)
 import Data.IntMap (IntMap)
 
 import PreSyntax (VarType(..))
-import Value (Value)
 
 data Program = Program
   { programFunctions :: IntMap FunctionDef
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
-  , programConstants :: IntMap Value
+  , programStrings :: IntMap String
   , programVariables :: IntMap VarType
   , programLastFunID :: FunID
   , programLastVarID :: VarID
-  , programLastConstID :: ConstID
+  , programLastStringID :: StringID
   }
 
 newtype VarID =
@@ -42,11 +43,11 @@ newtype FunID =
 instance Show FunID where
   show (FunID i) = "fun_" ++ show i
 
-newtype ConstID =
-  ConstID Int
+newtype StringID =
+  StringID Int
 
-instance Show ConstID where
-  show (ConstID i) = "const_" ++ show i
+instance Show StringID where
+  show (StringID i) = "str_" ++ show i
 
 data VarDecl =
   VarDecl VarType
@@ -97,10 +98,15 @@ data FunctionCall
                         [Expr]
   | PrintCall [Expr]
 
+data Immediate
+  = ImmediateInt Int64
+  | ImmediateFloat Double
+  | ImmediateString StringID
+
 data Expr
   = ExprFunctionCall FunctionCall
   | ExprVar VarID
-  | ExprConst ConstID
+  | ExprConst Immediate
   | ExprNeg Expr
   | ExprPlus Expr
              Expr
