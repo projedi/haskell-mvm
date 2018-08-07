@@ -132,8 +132,9 @@ instance PrettyPrintSimple Pointer where
 instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementFunctionCall fcall) =
     prettyPrintSimple fcall ++ ";"
-  prettyPrintSimple (StatementAssign var expr) =
-    prettyPrintSimple var ++ " = " ++ prettyPrintSimple expr ++ ";"
+  prettyPrintSimple (StatementExpr expr) = prettyPrintSimple expr ++ ";"
+  prettyPrintSimple (StatementAssign lhs rhs) =
+    prettyPrintSimple lhs ++ " = " ++ prettyPrintSimple rhs ++ ";"
   prettyPrintSimple (StatementAssignToPtr ptr var) =
     "*" ++ prettyPrintSimple ptr ++ " = " ++ prettyPrintSimple var ++ ";"
   prettyPrintSimple (StatementPushOnStack x) =

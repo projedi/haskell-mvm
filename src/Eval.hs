@@ -394,8 +394,11 @@ functionReturn = do
 
 execute :: Statement -> ExecuteStatement ()
 execute (StatementFunctionCall fcall) = functionCall fcall
-execute (StatementAssign lhs e) = do
+execute (StatementExpr e) = do
   res <- Trans.lift $ evaluate e
+  Trans.lift $ writeRegister RegisterRAX res
+execute (StatementAssign lhs rhs) = do
+  res <- Trans.lift $ readOperand rhs
   Trans.lift $ writeOperand lhs res
 execute (StatementAssignToPtr ptr rhs) = do
   res <- Trans.lift $ readOperand rhs

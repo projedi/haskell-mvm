@@ -86,8 +86,9 @@ operandType (OperandImmediateInt _) = VarTypeInt
 
 data Statement
   = StatementFunctionCall FunctionCall
+  | StatementExpr Expr -- stores result in RAX
   | StatementAssign Operand
-                    Expr
+                    Operand
   | StatementAssignToPtr Operand
                          Operand
   | StatementPushOnStack Operand

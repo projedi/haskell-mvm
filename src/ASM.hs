@@ -71,9 +71,8 @@ opRSP = ASMSyntax.OperandRegister ASMSyntax.VarTypeInt ASMSyntax.RegisterRSP
 opRAX :: ASMSyntax.VarType -> ASMSyntax.Operand
 opRAX t = ASMSyntax.OperandRegister t ASMSyntax.RegisterRAX
 
-peekStack :: ASMSyntax.VarType -> ASMSyntax.Expr
+peekStack :: ASMSyntax.VarType -> ASMSyntax.Operand
 peekStack t =
-  ASMSyntax.ExprRead $
   ASMSyntax.OperandPointer
     ASMSyntax.Pointer
       { ASMSyntax.pointerType = t
@@ -146,7 +145,7 @@ translateFunctionDef fdef = do
     addStatement $ ASMSyntax.StatementLabel funLbl
     let stackVars = params ++ locals
     addStatement $ ASMSyntax.StatementPushOnStack opRBP
-    addStatement $ ASMSyntax.StatementAssign opRBP (ASMSyntax.ExprRead opRSP)
+    addStatement $ ASMSyntax.StatementAssign opRBP opRSP
     mapM_
       (addStatement . ASMSyntax.StatementAllocateOnStack . varType)
       stackVars
@@ -183,11 +182,12 @@ translateStatement (LinearSyntax.StatementAssign v (LinearSyntax.ExprFunctionCal
   cc <- translateFunctionCall fcall
   let (Just retValue) =
         (uncurry ASMSyntax.OperandRegister) <$> CallingConvention.funRetValue cc
-  addStatement $ ASMSyntax.StatementAssign v' $ ASMSyntax.ExprRead retValue
+  addStatement $ ASMSyntax.StatementAssign v' retValue
 translateStatement (LinearSyntax.StatementAssign v e) = do
   v' <- resolveVariableAsOperand v
   e' <- translateExpr e
-  addStatement $ ASMSyntax.StatementAssign v' e'
+  addStatement $ ASMSyntax.StatementExpr e'
+  addStatement $ ASMSyntax.StatementAssign v' (opRAX (ASMSyntax.operandType v'))
 translateStatement (LinearSyntax.StatementAssignToPtr p v) = do
   p' <- resolveVariableAsOperand p
   v' <- resolveVariableAsOperand v
@@ -199,7 +199,7 @@ translateStatement (LinearSyntax.StatementReturn Nothing) = do
 translateStatement (LinearSyntax.StatementReturn (Just v)) = do
   v' <- resolveVariableAsOperand v
   Just rl <- Reader.asks retValueLocation
-  addStatement $ ASMSyntax.StatementAssign rl $ ASMSyntax.ExprRead v'
+  addStatement $ ASMSyntax.StatementAssign rl v'
   lbl <- Reader.asks epilogueLabel
   addStatement $ ASMSyntax.StatementJump lbl
   addStatement $ ASMSyntax.StatementReturn
@@ -220,7 +220,6 @@ prepareArgsForCall cc args = do
   mapM_ go (zip args (CallingConvention.funArgValues cc))
   addStatement $
     ASMSyntax.StatementAssign (opRAX ASMSyntax.VarTypeInt) $
-    ASMSyntax.ExprRead $
     ASMSyntax.OperandImmediateInt
       (fromIntegral $ CallingConvention.funFloatRegistersUsed cc)
   where
@@ -229,7 +228,7 @@ prepareArgsForCall cc args = do
       addStatement $
       ASMSyntax.StatementAssign
         (ASMSyntax.OperandRegister (ASMSyntax.operandType arg) r)
-        (ASMSyntax.ExprRead arg)
+        arg
     go (arg, CallingConvention.ArgLocationStack t d) =
       addStatement $
       ASMSyntax.StatementAssign
@@ -239,7 +238,7 @@ prepareArgsForCall cc args = do
              , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRSP
              , ASMSyntax.pointerDisplacement = -(d + 1)
              })
-        (ASMSyntax.ExprRead arg)
+        arg
 
 cleanStackAfterCall :: CallingConvention -> ASMStatement ()
 cleanStackAfterCall cc =
@@ -273,7 +272,7 @@ prepareArgsAtCall params cc = do
                , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
                , ASMSyntax.pointerDisplacement = d
                })
-          (ASMSyntax.ExprRead val)
+          val
       generateAssignments vs vals
     generateAssignments _ _ = error "Type mismatch"
 
