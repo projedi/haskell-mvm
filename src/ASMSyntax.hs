@@ -114,8 +114,6 @@ data Statement
                      FloatOperand
   -- Stores result in XMM0
   | StatementNegFloat FloatOperand
-  -- Stores result in XMM0
-  | StatementIntToFloat IntOperand
   | StatementPushOnStack IntOperand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType

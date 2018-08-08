@@ -393,9 +393,6 @@ execute (StatementLtFloat el er) = do
 execute (StatementNegFloat v) = do
   res <- negate <$> Trans.lift (readFloatOperand v)
   Trans.lift $ writeRegisterXMM RegisterXMM0 res
-execute (StatementIntToFloat v) = do
-  ValueInt i <- Trans.lift (readIntOperand v)
-  Trans.lift $ writeRegisterXMM RegisterXMM0 (ValueFloat $ fromIntegral i)
 execute (InstructionCMP lhs rhs) = do
   ValueInt lhs' <- Trans.lift (readIntOperand lhs)
   ValueInt rhs' <- Trans.lift (readIntOperand rhs)

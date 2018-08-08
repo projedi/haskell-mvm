@@ -444,8 +444,9 @@ translateUnOp LinearSyntax.UnNot v = do
   pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
 translateUnOp LinearSyntax.UnIntToFloat v = do
   v' <- resolveVariableAsIntOperand v
-  addStatement $ ASMSyntax.StatementIntToFloat v'
-  pure $ Right ASMSyntax.RegisterXMM0
+  let res = ASMSyntax.RegisterXMM0
+  addStatement $ ASMSyntax.InstructionCVTSI2SD res v'
+  pure $ Right res
 
 translateBinOp ::
      LinearSyntax.BinOp

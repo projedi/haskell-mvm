@@ -120,8 +120,6 @@ instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementLtFloat el er) =
     prettyPrintSimple el ++ " < " ++ prettyPrintSimple er ++ ";"
   prettyPrintSimple (StatementNegFloat v) = "-" ++ prettyPrintSimple v ++ ";"
-  prettyPrintSimple (StatementIntToFloat v) =
-    "(double)" ++ prettyPrintSimple v ++ ";"
   prettyPrintSimple (InstructionCMP lhs rhs) =
     "CMP " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionSetZ v) = "SETZ " ++ prettyPrintSimple v
