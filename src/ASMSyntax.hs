@@ -10,8 +10,6 @@ module ASMSyntax
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
-  , BinOp(..)
-  , binOpTypeFromArgs
   , Register(..)
   , RegisterXMM(..)
   , Pointer(..)
@@ -85,19 +83,8 @@ data FloatOperand
   = FloatOperandRegister RegisterXMM
   | FloatOperandPointer Pointer
 
-data BinOp =
-  BinPlusFloat
-
-binOpTypeFromArgs :: BinOp -> VarType -> VarType -> VarType
-binOpTypeFromArgs BinPlusFloat VarTypeFloat VarTypeFloat = VarTypeFloat
-binOpTypeFromArgs BinPlusFloat _ _ = error "Type mismatch"
-
 data Statement
-  -- Stores result in XMM0
-  = StatementBinOp BinOp
-                   FloatOperand
-                   FloatOperand
-  | StatementPushOnStack IntOperand
+  = StatementPushOnStack IntOperand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType
   --

@@ -117,11 +117,6 @@ resolveVariableAsIntOperand ::
 resolveVariableAsIntOperand v =
   ASMSyntax.IntOperandPointer <$> resolveVariableAsPointer v
 
-resolveVariableAsFloatOperand ::
-     MonadState Env m => LinearSyntax.Var -> m ASMSyntax.FloatOperand
-resolveVariableAsFloatOperand v = do
-  ASMSyntax.FloatOperandPointer <$> resolveVariableAsPointer v
-
 translateCode :: IntMap LinearSyntax.FunctionDef -> ASM ()
 translateCode fs = do
   let fids = IntMap.keys fs
@@ -470,10 +465,14 @@ translateBinOp LinearSyntax.BinPlus lhs rhs =
       addStatement $ ASMSyntax.InstructionADD res rhs'
       pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
-      lhs' <- resolveVariableAsFloatOperand lhs
-      rhs' <- resolveVariableAsFloatOperand rhs
-      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinPlusFloat lhs' rhs'
-      pure $ Right ASMSyntax.RegisterXMM0
+      lhs' <- resolveVariableAsPointer lhs
+      rhs' <- resolveVariableAsPointer rhs
+      let xmm0 = ASMSyntax.RegisterXMM0
+      let xmm1 = ASMSyntax.RegisterXMM1
+      addStatement $ ASMSyntax.InstructionMOVSD_XMM_M64 xmm0 lhs'
+      addStatement $ ASMSyntax.InstructionMOVSD_XMM_M64 xmm1 rhs'
+      addStatement $ ASMSyntax.InstructionADDSD xmm0 xmm1
+      pure $ Right xmm0
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinMinus lhs rhs =
   case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of

@@ -71,9 +71,6 @@ instance PrettyPrintSimple (Maybe VarType) where
   prettyPrintSimple (Just vtype) = prettyPrintSimple vtype
   prettyPrintSimple Nothing = "void"
 
-instance PrettyPrintSimple BinOp where
-  prettyPrintSimple BinPlusFloat = "+"
-
 instance PrettyPrintSimple IntOperand where
   prettyPrintSimple (IntOperandRegister _ r) = prettyPrintSimple r
   prettyPrintSimple (IntOperandPointer p) = prettyPrintSimple p
@@ -109,9 +106,6 @@ instance PrettyPrintSimple Pointer where
 
 instance PrettyPrintSimple Statement where
   prettyPrintSimple (InstructionCALL fcall) = "CALL " ++ prettyPrintSimple fcall
-  prettyPrintSimple (StatementBinOp op el er) =
-    prettyPrintSimple el ++
-    " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er ++ ";"
   prettyPrintSimple (InstructionCMP lhs rhs) =
     "CMP " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionSetZ v) = "SETZ " ++ prettyPrintSimple v

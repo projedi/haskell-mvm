@@ -327,13 +327,6 @@ writeIntOperand :: IntOperand -> Value -> Execute ()
 writeIntOperand (IntOperandRegister _ r) val = writeRegister r val
 writeIntOperand (IntOperandPointer p) val = writePointer p val
 
-readFloatOperand :: FloatOperand -> Execute Value
-readFloatOperand (FloatOperandRegister r) = readRegisterXMM r
-readFloatOperand (FloatOperandPointer p) = readPointer p
-
-evaluateBinOp :: BinOp -> (Value -> Value -> Value)
-evaluateBinOp BinPlusFloat = (+)
-
 data ConstEnv = ConstEnv
   { constEnvInstructions :: Array Int Statement
   , constEnvLabelMap :: IntMap Int
@@ -372,11 +365,6 @@ functionReturn = do
 
 execute :: Statement -> ExecuteStatement ()
 execute (InstructionCALL fcall) = functionCall fcall
-execute (StatementBinOp op el er) = do
-  res <-
-    evaluateBinOp op <$> Trans.lift (readFloatOperand el) <*>
-    Trans.lift (readFloatOperand er)
-  Trans.lift $ writeRegisterXMM RegisterXMM0 res
 execute (InstructionCMP lhs rhs) = do
   ValueInt lhs' <- Trans.lift (readIntOperand lhs)
   ValueInt rhs' <- Trans.lift (readIntOperand rhs)
