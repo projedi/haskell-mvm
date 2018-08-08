@@ -109,9 +109,6 @@ data Statement
   -- Stores result in RAX
   | StatementEqFloat FloatOperand
                      FloatOperand
-  -- Stores result in RAX
-  | StatementLtFloat FloatOperand
-                     FloatOperand
   | StatementPushOnStack IntOperand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType

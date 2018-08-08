@@ -385,11 +385,6 @@ execute (StatementEqFloat el er) = do
     ((fromBool .) . (==)) <$> Trans.lift (readFloatOperand el) <*>
     Trans.lift (readFloatOperand er)
   Trans.lift $ writeRegister RegisterRAX res
-execute (StatementLtFloat el er) = do
-  res <-
-    ((fromBool .) . (<)) <$> Trans.lift (readFloatOperand el) <*>
-    Trans.lift (readFloatOperand er)
-  Trans.lift $ writeRegister RegisterRAX res
 execute (InstructionCMP lhs rhs) = do
   ValueInt lhs' <- Trans.lift (readIntOperand lhs)
   ValueInt rhs' <- Trans.lift (readIntOperand rhs)

@@ -117,8 +117,6 @@ instance PrettyPrintSimple Statement where
     " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er ++ ";"
   prettyPrintSimple (StatementEqFloat el er) =
     prettyPrintSimple el ++ " == " ++ prettyPrintSimple er ++ ";"
-  prettyPrintSimple (StatementLtFloat el er) =
-    prettyPrintSimple el ++ " < " ++ prettyPrintSimple er ++ ";"
   prettyPrintSimple (InstructionCMP lhs rhs) =
     "CMP " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionSetZ v) = "SETZ " ++ prettyPrintSimple v
