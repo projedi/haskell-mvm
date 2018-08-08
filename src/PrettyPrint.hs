@@ -83,9 +83,9 @@ instance PrettyPrintSimple UnOp where
   prettyPrintSimple UnNegFloat = "-"
   prettyPrintSimple UnIntToFloat = "(double)"
 
-instance PrettyPrintSimple Operand where
-  prettyPrintSimple (OperandRegister _ r) = prettyPrintSimple r
-  prettyPrintSimple (OperandPointer p) = prettyPrintSimple p
+instance PrettyPrintSimple IntOperand where
+  prettyPrintSimple (IntOperandRegister _ r) = prettyPrintSimple r
+  prettyPrintSimple (IntOperandPointer p) = prettyPrintSimple p
 
 instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"

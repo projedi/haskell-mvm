@@ -310,13 +310,13 @@ writePointer Pointer {pointerBase = mr, pointerDisplacement = d} val = do
   b <- maybe (pure $ ValueInt 0) readRegister mr
   writeToPtr (b + ValueInt d) val
 
-readOperand :: Operand -> Execute Value
-readOperand (OperandRegister _ r) = readRegister r
-readOperand (OperandPointer p) = readPointer p
+readIntOperand :: IntOperand -> Execute Value
+readIntOperand (IntOperandRegister _ r) = readRegister r
+readIntOperand (IntOperandPointer p) = readPointer p
 
-writeOperand :: Operand -> Value -> Execute ()
-writeOperand (OperandRegister _ r) val = writeRegister r val
-writeOperand (OperandPointer p) val = writePointer p val
+writeIntOperand :: IntOperand -> Value -> Execute ()
+writeIntOperand (IntOperandRegister _ r) val = writeRegister r val
+writeIntOperand (IntOperandPointer p) val = writePointer p val
 
 evaluateUnOp :: UnOp -> (Value -> Value)
 evaluateUnOp UnNegFloat = negate
@@ -374,15 +374,15 @@ execute :: Statement -> ExecuteStatement ()
 execute (InstructionCALL fcall) = functionCall fcall
 execute (StatementBinOp op el er) = do
   res <-
-    evaluateBinOp op <$> Trans.lift (readOperand el) <*>
-    Trans.lift (readOperand er)
+    evaluateBinOp op <$> Trans.lift (readIntOperand el) <*>
+    Trans.lift (readIntOperand er)
   Trans.lift $ writeRegister RegisterRAX res
 execute (StatementUnOp op v) = do
-  res <- evaluateUnOp op <$> Trans.lift (readOperand v)
+  res <- evaluateUnOp op <$> Trans.lift (readIntOperand v)
   Trans.lift $ writeRegister RegisterRAX res
 execute (InstructionCMP lhs rhs) = do
-  ValueInt lhs' <- Trans.lift (readOperand lhs)
-  ValueInt rhs' <- Trans.lift (readOperand rhs)
+  ValueInt lhs' <- Trans.lift (readIntOperand lhs)
+  ValueInt rhs' <- Trans.lift (readIntOperand rhs)
   let (zf, sf) =
         case compare lhs' rhs' of
           EQ -> (True, False)
@@ -393,7 +393,7 @@ execute (InstructionCMP lhs rhs) = do
 execute (InstructionSetZ v) = do
   zf <- State.gets (efZF . regEFLAGS)
   Trans.lift $
-    writeOperand
+    writeIntOperand
       v
       (if zf
          then ValueInt 1
@@ -401,7 +401,7 @@ execute (InstructionSetZ v) = do
 execute (InstructionSetNZ v) = do
   zf <- State.gets (efZF . regEFLAGS)
   Trans.lift $
-    writeOperand
+    writeIntOperand
       v
       (if zf
          then ValueInt 0
@@ -409,16 +409,16 @@ execute (InstructionSetNZ v) = do
 execute (InstructionSetS v) = do
   sf <- State.gets (efSF . regEFLAGS)
   Trans.lift $
-    writeOperand
+    writeIntOperand
       v
       (if sf
          then ValueInt 1
          else ValueInt 0)
 execute (InstructionMOV lhs rhs) = do
-  res <- Trans.lift $ either readOperand readImmediate rhs
-  Trans.lift $ writeOperand lhs res
+  res <- Trans.lift $ either readIntOperand readImmediate rhs
+  Trans.lift $ writeIntOperand lhs res
 execute (StatementPushOnStack x) = do
-  res <- Trans.lift $ readOperand x
+  res <- Trans.lift $ readIntOperand x
   Trans.lift $ pushOnStack res
 execute (StatementAllocateOnStack t) = do
   Trans.lift $ pushOnStack (defaultValueFromType t)
@@ -430,40 +430,40 @@ execute (InstructionJZ l) = do
   zf <- State.gets (efZF . regEFLAGS)
   when zf $ jump l
 execute (InstructionNEG v) = do
-  ValueInt val <- Trans.lift (readOperand v)
-  Trans.lift $ writeOperand v (ValueInt (negate val))
+  ValueInt val <- Trans.lift (readIntOperand v)
+  Trans.lift $ writeIntOperand v (ValueInt (negate val))
 execute (InstructionAND lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' .&. rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' .&. rhs')
 execute (InstructionXOR lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' `xor` rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' `xor` rhs')
 execute (InstructionOR lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' .|. rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' .|. rhs')
 execute (InstructionADD lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' + rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' + rhs')
 execute (InstructionSUB lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' - rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' - rhs')
 execute (InstructionIDIV v)
   -- TODO: Should use RDX:RAX
  = do
   lhs' <- Trans.lift (readRegister RegisterRAX)
-  rhs' <- Trans.lift (readOperand v)
+  rhs' <- Trans.lift (readIntOperand v)
   let (q, r) = lhs' `quotRem` rhs'
   Trans.lift $ writeRegister RegisterRAX q
   Trans.lift $ writeRegister RegisterRDX r
 execute (InstructionIMUL lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' * rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' * rhs')
 execute InstructionCQO
   -- TODO: Not implemented. We only use RAX.
  = do
