@@ -95,6 +95,8 @@ instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRCX = "RCX"
   prettyPrintSimple RegisterR8 = "R8"
   prettyPrintSimple RegisterR9 = "R9"
+
+instance PrettyPrintSimple RegisterXMM where
   prettyPrintSimple RegisterXMM0 = "XMM0"
   prettyPrintSimple RegisterXMM1 = "XMM1"
   prettyPrintSimple RegisterXMM2 = "XMM2"

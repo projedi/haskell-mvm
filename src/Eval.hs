@@ -140,6 +140,7 @@ prepareArgsAtCall cc = do
   where
     go :: CallingConvention.ArgLocation -> Execute Value
     go (CallingConvention.ArgLocationRegister _ r) = readRegister r
+    go (CallingConvention.ArgLocationRegisterXMM r) = readRegisterXMM r
     go (CallingConvention.ArgLocationStack t d) =
       readPointer
         Pointer
@@ -179,7 +180,10 @@ foreignFunctionCall rettype params hasVarArgs args fun
   popFromStack VarTypeInt
   case (res, CallingConvention.funRetValue cc) of
     (Nothing, Nothing) -> pure ()
-    (Just r, Just (_, rv)) -> writeRegister rv r
+    (Just r, Just (CallingConvention.RetLocationRegister _ rv)) ->
+      writeRegister rv r
+    (Just r, Just (CallingConvention.RetLocationRegisterXMM rv)) ->
+      writeRegisterXMM rv r
     _ -> error "Type mismatch"
   where
     assertVals [] [] = []
@@ -254,14 +258,16 @@ readRegister RegisterRDX = State.gets regRDX
 readRegister RegisterRCX = State.gets regRCX
 readRegister RegisterR8 = State.gets regR8
 readRegister RegisterR9 = State.gets regR9
-readRegister RegisterXMM0 = State.gets (ValueFloat . regXMM0)
-readRegister RegisterXMM1 = State.gets (ValueFloat . regXMM1)
-readRegister RegisterXMM2 = State.gets (ValueFloat . regXMM2)
-readRegister RegisterXMM3 = State.gets (ValueFloat . regXMM3)
-readRegister RegisterXMM4 = State.gets (ValueFloat . regXMM4)
-readRegister RegisterXMM5 = State.gets (ValueFloat . regXMM5)
-readRegister RegisterXMM6 = State.gets (ValueFloat . regXMM6)
-readRegister RegisterXMM7 = State.gets (ValueFloat . regXMM7)
+
+readRegisterXMM :: RegisterXMM -> Execute Value
+readRegisterXMM RegisterXMM0 = State.gets (ValueFloat . regXMM0)
+readRegisterXMM RegisterXMM1 = State.gets (ValueFloat . regXMM1)
+readRegisterXMM RegisterXMM2 = State.gets (ValueFloat . regXMM2)
+readRegisterXMM RegisterXMM3 = State.gets (ValueFloat . regXMM3)
+readRegisterXMM RegisterXMM4 = State.gets (ValueFloat . regXMM4)
+readRegisterXMM RegisterXMM5 = State.gets (ValueFloat . regXMM5)
+readRegisterXMM RegisterXMM6 = State.gets (ValueFloat . regXMM6)
+readRegisterXMM RegisterXMM7 = State.gets (ValueFloat . regXMM7)
 
 writeRegister :: Register -> Value -> Execute ()
 writeRegister RegisterRSP (ValueInt i) = State.modify $ \env -> env {regRSP = i}
@@ -275,30 +281,32 @@ writeRegister RegisterRDX v = State.modify $ \env -> env {regRDX = v}
 writeRegister RegisterRCX v = State.modify $ \env -> env {regRCX = v}
 writeRegister RegisterR8 v = State.modify $ \env -> env {regR8 = v}
 writeRegister RegisterR9 v = State.modify $ \env -> env {regR9 = v}
-writeRegister RegisterXMM0 (ValueFloat f) =
+
+writeRegisterXMM :: RegisterXMM -> Value -> Execute ()
+writeRegisterXMM RegisterXMM0 (ValueFloat f) =
   State.modify $ \env -> env {regXMM0 = f}
-writeRegister RegisterXMM0 _ = error "Type mismatch"
-writeRegister RegisterXMM1 (ValueFloat f) =
+writeRegisterXMM RegisterXMM0 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM1 (ValueFloat f) =
   State.modify $ \env -> env {regXMM1 = f}
-writeRegister RegisterXMM1 _ = error "Type mismatch"
-writeRegister RegisterXMM2 (ValueFloat f) =
+writeRegisterXMM RegisterXMM1 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM2 (ValueFloat f) =
   State.modify $ \env -> env {regXMM2 = f}
-writeRegister RegisterXMM2 _ = error "Type mismatch"
-writeRegister RegisterXMM3 (ValueFloat f) =
+writeRegisterXMM RegisterXMM2 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM3 (ValueFloat f) =
   State.modify $ \env -> env {regXMM3 = f}
-writeRegister RegisterXMM3 _ = error "Type mismatch"
-writeRegister RegisterXMM4 (ValueFloat f) =
+writeRegisterXMM RegisterXMM3 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM4 (ValueFloat f) =
   State.modify $ \env -> env {regXMM4 = f}
-writeRegister RegisterXMM4 _ = error "Type mismatch"
-writeRegister RegisterXMM5 (ValueFloat f) =
+writeRegisterXMM RegisterXMM4 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM5 (ValueFloat f) =
   State.modify $ \env -> env {regXMM5 = f}
-writeRegister RegisterXMM5 _ = error "Type mismatch"
-writeRegister RegisterXMM6 (ValueFloat f) =
+writeRegisterXMM RegisterXMM5 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM6 (ValueFloat f) =
   State.modify $ \env -> env {regXMM6 = f}
-writeRegister RegisterXMM6 _ = error "Type mismatch"
-writeRegister RegisterXMM7 (ValueFloat f) =
+writeRegisterXMM RegisterXMM6 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM7 (ValueFloat f) =
   State.modify $ \env -> env {regXMM7 = f}
-writeRegister RegisterXMM7 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM7 _ = error "Type mismatch"
 
 readPointer :: Pointer -> Execute Value
 readPointer Pointer {pointerBase = mr, pointerDisplacement = d} = do
@@ -319,11 +327,11 @@ writeIntOperand (IntOperandRegister _ r) val = writeRegister r val
 writeIntOperand (IntOperandPointer p) val = writePointer p val
 
 readFloatOperand :: FloatOperand -> Execute Value
-readFloatOperand (FloatOperandRegister r) = readRegister r
+readFloatOperand (FloatOperandRegister r) = readRegisterXMM r
 readFloatOperand (FloatOperandPointer p) = readPointer p
 
 writeFloatOperand :: FloatOperand -> Value -> Execute ()
-writeFloatOperand (FloatOperandRegister r) val = writeRegister r val
+writeFloatOperand (FloatOperandRegister r) val = writeRegisterXMM r val
 writeFloatOperand (FloatOperandPointer p) val = writePointer p val
 
 evaluateBinOp :: BinOp -> (Value -> Value -> Value)
@@ -374,7 +382,7 @@ execute (StatementBinOp op el er) = do
   res <-
     evaluateBinOp op <$> Trans.lift (readFloatOperand el) <*>
     Trans.lift (readFloatOperand er)
-  Trans.lift $ writeRegister RegisterXMM0 res
+  Trans.lift $ writeRegisterXMM RegisterXMM0 res
 execute (StatementEqFloat el er) = do
   res <-
     ((fromBool .) . (==)) <$> Trans.lift (readFloatOperand el) <*>
@@ -387,10 +395,10 @@ execute (StatementLtFloat el er) = do
   Trans.lift $ writeRegister RegisterRAX res
 execute (StatementNegFloat v) = do
   res <- negate <$> Trans.lift (readFloatOperand v)
-  Trans.lift $ writeRegister RegisterXMM0 res
+  Trans.lift $ writeRegisterXMM RegisterXMM0 res
 execute (StatementIntToFloat v) = do
   ValueInt i <- Trans.lift (readIntOperand v)
-  Trans.lift $ writeRegister RegisterXMM0 (ValueFloat $ fromIntegral i)
+  Trans.lift $ writeRegisterXMM RegisterXMM0 (ValueFloat $ fromIntegral i)
 execute (StatementAssignFloat lhs rhs) = do
   res <- Trans.lift $ readFloatOperand rhs
   Trans.lift $ writeFloatOperand lhs res

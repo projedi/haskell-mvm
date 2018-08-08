@@ -13,6 +13,7 @@ module ASMSyntax
   , BinOp(..)
   , binOpTypeFromArgs
   , Register(..)
+  , RegisterXMM(..)
   , Pointer(..)
   , IntOperand(..)
   , intOperandType
@@ -54,7 +55,9 @@ data Register
   | RegisterRCX
   | RegisterR8
   | RegisterR9
-  | RegisterXMM0
+
+data RegisterXMM
+  = RegisterXMM0
   | RegisterXMM1
   | RegisterXMM2
   | RegisterXMM3
@@ -79,7 +82,7 @@ intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
 
 data FloatOperand
-  = FloatOperandRegister Register
+  = FloatOperandRegister RegisterXMM
   | FloatOperandPointer Pointer
 
 data BinOp
