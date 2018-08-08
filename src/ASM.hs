@@ -432,9 +432,16 @@ translateUnOp LinearSyntax.UnNeg v =
       addStatement $ ASMSyntax.InstructionNEG res
       pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     ASMSyntax.VarTypeFloat -> do
-      v' <- resolveVariableAsFloatOperand v
-      addStatement $ ASMSyntax.StatementNegFloat v'
-      pure $ Right ASMSyntax.RegisterXMM0
+      let rax = opRAX ASMSyntax.VarTypeInt
+      let xmm0 = ASMSyntax.RegisterXMM0
+      addStatement $
+        ASMSyntax.InstructionMOV rax (Right $ ASMSyntax.ImmediateInt 0)
+      addStatement $ ASMSyntax.InstructionCVTSI2SD xmm0 rax
+      v' <- resolveVariableAsPointer v
+      let xmm1 = ASMSyntax.RegisterXMM1
+      addStatement $ ASMSyntax.InstructionMOVSD_XMM_M64 xmm1 v'
+      addStatement $ ASMSyntax.InstructionSUBSD xmm0 xmm1
+      pure $ Right xmm0
     _ -> error "Type mismatch"
 translateUnOp LinearSyntax.UnNot v = do
   v' <- resolveVariableAsIntOperand v

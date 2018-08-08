@@ -390,9 +390,6 @@ execute (StatementLtFloat el er) = do
     ((fromBool .) . (<)) <$> Trans.lift (readFloatOperand el) <*>
     Trans.lift (readFloatOperand er)
   Trans.lift $ writeRegister RegisterRAX res
-execute (StatementNegFloat v) = do
-  res <- negate <$> Trans.lift (readFloatOperand v)
-  Trans.lift $ writeRegisterXMM RegisterXMM0 res
 execute (InstructionCMP lhs rhs) = do
   ValueInt lhs' <- Trans.lift (readIntOperand lhs)
   ValueInt rhs' <- Trans.lift (readIntOperand rhs)

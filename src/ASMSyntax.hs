@@ -112,8 +112,6 @@ data Statement
   -- Stores result in RAX
   | StatementLtFloat FloatOperand
                      FloatOperand
-  -- Stores result in XMM0
-  | StatementNegFloat FloatOperand
   | StatementPushOnStack IntOperand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType
