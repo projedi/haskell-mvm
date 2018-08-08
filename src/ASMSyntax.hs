@@ -15,7 +15,6 @@ module ASMSyntax
   , Pointer(..)
   , IntOperand(..)
   , intOperandType
-  , FloatOperand(..)
   , Immediate(..)
   , immediateType
   ) where
@@ -78,10 +77,6 @@ data IntOperand
 intOperandType :: IntOperand -> VarType
 intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
-
-data FloatOperand
-  = FloatOperandRegister RegisterXMM
-  | FloatOperandPointer Pointer
 
 data Statement
   = StatementPushOnStack IntOperand

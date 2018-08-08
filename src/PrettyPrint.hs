@@ -75,10 +75,6 @@ instance PrettyPrintSimple IntOperand where
   prettyPrintSimple (IntOperandRegister _ r) = prettyPrintSimple r
   prettyPrintSimple (IntOperandPointer p) = prettyPrintSimple p
 
-instance PrettyPrintSimple FloatOperand where
-  prettyPrintSimple (FloatOperandRegister r) = prettyPrintSimple r
-  prettyPrintSimple (FloatOperandPointer p) = prettyPrintSimple p
-
 instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"
   prettyPrintSimple RegisterRBP = "RBP"
