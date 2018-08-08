@@ -170,6 +170,31 @@ data Statement
                     IntOperand
   -- Sign extends RAX into RDX:RAX.
   | InstructionCQO
+  -- Add low double precision in lhs to low double precision in rhs and store in rhs.
+  | InstructionADDSD RegisterXMM
+                     RegisterXMM
+  -- Subtract low double precision in rhs from low double precision in lhs and store in lhs.
+  | InstructionSUBSD RegisterXMM
+                     RegisterXMM
+  -- Multiply low double precision in lhs by low double precision in rhs and store in lhs.
+  | InstructionMULSD RegisterXMM
+                     RegisterXMM
+  -- Divide low double precision in lhs by low double precision in rhs and store in lhs.
+  | InstructionDIVSD RegisterXMM
+                     RegisterXMM
+  -- Compare low double precision in lhs with low double precision in rhs and set EFLAGS.
+  | InstructionCOMISD RegisterXMM
+                      RegisterXMM
+  -- Move from rhs to lhs.
+  | InstructionMOVSD_XMM_XMM RegisterXMM
+                             RegisterXMM
+  | InstructionMOVSD_XMM_M64 RegisterXMM
+                             Pointer
+  | InstructionMOVSD_M64_XMM Pointer
+                             RegisterXMM
+  -- Convert from integer in rhs to double precision in lhs.
+  | InstructionCVTSI2SD RegisterXMM
+                        IntOperand
 
 data FunctionDef = FunctionDef
   { funDefBody :: [Statement]

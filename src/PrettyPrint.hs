@@ -158,6 +158,24 @@ instance PrettyPrintSimple Statement where
   prettyPrintSimple (InstructionIMUL lhs rhs) =
     "IMUL " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple InstructionCQO = "CQO"
+  prettyPrintSimple (InstructionADDSD lhs rhs) =
+    "ADDSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionSUBSD lhs rhs) =
+    "SUBSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionMULSD lhs rhs) =
+    "MULSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionDIVSD lhs rhs) =
+    "DIVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionCOMISD lhs rhs) =
+    "COMISD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionMOVSD_XMM_XMM lhs rhs) =
+    "MOVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionMOVSD_XMM_M64 lhs rhs) =
+    "MOVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionMOVSD_M64_XMM lhs rhs) =
+    "MOVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionCVTSI2SD lhs rhs) =
+    "CVTSI2SD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
 
 instance PrettyPrintSimple FunctionDef where
   prettyPrintSimple FunctionDef {funDefBody = body} =
