@@ -18,8 +18,6 @@ module ASMSyntax
   , Pointer(..)
   , Operand(..)
   , operandType
-  , Expr(ExprConst, ExprBinOp, ExprUnOp)
-  , exprType
   , Immediate(..)
   , immediateType
   ) where
@@ -28,17 +26,13 @@ import Data.Int (Int64)
 import Data.IntMap (IntMap)
 
 import LinearSyntax
-  ( BinOp(..)
-  , ForeignFunctionDecl(..)
+  ( ForeignFunctionDecl(..)
   , FunID(..)
   , Immediate(..)
   , LabelID(..)
   , StringID(..)
-  , UnOp(..)
   , VarType(..)
-  , binOpTypeFromArgs
   , immediateType
-  , unOpTypeFromArg
   )
 
 data Program = Program
@@ -80,26 +74,103 @@ data Operand
   = OperandRegister VarType
                     Register
   | OperandPointer Pointer
-  | OperandImmediateInt Int64 -- TODO: Reconsider.
 
 operandType :: Operand -> VarType
 operandType (OperandRegister t _) = t
 operandType (OperandPointer p) = pointerType p
-operandType (OperandImmediateInt _) = VarTypeInt
+
+data UnOp
+  = UnNegFloat
+  | UnIntToFloat
+
+unOpTypeFromArg :: UnOp -> VarType -> VarType
+unOpTypeFromArg UnNegFloat VarTypeFloat = VarTypeFloat
+unOpTypeFromArg UnNegFloat _ = error "Type mismatch"
+unOpTypeFromArg UnIntToFloat VarTypeInt = VarTypeFloat
+unOpTypeFromArg UnIntToFloat _ = error "Type mismatch"
+
+data BinOp
+  = BinPlusFloat
+  | BinMinusFloat
+  | BinTimesFloat
+  | BinDivFloat
+  | BinEqFloat
+  | BinLtFloat
+
+binOpTypeFromArgs :: BinOp -> VarType -> VarType -> VarType
+binOpTypeFromArgs BinPlusFloat VarTypeFloat VarTypeFloat = VarTypeFloat
+binOpTypeFromArgs BinPlusFloat _ _ = error "Type mismatch"
+binOpTypeFromArgs BinMinusFloat VarTypeFloat VarTypeFloat = VarTypeFloat
+binOpTypeFromArgs BinMinusFloat _ _ = error "Type mismatch"
+binOpTypeFromArgs BinTimesFloat VarTypeFloat VarTypeFloat = VarTypeFloat
+binOpTypeFromArgs BinTimesFloat _ _ = error "Type mismatch"
+binOpTypeFromArgs BinDivFloat VarTypeFloat VarTypeFloat = VarTypeFloat
+binOpTypeFromArgs BinDivFloat _ _ = error "Type mismatch"
+binOpTypeFromArgs BinEqFloat VarTypeFloat VarTypeFloat = VarTypeInt
+binOpTypeFromArgs BinEqFloat _ _ = error "Type mismatch"
+binOpTypeFromArgs BinLtFloat VarTypeFloat VarTypeFloat = VarTypeInt
+binOpTypeFromArgs BinLtFloat _ _ = error "Type mismatch"
 
 data Statement
-  = StatementFunctionCall FunctionCall
-  | StatementExpr Expr -- stores result in RAX
-  | StatementAssign Operand
-                    Operand
+  -- Stores result in RAX
+  = StatementBinOp BinOp
+                   Operand
+                   Operand
+  -- Stores result in RAX
+  | StatementUnOp UnOp
+                  Operand
   | StatementPushOnStack Operand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType
-  | StatementReturn
-  | StatementLabel LabelID
-  | StatementJump LabelID
-  | StatementJumpIfZero Operand
-                        LabelID
+  --
+  -- From here on, statements are directly representable as ASM instructions.
+  --
+  -- Subtract one from the other and set EFLAGS accordingly.
+  | InstructionCMP Operand
+                   Operand
+  -- Set to 1 if ZF(EFLAGS) = 1, 0 - otherwise.
+  | InstructionSetZ Operand
+  -- Set to 1 if ZF(EFLAGS) = 0, 0 - otherwise.
+  | InstructionSetNZ Operand
+  -- Set to 1 if SF(EFLAGS) = 1, 0 - otherwise.
+  | InstructionSetS Operand
+  -- Copy from rhs to lhs.
+  | InstructionMOV Operand
+                   (Either Operand Immediate)
+  -- A nop that has a label attached.
+  | InstructionLabelledNOP LabelID
+  -- Unconditional jump.
+  | InstructionJMP LabelID
+  -- Jump if ZF(EFLAGS) = 1
+  | InstructionJZ LabelID
+  -- Pop RIP from the stack and jump to it.
+  | InstructionRET
+  -- Push RIP to the stack and jump.
+  | InstructionCALL FunctionCall
+  -- Negate integer operand
+  | InstructionNEG Operand
+  -- Bitwise AND instruction. Stores result in the lhs.
+  | InstructionAND Operand
+                   Operand
+  -- Bitwise XOR instruction. Stores result in the lhs.
+  | InstructionXOR Operand
+                   Operand
+  -- Bitwise OR instruction. Stores result in the lhs.
+  | InstructionOR Operand
+                  Operand
+  -- lhs + rhs. Stores result in the lhs.
+  | InstructionADD Operand
+                   Operand
+  -- lhs - rhs. Stores result in the lhs.
+  | InstructionSUB Operand
+                   Operand
+  -- Divides RDX:RAX by operand. Stores result quotient in RAX, remainder in RDX.
+  | InstructionIDIV Operand
+  -- lhs * rhs. Stores result in lhs.
+  | InstructionIMUL Operand
+                    Operand
+  -- Sign extends RAX into RDX:RAX.
+  | InstructionCQO
 
 data FunctionDef = FunctionDef
   { funDefBody :: [Statement]
@@ -110,39 +181,3 @@ data FunctionCall
   | ForeignFunctionCall { foreignFunCallName :: FunID
                         , foreignFunCallRetType :: Maybe VarType
                         , foreignFunCallArgTypes :: [VarType] }
-
-data Expr = Expr
-  { exprType :: VarType
-  , exprImpl :: ExprImpl
-  }
-
-data ExprImpl
-  = ExprConstImpl Immediate
-  | ExprBinOpImpl BinOp
-                  Operand
-                  Operand
-  | ExprUnOpImpl UnOp
-                 Operand
-
-pattern ExprConst :: Immediate -> Expr
-
-pattern ExprConst imm <- Expr{exprImpl = ExprConstImpl imm}
-  where ExprConst imm
-          = Expr{exprType = immediateType imm, exprImpl = ExprConstImpl imm}
-
-pattern ExprBinOp :: BinOp -> Operand -> Operand -> Expr
-
-pattern ExprBinOp op lhs rhs <-
-        Expr{exprImpl = ExprBinOpImpl op lhs rhs}
-  where ExprBinOp op lhs rhs
-          = Expr{exprType = t, exprImpl = ExprBinOpImpl op lhs rhs}
-          where t = binOpTypeFromArgs op (operandType lhs) (operandType rhs)
-
-pattern ExprUnOp :: UnOp -> Operand -> Expr
-
-pattern ExprUnOp op x <- Expr{exprImpl = ExprUnOpImpl op x}
-  where ExprUnOp op x
-          = Expr{exprType = t, exprImpl = ExprUnOpImpl op x}
-          where t = unOpTypeFromArg op $ operandType x
-
-{-# COMPLETE ExprConst, ExprBinOp, ExprUnOp :: Expr #-}

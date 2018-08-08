@@ -39,6 +39,11 @@ eval p = do
     startExecute (programForeignFunctions p) (programCode p) (programStrings p)
   forM_ libhandles dlclose
 
+data EFLAGS = EFLAGS
+  { efZF :: Bool
+  , efSF :: Bool
+  }
+
 data Env = Env
   { envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   , envStrings :: IntMap String
@@ -61,6 +66,7 @@ data Env = Env
   , regXMM5 :: Double
   , regXMM6 :: Double
   , regXMM7 :: Double
+  , regEFLAGS :: EFLAGS
   }
 
 instance Show Env where
@@ -95,6 +101,7 @@ emptyEnv =
     , regXMM5 = 0
     , regXMM6 = 0
     , regXMM7 = 0
+    , regEFLAGS = EFLAGS {efZF = False, efSF = False}
     }
 
 type Execute = StateT Env IO
@@ -214,7 +221,7 @@ executeFunctionBody ss = do
         , constEnvLabelMap = buildLabelMap $ Array.assocs instructions
         }
     buildLabelMap [] = IntMap.empty
-    buildLabelMap ((i, StatementLabel (LabelID lid)):is) =
+    buildLabelMap ((i, InstructionLabelledNOP (LabelID lid)):is) =
       IntMap.insert lid i $ buildLabelMap is
     buildLabelMap (_:is) = buildLabelMap is
 
@@ -306,21 +313,13 @@ writePointer Pointer {pointerBase = mr, pointerDisplacement = d} val = do
 readOperand :: Operand -> Execute Value
 readOperand (OperandRegister _ r) = readRegister r
 readOperand (OperandPointer p) = readPointer p
-readOperand (OperandImmediateInt i) = pure $ ValueInt i
 
 writeOperand :: Operand -> Value -> Execute ()
 writeOperand (OperandRegister _ r) val = writeRegister r val
 writeOperand (OperandPointer p) val = writePointer p val
-writeOperand (OperandImmediateInt _) _ = error "Type mismatch"
 
 evaluateUnOp :: UnOp -> (Value -> Value)
-evaluateUnOp UnNeg = negate
-evaluateUnOp UnNot =
-  \v ->
-    case v of
-      ValueInt 0 -> ValueInt 1
-      ValueInt _ -> ValueInt 0
-      _ -> error "Type mismatch"
+evaluateUnOp UnNegFloat = negate
 evaluateUnOp UnIntToFloat =
   \v ->
     case v of
@@ -328,28 +327,12 @@ evaluateUnOp UnIntToFloat =
       _ -> error "Type mismatch"
 
 evaluateBinOp :: BinOp -> (Value -> Value -> Value)
-evaluateBinOp BinPlus = (+)
-evaluateBinOp BinMinus = (-)
-evaluateBinOp BinTimes = (*)
-evaluateBinOp BinDiv = (/)
-evaluateBinOp BinMod = rem
-evaluateBinOp BinBitAnd = (.&.)
-evaluateBinOp BinBitOr = (.|.)
-evaluateBinOp BinBitXor = xor
-evaluateBinOp BinAnd = \lhs rhs -> fromBool (toBool lhs && toBool rhs)
-evaluateBinOp BinOr = \lhs rhs -> fromBool (toBool lhs || toBool rhs)
-evaluateBinOp BinEq = (fromBool .) . (==)
-evaluateBinOp BinLt = (fromBool .) . (<)
-
-evaluate :: Expr -> Execute Value
-evaluate (ExprConst imm) = readImmediate imm
-evaluate (ExprUnOp op x) = evaluateUnOp op <$> readOperand x
-evaluate (ExprBinOp op lhs rhs) =
-  evaluateBinOp op <$> readOperand lhs <*> readOperand rhs
-
-valueAsBool :: Value -> Bool
-valueAsBool (ValueInt i) = i /= 0
-valueAsBool _ = error "Type mismatch"
+evaluateBinOp BinPlusFloat = (+)
+evaluateBinOp BinMinusFloat = (-)
+evaluateBinOp BinTimesFloat = (*)
+evaluateBinOp BinDivFloat = (/)
+evaluateBinOp BinEqFloat = (fromBool .) . (==)
+evaluateBinOp BinLtFloat = (fromBool .) . (<)
 
 data ConstEnv = ConstEnv
   { constEnvInstructions :: Array Int Statement
@@ -388,12 +371,51 @@ functionReturn = do
   State.modify $ \env -> env {regRIP = fromIntegral ip}
 
 execute :: Statement -> ExecuteStatement ()
-execute (StatementFunctionCall fcall) = functionCall fcall
-execute (StatementExpr e) = do
-  res <- Trans.lift $ evaluate e
+execute (InstructionCALL fcall) = functionCall fcall
+execute (StatementBinOp op el er) = do
+  res <-
+    evaluateBinOp op <$> Trans.lift (readOperand el) <*>
+    Trans.lift (readOperand er)
   Trans.lift $ writeRegister RegisterRAX res
-execute (StatementAssign lhs rhs) = do
-  res <- Trans.lift $ readOperand rhs
+execute (StatementUnOp op v) = do
+  res <- evaluateUnOp op <$> Trans.lift (readOperand v)
+  Trans.lift $ writeRegister RegisterRAX res
+execute (InstructionCMP lhs rhs) = do
+  ValueInt lhs' <- Trans.lift (readOperand lhs)
+  ValueInt rhs' <- Trans.lift (readOperand rhs)
+  let (zf, sf) =
+        case compare lhs' rhs' of
+          EQ -> (True, False)
+          LT -> (False, True)
+          GT -> (False, False)
+  State.modify $ \env ->
+    env {regEFLAGS = (regEFLAGS env) {efZF = zf, efSF = sf}}
+execute (InstructionSetZ v) = do
+  zf <- State.gets (efZF . regEFLAGS)
+  Trans.lift $
+    writeOperand
+      v
+      (if zf
+         then ValueInt 1
+         else ValueInt 0)
+execute (InstructionSetNZ v) = do
+  zf <- State.gets (efZF . regEFLAGS)
+  Trans.lift $
+    writeOperand
+      v
+      (if zf
+         then ValueInt 0
+         else ValueInt 1)
+execute (InstructionSetS v) = do
+  sf <- State.gets (efSF . regEFLAGS)
+  Trans.lift $
+    writeOperand
+      v
+      (if sf
+         then ValueInt 1
+         else ValueInt 0)
+execute (InstructionMOV lhs rhs) = do
+  res <- Trans.lift $ either readOperand readImmediate rhs
   Trans.lift $ writeOperand lhs res
 execute (StatementPushOnStack x) = do
   res <- Trans.lift $ readOperand x
@@ -401,9 +423,48 @@ execute (StatementPushOnStack x) = do
 execute (StatementAllocateOnStack t) = do
   Trans.lift $ pushOnStack (defaultValueFromType t)
 execute (StatementPopFromStack t) = Trans.lift $ popFromStack t
-execute StatementReturn = functionReturn
-execute (StatementLabel _) = pure ()
-execute (StatementJump l) = jump l
-execute (StatementJumpIfZero x l) = do
-  res <- Trans.lift $ valueAsBool <$> readOperand x
-  unless res $ jump l
+execute InstructionRET = functionReturn
+execute (InstructionLabelledNOP _) = pure ()
+execute (InstructionJMP l) = jump l
+execute (InstructionJZ l) = do
+  zf <- State.gets (efZF . regEFLAGS)
+  when zf $ jump l
+execute (InstructionNEG v) = do
+  ValueInt val <- Trans.lift (readOperand v)
+  Trans.lift $ writeOperand v (ValueInt (negate val))
+execute (InstructionAND lhs rhs) = do
+  lhs' <- Trans.lift (readOperand lhs)
+  rhs' <- Trans.lift (readOperand rhs)
+  Trans.lift $ writeOperand lhs (lhs' .&. rhs')
+execute (InstructionXOR lhs rhs) = do
+  lhs' <- Trans.lift (readOperand lhs)
+  rhs' <- Trans.lift (readOperand rhs)
+  Trans.lift $ writeOperand lhs (lhs' `xor` rhs')
+execute (InstructionOR lhs rhs) = do
+  lhs' <- Trans.lift (readOperand lhs)
+  rhs' <- Trans.lift (readOperand rhs)
+  Trans.lift $ writeOperand lhs (lhs' .|. rhs')
+execute (InstructionADD lhs rhs) = do
+  lhs' <- Trans.lift (readOperand lhs)
+  rhs' <- Trans.lift (readOperand rhs)
+  Trans.lift $ writeOperand lhs (lhs' + rhs')
+execute (InstructionSUB lhs rhs) = do
+  lhs' <- Trans.lift (readOperand lhs)
+  rhs' <- Trans.lift (readOperand rhs)
+  Trans.lift $ writeOperand lhs (lhs' - rhs')
+execute (InstructionIDIV v)
+  -- TODO: Should use RDX:RAX
+ = do
+  lhs' <- Trans.lift (readRegister RegisterRAX)
+  rhs' <- Trans.lift (readOperand v)
+  let (q, r) = lhs' `quotRem` rhs'
+  Trans.lift $ writeRegister RegisterRAX q
+  Trans.lift $ writeRegister RegisterRDX r
+execute (InstructionIMUL lhs rhs) = do
+  lhs' <- Trans.lift (readOperand lhs)
+  rhs' <- Trans.lift (readOperand rhs)
+  Trans.lift $ writeOperand lhs (lhs' * rhs')
+execute InstructionCQO
+  -- TODO: Not implemented. We only use RAX.
+ = do
+  pure ()
