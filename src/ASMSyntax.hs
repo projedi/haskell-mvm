@@ -16,6 +16,7 @@ module ASMSyntax
   , Pointer(..)
   , IntOperand(..)
   , intOperandType
+  , FloatOperand(..)
   , Immediate(..)
   , immediateType
   ) where
@@ -77,13 +78,15 @@ intOperandType :: IntOperand -> VarType
 intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
 
+data FloatOperand
+  = FloatOperandRegister Register
+  | FloatOperandPointer Pointer
+
 data BinOp
   = BinPlusFloat
   | BinMinusFloat
   | BinTimesFloat
   | BinDivFloat
-  | BinEqFloat
-  | BinLtFloat
 
 binOpTypeFromArgs :: BinOp -> VarType -> VarType -> VarType
 binOpTypeFromArgs BinPlusFloat VarTypeFloat VarTypeFloat = VarTypeFloat
@@ -94,23 +97,27 @@ binOpTypeFromArgs BinTimesFloat VarTypeFloat VarTypeFloat = VarTypeFloat
 binOpTypeFromArgs BinTimesFloat _ _ = error "Type mismatch"
 binOpTypeFromArgs BinDivFloat VarTypeFloat VarTypeFloat = VarTypeFloat
 binOpTypeFromArgs BinDivFloat _ _ = error "Type mismatch"
-binOpTypeFromArgs BinEqFloat VarTypeFloat VarTypeFloat = VarTypeInt
-binOpTypeFromArgs BinEqFloat _ _ = error "Type mismatch"
-binOpTypeFromArgs BinLtFloat VarTypeFloat VarTypeFloat = VarTypeInt
-binOpTypeFromArgs BinLtFloat _ _ = error "Type mismatch"
 
 data Statement
-  -- Stores result in RAX
+  -- Stores result in XMM0
   = StatementBinOp BinOp
-                   IntOperand
-                   IntOperand
+                   FloatOperand
+                   FloatOperand
   -- Stores result in RAX
-  | StatementNegFloat IntOperand
+  | StatementEqFloat FloatOperand
+                     FloatOperand
   -- Stores result in RAX
+  | StatementLtFloat FloatOperand
+                     FloatOperand
+  -- Stores result in XMM0
+  | StatementNegFloat FloatOperand
+  -- Stores result in XMM0
   | StatementIntToFloat IntOperand
   | StatementPushOnStack IntOperand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType
+  | StatementAssignFloat FloatOperand
+                         FloatOperand
   --
   -- From here on, statements are directly representable as ASM instructions.
   --

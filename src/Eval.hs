@@ -318,13 +318,19 @@ writeIntOperand :: IntOperand -> Value -> Execute ()
 writeIntOperand (IntOperandRegister _ r) val = writeRegister r val
 writeIntOperand (IntOperandPointer p) val = writePointer p val
 
+readFloatOperand :: FloatOperand -> Execute Value
+readFloatOperand (FloatOperandRegister r) = readRegister r
+readFloatOperand (FloatOperandPointer p) = readPointer p
+
+writeFloatOperand :: FloatOperand -> Value -> Execute ()
+writeFloatOperand (FloatOperandRegister r) val = writeRegister r val
+writeFloatOperand (FloatOperandPointer p) val = writePointer p val
+
 evaluateBinOp :: BinOp -> (Value -> Value -> Value)
 evaluateBinOp BinPlusFloat = (+)
 evaluateBinOp BinMinusFloat = (-)
 evaluateBinOp BinTimesFloat = (*)
 evaluateBinOp BinDivFloat = (/)
-evaluateBinOp BinEqFloat = (fromBool .) . (==)
-evaluateBinOp BinLtFloat = (fromBool .) . (<)
 
 data ConstEnv = ConstEnv
   { constEnvInstructions :: Array Int Statement
@@ -366,15 +372,28 @@ execute :: Statement -> ExecuteStatement ()
 execute (InstructionCALL fcall) = functionCall fcall
 execute (StatementBinOp op el er) = do
   res <-
-    evaluateBinOp op <$> Trans.lift (readIntOperand el) <*>
-    Trans.lift (readIntOperand er)
+    evaluateBinOp op <$> Trans.lift (readFloatOperand el) <*>
+    Trans.lift (readFloatOperand er)
+  Trans.lift $ writeRegister RegisterXMM0 res
+execute (StatementEqFloat el er) = do
+  res <-
+    ((fromBool .) . (==)) <$> Trans.lift (readFloatOperand el) <*>
+    Trans.lift (readFloatOperand er)
+  Trans.lift $ writeRegister RegisterRAX res
+execute (StatementLtFloat el er) = do
+  res <-
+    ((fromBool .) . (<)) <$> Trans.lift (readFloatOperand el) <*>
+    Trans.lift (readFloatOperand er)
   Trans.lift $ writeRegister RegisterRAX res
 execute (StatementNegFloat v) = do
-  res <- negate <$> Trans.lift (readIntOperand v)
-  Trans.lift $ writeRegister RegisterRAX res
+  res <- negate <$> Trans.lift (readFloatOperand v)
+  Trans.lift $ writeRegister RegisterXMM0 res
 execute (StatementIntToFloat v) = do
   ValueInt i <- Trans.lift (readIntOperand v)
-  Trans.lift $ writeRegister RegisterRAX (ValueFloat $ fromIntegral i)
+  Trans.lift $ writeRegister RegisterXMM0 (ValueFloat $ fromIntegral i)
+execute (StatementAssignFloat lhs rhs) = do
+  res <- Trans.lift $ readFloatOperand rhs
+  Trans.lift $ writeFloatOperand lhs res
 execute (InstructionCMP lhs rhs) = do
   ValueInt lhs' <- Trans.lift (readIntOperand lhs)
   ValueInt rhs' <- Trans.lift (readIntOperand rhs)

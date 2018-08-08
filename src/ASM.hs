@@ -77,6 +77,9 @@ opRCX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRCX
 opRDX :: ASMSyntax.VarType -> ASMSyntax.IntOperand
 opRDX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRDX
 
+opXMM0 :: ASMSyntax.FloatOperand
+opXMM0 = ASMSyntax.FloatOperandRegister ASMSyntax.RegisterXMM0
+
 peekStack :: ASMSyntax.VarType -> ASMSyntax.IntOperand
 peekStack t =
   ASMSyntax.IntOperandPointer
@@ -109,6 +112,19 @@ resolveVariableAsIntOperand v = do
     ASMSyntax.IntOperandPointer
       ASMSyntax.Pointer
         { ASMSyntax.pointerType = t
+        , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
+        , ASMSyntax.pointerDisplacement = d
+        }
+
+resolveVariableAsFloatOperand ::
+     MonadState Env m => LinearSyntax.Var -> m ASMSyntax.FloatOperand
+resolveVariableAsFloatOperand v = do
+  Var {varType = ASMSyntax.VarTypeFloat, varDisplacement = d} <-
+    resolveVariable v
+  pure $
+    ASMSyntax.FloatOperandPointer
+      ASMSyntax.Pointer
+        { ASMSyntax.pointerType = ASMSyntax.VarTypeFloat
         , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
         , ASMSyntax.pointerDisplacement = d
         }
@@ -193,8 +209,13 @@ translateStatement (LinearSyntax.StatementAssign v (LinearSyntax.ExprFunctionCal
   addStatement $ ASMSyntax.InstructionMOV v' (Left retValue)
 translateStatement (LinearSyntax.StatementAssign v e) = do
   res <- translateExpr e
-  v' <- resolveVariableAsIntOperand v
-  addStatement $ ASMSyntax.InstructionMOV v' (Left res)
+  case res of
+    Left intOperand -> do
+      v' <- resolveVariableAsIntOperand v
+      addStatement $ ASMSyntax.InstructionMOV v' (Left intOperand)
+    Right floatOperand -> do
+      v' <- resolveVariableAsFloatOperand v
+      addStatement $ ASMSyntax.StatementAssignFloat v' floatOperand
 translateStatement (LinearSyntax.StatementAssignToPtr p v) = do
   p' <- resolveVariableAsIntOperand p
   addStatement $ ASMSyntax.InstructionMOV (opRAX ASMSyntax.VarTypeInt) (Left p')
@@ -337,14 +358,16 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
   cleanStackAfterCall cc
   pure cc
 
-translateExpr :: LinearSyntax.Expr -> ASMStatement ASMSyntax.IntOperand
+type SomeOperand = Either ASMSyntax.IntOperand ASMSyntax.FloatOperand
+
+translateExpr :: LinearSyntax.Expr -> ASMStatement SomeOperand
 translateExpr (LinearSyntax.ExprFunctionCall _) =
   error "Must've been handled in translateStatement"
 translateExpr (LinearSyntax.ExprVar v) = do
   v' <- resolveVariableAsIntOperand v
   let res = opRAX (ASMSyntax.intOperandType v')
   addStatement $ ASMSyntax.InstructionMOV res (Left v')
-  pure res
+  pure $ Left res
 translateExpr (LinearSyntax.ExprDereference v) = do
   v' <- resolveVariableAsIntOperand v
   addStatement $
@@ -360,7 +383,7 @@ translateExpr (LinearSyntax.ExprDereference v) = do
            , ASMSyntax.pointerDisplacement = 0
            , ASMSyntax.pointerType = ASMSyntax.intOperandType v'
            })
-  pure res
+  pure $ Left res
 translateExpr (LinearSyntax.ExprAddressOf v) = do
   Var {varDisplacement = d} <- resolveVariable v
   addStatement $
@@ -370,170 +393,203 @@ translateExpr (LinearSyntax.ExprAddressOf v) = do
   let rax = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionMOV rax (Left opRBP)
   addStatement $ ASMSyntax.InstructionADD rax (opRCX ASMSyntax.VarTypeInt)
-  pure rax
+  pure $ Left rax
 translateExpr (LinearSyntax.ExprConst c) = do
   let res = opRAX (ASMSyntax.immediateType c)
   addStatement $ ASMSyntax.InstructionMOV res (Right c)
-  pure res
-translateExpr (LinearSyntax.ExprBinOp op lhs rhs) = do
-  lhs' <- resolveVariableAsIntOperand lhs
-  rhs' <- resolveVariableAsIntOperand rhs
-  translateBinOp op lhs' rhs'
-translateExpr (LinearSyntax.ExprUnOp op v) = do
-  v' <- resolveVariableAsIntOperand v
-  translateUnOp op v'
+  pure $ Left res
+translateExpr (LinearSyntax.ExprBinOp op lhs rhs) = translateBinOp op lhs rhs
+translateExpr (LinearSyntax.ExprUnOp op v) = translateUnOp op v
 
 translateUnOp ::
-     LinearSyntax.UnOp
-  -> ASMSyntax.IntOperand
-  -> ASMStatement ASMSyntax.IntOperand
+     LinearSyntax.UnOp -> LinearSyntax.Var -> ASMStatement SomeOperand
 translateUnOp LinearSyntax.UnNeg v =
-  case (ASMSyntax.intOperandType v) of
+  case (LinearSyntax.varType v) of
     ASMSyntax.VarTypeInt -> do
+      v' <- resolveVariableAsIntOperand v
       let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.InstructionMOV res (Left v)
+      addStatement $ ASMSyntax.InstructionMOV res (Left v')
       addStatement $ ASMSyntax.InstructionNEG res
-      pure res
+      pure $ Left res
     ASMSyntax.VarTypeFloat -> do
-      let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.StatementNegFloat v
-      pure res
+      v' <- resolveVariableAsFloatOperand v
+      let res = opXMM0
+      addStatement $ ASMSyntax.StatementNegFloat v'
+      pure $ Right res
     _ -> error "Type mismatch"
 translateUnOp LinearSyntax.UnNot v = do
-  compareIntToZero v
+  v' <- resolveVariableAsIntOperand v
+  compareIntToZero v'
   let res = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionSetZ res
-  pure res
+  pure $ Left res
 translateUnOp LinearSyntax.UnIntToFloat v = do
-  let res = opRAX ASMSyntax.VarTypeInt
-  addStatement $ ASMSyntax.StatementIntToFloat v
-  pure res
+  v' <- resolveVariableAsIntOperand v
+  let res = opXMM0
+  addStatement $ ASMSyntax.StatementIntToFloat v'
+  pure $ Right res
 
 translateBinOp ::
      LinearSyntax.BinOp
-  -> ASMSyntax.IntOperand
-  -> ASMSyntax.IntOperand
-  -> ASMStatement ASMSyntax.IntOperand
+  -> LinearSyntax.Var
+  -> LinearSyntax.Var
+  -> ASMStatement SomeOperand
 translateBinOp LinearSyntax.BinPlus lhs rhs =
-  case (ASMSyntax.intOperandType lhs, ASMSyntax.intOperandType rhs) of
+  case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
     (ASMSyntax.VarTypeInt, ASMSyntax.VarTypeInt) -> do
+      lhs' <- resolveVariableAsIntOperand lhs
+      rhs' <- resolveVariableAsIntOperand rhs
       let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.InstructionMOV res (Left lhs)
-      addStatement $ ASMSyntax.InstructionADD res rhs
-      pure res
+      addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
+      addStatement $ ASMSyntax.InstructionADD res rhs'
+      pure $ Left res
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
-      let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinPlusFloat lhs rhs
-      pure res
+      lhs' <- resolveVariableAsFloatOperand lhs
+      rhs' <- resolveVariableAsFloatOperand rhs
+      let res = opXMM0
+      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinPlusFloat lhs' rhs'
+      pure $ Right res
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinMinus lhs rhs =
-  case (ASMSyntax.intOperandType lhs, ASMSyntax.intOperandType rhs) of
+  case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
     (ASMSyntax.VarTypeInt, ASMSyntax.VarTypeInt) -> do
+      lhs' <- resolveVariableAsIntOperand lhs
+      rhs' <- resolveVariableAsIntOperand rhs
       let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.InstructionMOV res (Left lhs)
-      addStatement $ ASMSyntax.InstructionSUB res rhs
-      pure res
+      addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
+      addStatement $ ASMSyntax.InstructionSUB res rhs'
+      pure $ Left res
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
-      let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinMinusFloat lhs rhs
-      pure res
+      lhs' <- resolveVariableAsFloatOperand lhs
+      rhs' <- resolveVariableAsFloatOperand rhs
+      let res = opXMM0
+      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinMinusFloat lhs' rhs'
+      pure $ Right res
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinTimes lhs rhs =
-  case (ASMSyntax.intOperandType lhs, ASMSyntax.intOperandType rhs) of
+  case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
     (ASMSyntax.VarTypeInt, ASMSyntax.VarTypeInt) -> do
+      lhs' <- resolveVariableAsIntOperand lhs
+      rhs' <- resolveVariableAsIntOperand rhs
       let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.InstructionMOV res (Left lhs)
-      addStatement $ ASMSyntax.InstructionIMUL res rhs
-      pure res
+      addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
+      addStatement $ ASMSyntax.InstructionIMUL res rhs'
+      pure $ Left res
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
-      let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinTimesFloat lhs rhs
-      pure res
+      lhs' <- resolveVariableAsFloatOperand lhs
+      rhs' <- resolveVariableAsFloatOperand rhs
+      let res = opXMM0
+      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinTimesFloat lhs' rhs'
+      pure $ Right res
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinDiv lhs rhs =
-  case (ASMSyntax.intOperandType lhs, ASMSyntax.intOperandType rhs) of
+  case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
     (ASMSyntax.VarTypeInt, ASMSyntax.VarTypeInt) -> do
+      lhs' <- resolveVariableAsIntOperand lhs
+      rhs' <- resolveVariableAsIntOperand rhs
       let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.InstructionMOV res (Left lhs)
+      addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
       addStatement $ ASMSyntax.InstructionCQO
-      addStatement $ ASMSyntax.InstructionIDIV rhs
-      pure res
+      addStatement $ ASMSyntax.InstructionIDIV rhs'
+      pure $ Left res
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
-      let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinDivFloat lhs rhs
-      pure res
+      lhs' <- resolveVariableAsFloatOperand lhs
+      rhs' <- resolveVariableAsFloatOperand rhs
+      let res = opXMM0
+      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinDivFloat lhs' rhs'
+      pure $ Right res
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinMod lhs rhs =
-  case (ASMSyntax.intOperandType lhs, ASMSyntax.intOperandType rhs) of
+  case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
     (ASMSyntax.VarTypeInt, ASMSyntax.VarTypeInt) -> do
+      lhs' <- resolveVariableAsIntOperand lhs
+      rhs' <- resolveVariableAsIntOperand rhs
       let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.InstructionMOV res (Left lhs)
+      addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
       addStatement $ ASMSyntax.InstructionCQO
-      addStatement $ ASMSyntax.InstructionIDIV rhs
+      addStatement $ ASMSyntax.InstructionIDIV rhs'
       addStatement $
         ASMSyntax.InstructionMOV res (Left $ opRDX ASMSyntax.VarTypeInt)
-      pure res
+      pure $ Left res
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinBitAnd lhs rhs = do
-  let res = opRAX ASMSyntax.VarTypeInt
-  addStatement $ ASMSyntax.InstructionMOV res (Left lhs)
-  addStatement $ ASMSyntax.InstructionAND res rhs
-  pure res
-translateBinOp LinearSyntax.BinBitOr lhs rhs = do
-  let res = opRAX ASMSyntax.VarTypeInt
-  addStatement $ ASMSyntax.InstructionMOV res (Left lhs)
-  addStatement $ ASMSyntax.InstructionOR res rhs
-  pure res
-translateBinOp LinearSyntax.BinBitXor lhs rhs = do
-  let res = opRAX ASMSyntax.VarTypeInt
-  addStatement $ ASMSyntax.InstructionMOV res (Left lhs)
-  addStatement $ ASMSyntax.InstructionXOR res rhs
-  pure res
-translateBinOp LinearSyntax.BinAnd lhs rhs = do
-  compareIntToZero lhs
-  let lhs' = opRCX ASMSyntax.VarTypeInt
-  addStatement $ ASMSyntax.InstructionSetNZ lhs'
-  compareIntToZero rhs
-  let rhs' = opRDX ASMSyntax.VarTypeInt
-  addStatement $ ASMSyntax.InstructionSetNZ rhs'
+  lhs' <- resolveVariableAsIntOperand lhs
+  rhs' <- resolveVariableAsIntOperand rhs
   let res = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
   addStatement $ ASMSyntax.InstructionAND res rhs'
-  pure res
-translateBinOp LinearSyntax.BinOr lhs rhs = do
-  compareIntToZero lhs
-  let lhs' = opRCX ASMSyntax.VarTypeInt
-  addStatement $ ASMSyntax.InstructionSetNZ lhs'
-  compareIntToZero rhs
-  let rhs' = opRDX ASMSyntax.VarTypeInt
-  addStatement $ ASMSyntax.InstructionSetNZ rhs'
+  pure $ Left res
+translateBinOp LinearSyntax.BinBitOr lhs rhs = do
+  lhs' <- resolveVariableAsIntOperand lhs
+  rhs' <- resolveVariableAsIntOperand rhs
   let res = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
   addStatement $ ASMSyntax.InstructionOR res rhs'
-  pure res
+  pure $ Left res
+translateBinOp LinearSyntax.BinBitXor lhs rhs = do
+  lhs' <- resolveVariableAsIntOperand lhs
+  rhs' <- resolveVariableAsIntOperand rhs
+  let res = opRAX ASMSyntax.VarTypeInt
+  addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
+  addStatement $ ASMSyntax.InstructionXOR res rhs'
+  pure $ Left res
+translateBinOp LinearSyntax.BinAnd lhs rhs = do
+  lhs' <- resolveVariableAsIntOperand lhs
+  rhs' <- resolveVariableAsIntOperand rhs
+  compareIntToZero lhs'
+  let lhs'' = opRCX ASMSyntax.VarTypeInt
+  addStatement $ ASMSyntax.InstructionSetNZ lhs''
+  compareIntToZero rhs'
+  let rhs'' = opRDX ASMSyntax.VarTypeInt
+  addStatement $ ASMSyntax.InstructionSetNZ rhs''
+  let res = opRAX ASMSyntax.VarTypeInt
+  addStatement $ ASMSyntax.InstructionMOV res (Left lhs'')
+  addStatement $ ASMSyntax.InstructionAND res rhs''
+  pure $ Left res
+translateBinOp LinearSyntax.BinOr lhs rhs = do
+  lhs' <- resolveVariableAsIntOperand lhs
+  rhs' <- resolveVariableAsIntOperand rhs
+  compareIntToZero lhs'
+  let lhs'' = opRCX ASMSyntax.VarTypeInt
+  addStatement $ ASMSyntax.InstructionSetNZ lhs''
+  compareIntToZero rhs'
+  let rhs'' = opRDX ASMSyntax.VarTypeInt
+  addStatement $ ASMSyntax.InstructionSetNZ rhs''
+  let res = opRAX ASMSyntax.VarTypeInt
+  addStatement $ ASMSyntax.InstructionMOV res (Left lhs'')
+  addStatement $ ASMSyntax.InstructionOR res rhs''
+  pure $ Left res
 translateBinOp LinearSyntax.BinEq lhs rhs =
-  case (ASMSyntax.intOperandType lhs, ASMSyntax.intOperandType rhs) of
+  case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
     (ASMSyntax.VarTypeInt, ASMSyntax.VarTypeInt) -> do
-      addStatement $ ASMSyntax.InstructionCMP lhs rhs
+      lhs' <- resolveVariableAsIntOperand lhs
+      rhs' <- resolveVariableAsIntOperand rhs
+      addStatement $ ASMSyntax.InstructionCMP lhs' rhs'
       let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.InstructionSetZ res
-      pure res
+      pure $ Left res
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
+      lhs' <- resolveVariableAsFloatOperand lhs
+      rhs' <- resolveVariableAsFloatOperand rhs
       let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinEqFloat lhs rhs
-      pure res
+      addStatement $ ASMSyntax.StatementEqFloat lhs' rhs'
+      pure $ Left res
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinLt lhs rhs =
-  case (ASMSyntax.intOperandType lhs, ASMSyntax.intOperandType rhs) of
+  case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
     (ASMSyntax.VarTypeInt, ASMSyntax.VarTypeInt) -> do
-      addStatement $ ASMSyntax.InstructionCMP lhs rhs
+      lhs' <- resolveVariableAsIntOperand lhs
+      rhs' <- resolveVariableAsIntOperand rhs
+      addStatement $ ASMSyntax.InstructionCMP lhs' rhs'
       let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.InstructionSetS res
-      pure res
+      pure $ Left res
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
+      lhs' <- resolveVariableAsFloatOperand lhs
+      rhs' <- resolveVariableAsFloatOperand rhs
       let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinLtFloat lhs rhs
-      pure res
+      addStatement $ ASMSyntax.StatementLtFloat lhs' rhs'
+      pure $ Left res
     _ -> error "Type mismatch"
 
 -- Compare int operand to zero and set EFLAGS.

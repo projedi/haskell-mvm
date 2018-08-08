@@ -76,12 +76,14 @@ instance PrettyPrintSimple BinOp where
   prettyPrintSimple BinMinusFloat = "-"
   prettyPrintSimple BinTimesFloat = "*"
   prettyPrintSimple BinDivFloat = "/"
-  prettyPrintSimple BinEqFloat = "=="
-  prettyPrintSimple BinLtFloat = "<"
 
 instance PrettyPrintSimple IntOperand where
   prettyPrintSimple (IntOperandRegister _ r) = prettyPrintSimple r
   prettyPrintSimple (IntOperandPointer p) = prettyPrintSimple p
+
+instance PrettyPrintSimple FloatOperand where
+  prettyPrintSimple (FloatOperandRegister r) = prettyPrintSimple r
+  prettyPrintSimple (FloatOperandPointer p) = prettyPrintSimple p
 
 instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"
@@ -111,9 +113,15 @@ instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementBinOp op el er) =
     prettyPrintSimple el ++
     " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er ++ ";"
+  prettyPrintSimple (StatementEqFloat el er) =
+    prettyPrintSimple el ++ " == " ++ prettyPrintSimple er ++ ";"
+  prettyPrintSimple (StatementLtFloat el er) =
+    prettyPrintSimple el ++ " < " ++ prettyPrintSimple er ++ ";"
   prettyPrintSimple (StatementNegFloat v) = "-" ++ prettyPrintSimple v ++ ";"
   prettyPrintSimple (StatementIntToFloat v) =
     "(double)" ++ prettyPrintSimple v ++ ";"
+  prettyPrintSimple (StatementAssignFloat lhs rhs) =
+    prettyPrintSimple lhs ++ " = " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionCMP lhs rhs) =
     "CMP " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionSetZ v) = "SETZ " ++ prettyPrintSimple v
