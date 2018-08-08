@@ -133,6 +133,8 @@ data Statement
   | InstructionSetNZ IntOperand
   -- Set to 1 if SF(EFLAGS) = 1, 0 - otherwise.
   | InstructionSetS IntOperand
+  -- Set to 1 if CF(EFLAGS) = 1, 0 - otherwise.
+  | InstructionSetC IntOperand
   -- Copy from rhs to lhs.
   | InstructionMOV IntOperand
                    (Either IntOperand Immediate)

@@ -437,6 +437,14 @@ execute (InstructionSetS v) = do
       (if sf
          then ValueInt 1
          else ValueInt 0)
+execute (InstructionSetC v) = do
+  cf <- State.gets (efCF . regEFLAGS)
+  Trans.lift $
+    writeIntOperand
+      v
+      (if cf
+         then ValueInt 1
+         else ValueInt 0)
 execute (InstructionMOV lhs rhs) = do
   res <- Trans.lift $ either readIntOperand readImmediate rhs
   Trans.lift $ writeIntOperand lhs res

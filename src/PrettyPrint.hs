@@ -129,6 +129,7 @@ instance PrettyPrintSimple Statement where
   prettyPrintSimple (InstructionSetZ v) = "SETZ " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionSetNZ v) = "SETNZ " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionSetS v) = "SETS " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionSetC v) = "SETC " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionMOV lhs rhs) =
     "MOV " ++
     prettyPrintSimple lhs ++
