@@ -12,8 +12,6 @@ module ASMSyntax
   , FunctionCall(..)
   , BinOp(..)
   , binOpTypeFromArgs
-  , UnOp(..)
-  , unOpTypeFromArg
   , Register(..)
   , Pointer(..)
   , IntOperand(..)
@@ -79,16 +77,6 @@ intOperandType :: IntOperand -> VarType
 intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
 
-data UnOp
-  = UnNegFloat
-  | UnIntToFloat
-
-unOpTypeFromArg :: UnOp -> VarType -> VarType
-unOpTypeFromArg UnNegFloat VarTypeFloat = VarTypeFloat
-unOpTypeFromArg UnNegFloat _ = error "Type mismatch"
-unOpTypeFromArg UnIntToFloat VarTypeInt = VarTypeFloat
-unOpTypeFromArg UnIntToFloat _ = error "Type mismatch"
-
 data BinOp
   = BinPlusFloat
   | BinMinusFloat
@@ -117,8 +105,9 @@ data Statement
                    IntOperand
                    IntOperand
   -- Stores result in RAX
-  | StatementUnOp UnOp
-                  IntOperand
+  | StatementNegFloat IntOperand
+  -- Stores result in RAX
+  | StatementIntToFloat IntOperand
   | StatementPushOnStack IntOperand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType

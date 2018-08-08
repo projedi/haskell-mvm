@@ -387,13 +387,13 @@ translateUnOp LinearSyntax.UnNeg v =
         ASMSyntax.InstructionMOV (opRAX ASMSyntax.VarTypeInt) (Left v)
       addStatement $ ASMSyntax.InstructionNEG (opRAX ASMSyntax.VarTypeInt)
     ASMSyntax.VarTypeFloat ->
-      addStatement $ ASMSyntax.StatementUnOp ASMSyntax.UnNegFloat v
+      addStatement $ ASMSyntax.StatementNegFloat v
     _ -> error "Type mismatch"
 translateUnOp LinearSyntax.UnNot v = do
   compareIntToZero v
   addStatement $ ASMSyntax.InstructionSetZ (opRAX ASMSyntax.VarTypeInt)
 translateUnOp LinearSyntax.UnIntToFloat v =
-  addStatement $ ASMSyntax.StatementUnOp ASMSyntax.UnIntToFloat v
+  addStatement $ ASMSyntax.StatementIntToFloat v
 
 translateBinOp ::
      LinearSyntax.BinOp

@@ -318,14 +318,6 @@ writeIntOperand :: IntOperand -> Value -> Execute ()
 writeIntOperand (IntOperandRegister _ r) val = writeRegister r val
 writeIntOperand (IntOperandPointer p) val = writePointer p val
 
-evaluateUnOp :: UnOp -> (Value -> Value)
-evaluateUnOp UnNegFloat = negate
-evaluateUnOp UnIntToFloat =
-  \v ->
-    case v of
-      ValueInt i -> ValueFloat $ fromIntegral i
-      _ -> error "Type mismatch"
-
 evaluateBinOp :: BinOp -> (Value -> Value -> Value)
 evaluateBinOp BinPlusFloat = (+)
 evaluateBinOp BinMinusFloat = (-)
@@ -377,9 +369,12 @@ execute (StatementBinOp op el er) = do
     evaluateBinOp op <$> Trans.lift (readIntOperand el) <*>
     Trans.lift (readIntOperand er)
   Trans.lift $ writeRegister RegisterRAX res
-execute (StatementUnOp op v) = do
-  res <- evaluateUnOp op <$> Trans.lift (readIntOperand v)
+execute (StatementNegFloat v) = do
+  res <- negate <$> Trans.lift (readIntOperand v)
   Trans.lift $ writeRegister RegisterRAX res
+execute (StatementIntToFloat v) = do
+  ValueInt i <- Trans.lift (readIntOperand v)
+  Trans.lift $ writeRegister RegisterRAX (ValueFloat $ fromIntegral i)
 execute (InstructionCMP lhs rhs) = do
   ValueInt lhs' <- Trans.lift (readIntOperand lhs)
   ValueInt rhs' <- Trans.lift (readIntOperand rhs)
