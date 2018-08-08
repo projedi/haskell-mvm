@@ -106,9 +106,6 @@ data Statement
   = StatementBinOp BinOp
                    FloatOperand
                    FloatOperand
-  -- Stores result in RAX
-  | StatementEqFloat FloatOperand
-                     FloatOperand
   | StatementPushOnStack IntOperand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType

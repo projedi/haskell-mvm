@@ -591,9 +591,15 @@ translateBinOp LinearSyntax.BinEq lhs rhs =
       addStatement $ ASMSyntax.InstructionSetZ res
       pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
-      lhs' <- resolveVariableAsFloatOperand lhs
-      rhs' <- resolveVariableAsFloatOperand rhs
-      addStatement $ ASMSyntax.StatementEqFloat lhs' rhs'
+      lhs' <- resolveVariableAsPointer lhs
+      rhs' <- resolveVariableAsPointer rhs
+      let xmm0 = ASMSyntax.RegisterXMM0
+      let xmm1 = ASMSyntax.RegisterXMM1
+      addStatement $ ASMSyntax.InstructionMOVSD_XMM_M64 xmm0 lhs'
+      addStatement $ ASMSyntax.InstructionMOVSD_XMM_M64 xmm1 rhs'
+      addStatement $ ASMSyntax.InstructionCOMISD xmm0 xmm1
+      let rax = opRAX ASMSyntax.VarTypeInt
+      addStatement $ ASMSyntax.InstructionSetZ rax
       pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinLt lhs rhs =
