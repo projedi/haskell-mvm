@@ -77,9 +77,6 @@ opRCX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRCX
 opRDX :: ASMSyntax.VarType -> ASMSyntax.IntOperand
 opRDX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRDX
 
-opXMM0 :: ASMSyntax.FloatOperand
-opXMM0 = ASMSyntax.FloatOperandRegister ASMSyntax.RegisterXMM0
-
 peekStack :: ASMSyntax.VarType -> ASMSyntax.IntOperand
 peekStack t =
   ASMSyntax.IntOperandPointer
@@ -104,30 +101,26 @@ resolveVariable :: MonadState Env m => LinearSyntax.Var -> m Var
 resolveVariable LinearSyntax.Var {LinearSyntax.varName = LinearSyntax.VarID vid} =
   State.gets ((IntMap.! vid) . varMap)
 
-resolveVariableAsIntOperand ::
-     MonadState Env m => LinearSyntax.Var -> m ASMSyntax.IntOperand
-resolveVariableAsIntOperand v = do
+resolveVariableAsPointer ::
+     MonadState Env m => LinearSyntax.Var -> m ASMSyntax.Pointer
+resolveVariableAsPointer v = do
   Var {varType = t, varDisplacement = d} <- resolveVariable v
   pure $
-    ASMSyntax.IntOperandPointer
-      ASMSyntax.Pointer
-        { ASMSyntax.pointerType = t
-        , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
-        , ASMSyntax.pointerDisplacement = d
-        }
+    ASMSyntax.Pointer
+      { ASMSyntax.pointerType = t
+      , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
+      , ASMSyntax.pointerDisplacement = d
+      }
+
+resolveVariableAsIntOperand ::
+     MonadState Env m => LinearSyntax.Var -> m ASMSyntax.IntOperand
+resolveVariableAsIntOperand v =
+  ASMSyntax.IntOperandPointer <$> resolveVariableAsPointer v
 
 resolveVariableAsFloatOperand ::
      MonadState Env m => LinearSyntax.Var -> m ASMSyntax.FloatOperand
 resolveVariableAsFloatOperand v = do
-  Var {varType = ASMSyntax.VarTypeFloat, varDisplacement = d} <-
-    resolveVariable v
-  pure $
-    ASMSyntax.FloatOperandPointer
-      ASMSyntax.Pointer
-        { ASMSyntax.pointerType = ASMSyntax.VarTypeFloat
-        , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
-        , ASMSyntax.pointerDisplacement = d
-        }
+  ASMSyntax.FloatOperandPointer <$> resolveVariableAsPointer v
 
 translateCode :: IntMap LinearSyntax.FunctionDef -> ASM ()
 translateCode fs = do
@@ -145,14 +138,12 @@ translateCode fs = do
   addStatement $ ASMSyntax.InstructionRET
   mapM_ translateFunctionDef fs
 
-retValueFromCallingConvention :: CallingConvention -> Maybe SomeOperand
+retValueFromCallingConvention :: CallingConvention -> Maybe SomeRegister
 retValueFromCallingConvention cc =
   case CallingConvention.funRetValue cc of
     Nothing -> Nothing
-    Just (CallingConvention.RetLocationRegister t r) ->
-      Just $ Left $ ASMSyntax.IntOperandRegister t r
-    Just (CallingConvention.RetLocationRegisterXMM r) ->
-      Just $ Right $ ASMSyntax.FloatOperandRegister r
+    Just (CallingConvention.RetLocationRegister t r) -> Just $ Left (t, r)
+    Just (CallingConvention.RetLocationRegisterXMM r) -> Just $ Right r
 
 translateFunctionDef :: LinearSyntax.FunctionDef -> ASM ()
 translateFunctionDef fdef = do
@@ -192,7 +183,7 @@ translateFunctionDef fdef = do
 type ASMStatement = ReaderT ConstEnv ASM
 
 data ConstEnv = ConstEnv
-  { retValueLocation :: Maybe SomeOperand
+  { retValueLocation :: Maybe SomeRegister
   , epilogueLabel :: ASMSyntax.LabelID
   }
 
@@ -211,21 +202,23 @@ translateStatement (LinearSyntax.StatementAssign v (LinearSyntax.ExprFunctionCal
   cc <- translateFunctionCall fcall
   let (Just retValue) = retValueFromCallingConvention cc
   case retValue of
-    Left intRetValue -> do
+    Left (t, r) -> do
       v' <- resolveVariableAsIntOperand v
-      addStatement $ ASMSyntax.InstructionMOV v' (Left intRetValue)
-    Right floatRetValue -> do
-      v' <- resolveVariableAsFloatOperand v
-      addStatement $ ASMSyntax.StatementAssignFloat v' floatRetValue
+      addStatement $
+        ASMSyntax.InstructionMOV v' (Left $ ASMSyntax.IntOperandRegister t r)
+    Right r -> do
+      v' <- resolveVariableAsPointer v
+      addStatement $ ASMSyntax.InstructionMOVSD_M64_XMM v' r
 translateStatement (LinearSyntax.StatementAssign v e) = do
   res <- translateExpr e
   case res of
-    Left intOperand -> do
+    Left (t, r) -> do
       v' <- resolveVariableAsIntOperand v
-      addStatement $ ASMSyntax.InstructionMOV v' (Left intOperand)
-    Right floatOperand -> do
-      v' <- resolveVariableAsFloatOperand v
-      addStatement $ ASMSyntax.StatementAssignFloat v' floatOperand
+      addStatement $
+        ASMSyntax.InstructionMOV v' (Left $ ASMSyntax.IntOperandRegister t r)
+    Right r -> do
+      v' <- resolveVariableAsPointer v
+      addStatement $ ASMSyntax.InstructionMOVSD_M64_XMM v' r
 translateStatement (LinearSyntax.StatementAssignToPtr p v) = do
   p' <- resolveVariableAsIntOperand p
   addStatement $ ASMSyntax.InstructionMOV (opRAX ASMSyntax.VarTypeInt) (Left p')
@@ -246,12 +239,13 @@ translateStatement (LinearSyntax.StatementReturn Nothing) = do
 translateStatement (LinearSyntax.StatementReturn (Just v)) = do
   Just rl <- Reader.asks retValueLocation
   case rl of
-    Left intRl -> do
+    Left (t, r) -> do
       v' <- resolveVariableAsIntOperand v
-      addStatement $ ASMSyntax.InstructionMOV intRl (Left v')
-    Right floatRl -> do
-      v' <- resolveVariableAsFloatOperand v
-      addStatement $ ASMSyntax.StatementAssignFloat floatRl v'
+      addStatement $
+        ASMSyntax.InstructionMOV (ASMSyntax.IntOperandRegister t r) (Left v')
+    Right r -> do
+      v' <- resolveVariableAsPointer v
+      addStatement $ ASMSyntax.InstructionMOVSD_XMM_M64 r v'
   lbl <- Reader.asks epilogueLabel
   addStatement $ ASMSyntax.InstructionJMP lbl
 translateStatement (LinearSyntax.StatementLabel l) =
@@ -283,15 +277,8 @@ prepareArgsForCall cc args = do
           (ASMSyntax.IntOperandRegister (ASMSyntax.intOperandType arg') r)
           (Left arg')
     go (arg, CallingConvention.ArgLocationRegisterXMM r) = do
-      arg' <- resolveVariableAsFloatOperand arg
-      addStatement $
-        ASMSyntax.StatementAssignFloat (ASMSyntax.FloatOperandRegister r) arg'
-    go (arg, CallingConvention.ArgLocationStack t@ASMSyntax.VarTypeFloat d) = do
-      arg' <- resolveVariableAsFloatOperand arg
-      addStatement $
-        ASMSyntax.StatementAssignFloat
-          (ASMSyntax.FloatOperandPointer $ pointerForStack t d)
-          arg'
+      arg' <- resolveVariableAsPointer arg
+      addStatement $ ASMSyntax.InstructionMOVSD_XMM_M64 r arg'
     go (arg, CallingConvention.ArgLocationStack t d) = do
       arg' <- resolveVariableAsIntOperand arg
       addStatement $
@@ -323,13 +310,7 @@ prepareArgsAtCall params cc = do
         (ASMSyntax.IntOperandPointer $ pointerForLocalVar v)
         (Left $ ASMSyntax.IntOperandRegister t r)
     go (CallingConvention.ArgLocationRegisterXMM r) v =
-      ASMSyntax.StatementAssignFloat
-        (ASMSyntax.FloatOperandPointer $ pointerForLocalVar v)
-        (ASMSyntax.FloatOperandRegister r)
-    go (CallingConvention.ArgLocationStack t@ASMSyntax.VarTypeFloat d) v =
-      ASMSyntax.StatementAssignFloat
-        (ASMSyntax.FloatOperandPointer $ pointerForLocalVar v)
-        (ASMSyntax.FloatOperandPointer $ pointerForParamVar t d)
+      ASMSyntax.InstructionMOVSD_M64_XMM (pointerForLocalVar v) r
     go (CallingConvention.ArgLocationStack t d) v =
       ASMSyntax.InstructionMOV
         (ASMSyntax.IntOperandPointer $ pointerForLocalVar v)
@@ -396,16 +377,17 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
   cleanStackAfterCall cc
   pure cc
 
-type SomeOperand = Either ASMSyntax.IntOperand ASMSyntax.FloatOperand
+type SomeRegister
+   = Either (ASMSyntax.VarType, ASMSyntax.Register) ASMSyntax.RegisterXMM
 
-translateExpr :: LinearSyntax.Expr -> ASMStatement SomeOperand
+translateExpr :: LinearSyntax.Expr -> ASMStatement SomeRegister
 translateExpr (LinearSyntax.ExprFunctionCall _) =
   error "Must've been handled in translateStatement"
 translateExpr (LinearSyntax.ExprVar v) = do
   v' <- resolveVariableAsIntOperand v
   let res = opRAX (ASMSyntax.intOperandType v')
   addStatement $ ASMSyntax.InstructionMOV res (Left v')
-  pure $ Left res
+  pure $ Left (ASMSyntax.intOperandType v', ASMSyntax.RegisterRAX)
 translateExpr (LinearSyntax.ExprDereference v) = do
   v' <- resolveVariableAsIntOperand v
   addStatement $
@@ -421,7 +403,7 @@ translateExpr (LinearSyntax.ExprDereference v) = do
            , ASMSyntax.pointerDisplacement = 0
            , ASMSyntax.pointerType = ASMSyntax.intOperandType v'
            })
-  pure $ Left res
+  pure $ Left (ASMSyntax.intOperandType v', ASMSyntax.RegisterRAX)
 translateExpr (LinearSyntax.ExprAddressOf v) = do
   Var {varDisplacement = d} <- resolveVariable v
   addStatement $
@@ -431,16 +413,16 @@ translateExpr (LinearSyntax.ExprAddressOf v) = do
   let rax = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionMOV rax (Left opRBP)
   addStatement $ ASMSyntax.InstructionADD rax (opRCX ASMSyntax.VarTypeInt)
-  pure $ Left rax
+  pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
 translateExpr (LinearSyntax.ExprConst c) = do
   let res = opRAX (ASMSyntax.immediateType c)
   addStatement $ ASMSyntax.InstructionMOV res (Right c)
-  pure $ Left res
+  pure $ Left (ASMSyntax.immediateType c, ASMSyntax.RegisterRAX)
 translateExpr (LinearSyntax.ExprBinOp op lhs rhs) = translateBinOp op lhs rhs
 translateExpr (LinearSyntax.ExprUnOp op v) = translateUnOp op v
 
 translateUnOp ::
-     LinearSyntax.UnOp -> LinearSyntax.Var -> ASMStatement SomeOperand
+     LinearSyntax.UnOp -> LinearSyntax.Var -> ASMStatement SomeRegister
 translateUnOp LinearSyntax.UnNeg v =
   case (LinearSyntax.varType v) of
     ASMSyntax.VarTypeInt -> do
@@ -448,30 +430,28 @@ translateUnOp LinearSyntax.UnNeg v =
       let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.InstructionMOV res (Left v')
       addStatement $ ASMSyntax.InstructionNEG res
-      pure $ Left res
+      pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     ASMSyntax.VarTypeFloat -> do
       v' <- resolveVariableAsFloatOperand v
-      let res = opXMM0
       addStatement $ ASMSyntax.StatementNegFloat v'
-      pure $ Right res
+      pure $ Right ASMSyntax.RegisterXMM0
     _ -> error "Type mismatch"
 translateUnOp LinearSyntax.UnNot v = do
   v' <- resolveVariableAsIntOperand v
   compareIntToZero v'
   let res = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionSetZ res
-  pure $ Left res
+  pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
 translateUnOp LinearSyntax.UnIntToFloat v = do
   v' <- resolveVariableAsIntOperand v
-  let res = opXMM0
   addStatement $ ASMSyntax.StatementIntToFloat v'
-  pure $ Right res
+  pure $ Right ASMSyntax.RegisterXMM0
 
 translateBinOp ::
      LinearSyntax.BinOp
   -> LinearSyntax.Var
   -> LinearSyntax.Var
-  -> ASMStatement SomeOperand
+  -> ASMStatement SomeRegister
 translateBinOp LinearSyntax.BinPlus lhs rhs =
   case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
     (ASMSyntax.VarTypeInt, ASMSyntax.VarTypeInt) -> do
@@ -480,13 +460,12 @@ translateBinOp LinearSyntax.BinPlus lhs rhs =
       let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
       addStatement $ ASMSyntax.InstructionADD res rhs'
-      pure $ Left res
+      pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
       lhs' <- resolveVariableAsFloatOperand lhs
       rhs' <- resolveVariableAsFloatOperand rhs
-      let res = opXMM0
       addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinPlusFloat lhs' rhs'
-      pure $ Right res
+      pure $ Right ASMSyntax.RegisterXMM0
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinMinus lhs rhs =
   case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
@@ -496,13 +475,12 @@ translateBinOp LinearSyntax.BinMinus lhs rhs =
       let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
       addStatement $ ASMSyntax.InstructionSUB res rhs'
-      pure $ Left res
+      pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
       lhs' <- resolveVariableAsFloatOperand lhs
       rhs' <- resolveVariableAsFloatOperand rhs
-      let res = opXMM0
       addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinMinusFloat lhs' rhs'
-      pure $ Right res
+      pure $ Right ASMSyntax.RegisterXMM0
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinTimes lhs rhs =
   case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
@@ -512,13 +490,12 @@ translateBinOp LinearSyntax.BinTimes lhs rhs =
       let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
       addStatement $ ASMSyntax.InstructionIMUL res rhs'
-      pure $ Left res
+      pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
       lhs' <- resolveVariableAsFloatOperand lhs
       rhs' <- resolveVariableAsFloatOperand rhs
-      let res = opXMM0
       addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinTimesFloat lhs' rhs'
-      pure $ Right res
+      pure $ Right ASMSyntax.RegisterXMM0
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinDiv lhs rhs =
   case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
@@ -529,13 +506,12 @@ translateBinOp LinearSyntax.BinDiv lhs rhs =
       addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
       addStatement $ ASMSyntax.InstructionCQO
       addStatement $ ASMSyntax.InstructionIDIV rhs'
-      pure $ Left res
+      pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
       lhs' <- resolveVariableAsFloatOperand lhs
       rhs' <- resolveVariableAsFloatOperand rhs
-      let res = opXMM0
       addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinDivFloat lhs' rhs'
-      pure $ Right res
+      pure $ Right ASMSyntax.RegisterXMM0
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinMod lhs rhs =
   case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
@@ -548,7 +524,7 @@ translateBinOp LinearSyntax.BinMod lhs rhs =
       addStatement $ ASMSyntax.InstructionIDIV rhs'
       addStatement $
         ASMSyntax.InstructionMOV res (Left $ opRDX ASMSyntax.VarTypeInt)
-      pure $ Left res
+      pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinBitAnd lhs rhs = do
   lhs' <- resolveVariableAsIntOperand lhs
@@ -556,21 +532,21 @@ translateBinOp LinearSyntax.BinBitAnd lhs rhs = do
   let res = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
   addStatement $ ASMSyntax.InstructionAND res rhs'
-  pure $ Left res
+  pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
 translateBinOp LinearSyntax.BinBitOr lhs rhs = do
   lhs' <- resolveVariableAsIntOperand lhs
   rhs' <- resolveVariableAsIntOperand rhs
   let res = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
   addStatement $ ASMSyntax.InstructionOR res rhs'
-  pure $ Left res
+  pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
 translateBinOp LinearSyntax.BinBitXor lhs rhs = do
   lhs' <- resolveVariableAsIntOperand lhs
   rhs' <- resolveVariableAsIntOperand rhs
   let res = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
   addStatement $ ASMSyntax.InstructionXOR res rhs'
-  pure $ Left res
+  pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
 translateBinOp LinearSyntax.BinAnd lhs rhs = do
   lhs' <- resolveVariableAsIntOperand lhs
   rhs' <- resolveVariableAsIntOperand rhs
@@ -583,7 +559,7 @@ translateBinOp LinearSyntax.BinAnd lhs rhs = do
   let res = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionMOV res (Left lhs'')
   addStatement $ ASMSyntax.InstructionAND res rhs''
-  pure $ Left res
+  pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
 translateBinOp LinearSyntax.BinOr lhs rhs = do
   lhs' <- resolveVariableAsIntOperand lhs
   rhs' <- resolveVariableAsIntOperand rhs
@@ -596,7 +572,7 @@ translateBinOp LinearSyntax.BinOr lhs rhs = do
   let res = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionMOV res (Left lhs'')
   addStatement $ ASMSyntax.InstructionOR res rhs''
-  pure $ Left res
+  pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
 translateBinOp LinearSyntax.BinEq lhs rhs =
   case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
     (ASMSyntax.VarTypeInt, ASMSyntax.VarTypeInt) -> do
@@ -605,13 +581,12 @@ translateBinOp LinearSyntax.BinEq lhs rhs =
       addStatement $ ASMSyntax.InstructionCMP lhs' rhs'
       let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.InstructionSetZ res
-      pure $ Left res
+      pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
       lhs' <- resolveVariableAsFloatOperand lhs
       rhs' <- resolveVariableAsFloatOperand rhs
-      let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.StatementEqFloat lhs' rhs'
-      pure $ Left res
+      pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinLt lhs rhs =
   case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
@@ -621,13 +596,12 @@ translateBinOp LinearSyntax.BinLt lhs rhs =
       addStatement $ ASMSyntax.InstructionCMP lhs' rhs'
       let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.InstructionSetS res
-      pure $ Left res
+      pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
       lhs' <- resolveVariableAsFloatOperand lhs
       rhs' <- resolveVariableAsFloatOperand rhs
-      let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.StatementLtFloat lhs' rhs'
-      pure $ Left res
+      pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     _ -> error "Type mismatch"
 
 -- Compare int operand to zero and set EFLAGS.

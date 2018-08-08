@@ -119,8 +119,6 @@ data Statement
   | StatementPushOnStack IntOperand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType
-  | StatementAssignFloat FloatOperand
-                         FloatOperand
   --
   -- From here on, statements are directly representable as ASM instructions.
   --

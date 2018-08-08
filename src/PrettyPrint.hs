@@ -122,8 +122,6 @@ instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementNegFloat v) = "-" ++ prettyPrintSimple v ++ ";"
   prettyPrintSimple (StatementIntToFloat v) =
     "(double)" ++ prettyPrintSimple v ++ ";"
-  prettyPrintSimple (StatementAssignFloat lhs rhs) =
-    prettyPrintSimple lhs ++ " = " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionCMP lhs rhs) =
     "CMP " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionSetZ v) = "SETZ " ++ prettyPrintSimple v

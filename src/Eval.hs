@@ -331,10 +331,6 @@ readFloatOperand :: FloatOperand -> Execute Value
 readFloatOperand (FloatOperandRegister r) = readRegisterXMM r
 readFloatOperand (FloatOperandPointer p) = readPointer p
 
-writeFloatOperand :: FloatOperand -> Value -> Execute ()
-writeFloatOperand (FloatOperandRegister r) val = writeRegisterXMM r val
-writeFloatOperand (FloatOperandPointer p) val = writePointer p val
-
 evaluateBinOp :: BinOp -> (Value -> Value -> Value)
 evaluateBinOp BinPlusFloat = (+)
 evaluateBinOp BinMinusFloat = (-)
@@ -400,9 +396,6 @@ execute (StatementNegFloat v) = do
 execute (StatementIntToFloat v) = do
   ValueInt i <- Trans.lift (readIntOperand v)
   Trans.lift $ writeRegisterXMM RegisterXMM0 (ValueFloat $ fromIntegral i)
-execute (StatementAssignFloat lhs rhs) = do
-  res <- Trans.lift $ readFloatOperand rhs
-  Trans.lift $ writeFloatOperand lhs res
 execute (InstructionCMP lhs rhs) = do
   ValueInt lhs' <- Trans.lift (readIntOperand lhs)
   ValueInt rhs' <- Trans.lift (readIntOperand rhs)
