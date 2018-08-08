@@ -111,8 +111,7 @@ instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementBinOp op el er) =
     prettyPrintSimple el ++
     " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er ++ ";"
-  prettyPrintSimple (StatementNegFloat v) =
-    "-" ++ prettyPrintSimple v ++ ";"
+  prettyPrintSimple (StatementNegFloat v) = "-" ++ prettyPrintSimple v ++ ";"
   prettyPrintSimple (StatementIntToFloat v) =
     "(double)" ++ prettyPrintSimple v ++ ";"
   prettyPrintSimple (InstructionCMP lhs rhs) =
