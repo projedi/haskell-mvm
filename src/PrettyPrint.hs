@@ -71,19 +71,9 @@ instance PrettyPrintSimple (Maybe VarType) where
   prettyPrintSimple (Just vtype) = prettyPrintSimple vtype
   prettyPrintSimple Nothing = "void"
 
-instance PrettyPrintSimple BinOp where
-  prettyPrintSimple BinPlusFloat = "+"
-  prettyPrintSimple BinMinusFloat = "-"
-  prettyPrintSimple BinTimesFloat = "*"
-  prettyPrintSimple BinDivFloat = "/"
-
 instance PrettyPrintSimple IntOperand where
   prettyPrintSimple (IntOperandRegister _ r) = prettyPrintSimple r
   prettyPrintSimple (IntOperandPointer p) = prettyPrintSimple p
-
-instance PrettyPrintSimple FloatOperand where
-  prettyPrintSimple (FloatOperandRegister r) = prettyPrintSimple r
-  prettyPrintSimple (FloatOperandPointer p) = prettyPrintSimple p
 
 instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"
@@ -112,23 +102,12 @@ instance PrettyPrintSimple Pointer where
 
 instance PrettyPrintSimple Statement where
   prettyPrintSimple (InstructionCALL fcall) = "CALL " ++ prettyPrintSimple fcall
-  prettyPrintSimple (StatementBinOp op el er) =
-    prettyPrintSimple el ++
-    " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er ++ ";"
-  prettyPrintSimple (StatementEqFloat el er) =
-    prettyPrintSimple el ++ " == " ++ prettyPrintSimple er ++ ";"
-  prettyPrintSimple (StatementLtFloat el er) =
-    prettyPrintSimple el ++ " < " ++ prettyPrintSimple er ++ ";"
-  prettyPrintSimple (StatementNegFloat v) = "-" ++ prettyPrintSimple v ++ ";"
-  prettyPrintSimple (StatementIntToFloat v) =
-    "(double)" ++ prettyPrintSimple v ++ ";"
-  prettyPrintSimple (StatementAssignFloat lhs rhs) =
-    prettyPrintSimple lhs ++ " = " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionCMP lhs rhs) =
     "CMP " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionSetZ v) = "SETZ " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionSetNZ v) = "SETNZ " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionSetS v) = "SETS " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionSetC v) = "SETC " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionMOV lhs rhs) =
     "MOV " ++
     prettyPrintSimple lhs ++
@@ -158,6 +137,24 @@ instance PrettyPrintSimple Statement where
   prettyPrintSimple (InstructionIMUL lhs rhs) =
     "IMUL " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple InstructionCQO = "CQO"
+  prettyPrintSimple (InstructionADDSD lhs rhs) =
+    "ADDSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionSUBSD lhs rhs) =
+    "SUBSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionMULSD lhs rhs) =
+    "MULSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionDIVSD lhs rhs) =
+    "DIVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionCOMISD lhs rhs) =
+    "COMISD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionMOVSD_XMM_XMM lhs rhs) =
+    "MOVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionMOVSD_XMM_M64 lhs rhs) =
+    "MOVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionMOVSD_M64_XMM lhs rhs) =
+    "MOVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionCVTSI2SD lhs rhs) =
+    "CVTSI2SD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
 
 instance PrettyPrintSimple FunctionDef where
   prettyPrintSimple FunctionDef {funDefBody = body} =

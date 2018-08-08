@@ -42,6 +42,7 @@ eval p = do
 data EFLAGS = EFLAGS
   { efZF :: Bool
   , efSF :: Bool
+  , efCF :: Bool
   }
 
 data Env = Env
@@ -101,7 +102,7 @@ emptyEnv =
     , regXMM5 = 0
     , regXMM6 = 0
     , regXMM7 = 0
-    , regEFLAGS = EFLAGS {efZF = False, efSF = False}
+    , regEFLAGS = EFLAGS {efZF = False, efSF = False, efCF = False}
     }
 
 type Execute = StateT Env IO
@@ -326,20 +327,6 @@ writeIntOperand :: IntOperand -> Value -> Execute ()
 writeIntOperand (IntOperandRegister _ r) val = writeRegister r val
 writeIntOperand (IntOperandPointer p) val = writePointer p val
 
-readFloatOperand :: FloatOperand -> Execute Value
-readFloatOperand (FloatOperandRegister r) = readRegisterXMM r
-readFloatOperand (FloatOperandPointer p) = readPointer p
-
-writeFloatOperand :: FloatOperand -> Value -> Execute ()
-writeFloatOperand (FloatOperandRegister r) val = writeRegisterXMM r val
-writeFloatOperand (FloatOperandPointer p) val = writePointer p val
-
-evaluateBinOp :: BinOp -> (Value -> Value -> Value)
-evaluateBinOp BinPlusFloat = (+)
-evaluateBinOp BinMinusFloat = (-)
-evaluateBinOp BinTimesFloat = (*)
-evaluateBinOp BinDivFloat = (/)
-
 data ConstEnv = ConstEnv
   { constEnvInstructions :: Array Int Statement
   , constEnvLabelMap :: IntMap Int
@@ -378,30 +365,6 @@ functionReturn = do
 
 execute :: Statement -> ExecuteStatement ()
 execute (InstructionCALL fcall) = functionCall fcall
-execute (StatementBinOp op el er) = do
-  res <-
-    evaluateBinOp op <$> Trans.lift (readFloatOperand el) <*>
-    Trans.lift (readFloatOperand er)
-  Trans.lift $ writeRegisterXMM RegisterXMM0 res
-execute (StatementEqFloat el er) = do
-  res <-
-    ((fromBool .) . (==)) <$> Trans.lift (readFloatOperand el) <*>
-    Trans.lift (readFloatOperand er)
-  Trans.lift $ writeRegister RegisterRAX res
-execute (StatementLtFloat el er) = do
-  res <-
-    ((fromBool .) . (<)) <$> Trans.lift (readFloatOperand el) <*>
-    Trans.lift (readFloatOperand er)
-  Trans.lift $ writeRegister RegisterRAX res
-execute (StatementNegFloat v) = do
-  res <- negate <$> Trans.lift (readFloatOperand v)
-  Trans.lift $ writeRegisterXMM RegisterXMM0 res
-execute (StatementIntToFloat v) = do
-  ValueInt i <- Trans.lift (readIntOperand v)
-  Trans.lift $ writeRegisterXMM RegisterXMM0 (ValueFloat $ fromIntegral i)
-execute (StatementAssignFloat lhs rhs) = do
-  res <- Trans.lift $ readFloatOperand rhs
-  Trans.lift $ writeFloatOperand lhs res
 execute (InstructionCMP lhs rhs) = do
   ValueInt lhs' <- Trans.lift (readIntOperand lhs)
   ValueInt rhs' <- Trans.lift (readIntOperand rhs)
@@ -434,6 +397,14 @@ execute (InstructionSetS v) = do
     writeIntOperand
       v
       (if sf
+         then ValueInt 1
+         else ValueInt 0)
+execute (InstructionSetC v) = do
+  cf <- State.gets (efCF . regEFLAGS)
+  Trans.lift $
+    writeIntOperand
+      v
+      (if cf
          then ValueInt 1
          else ValueInt 0)
 execute (InstructionMOV lhs rhs) = do
@@ -490,3 +461,41 @@ execute InstructionCQO
   -- TODO: Not implemented. We only use RAX.
  = do
   pure ()
+execute (InstructionADDSD lhs rhs) = do
+  lhs' <- Trans.lift (readRegisterXMM lhs)
+  rhs' <- Trans.lift (readRegisterXMM rhs)
+  Trans.lift (writeRegisterXMM lhs (lhs' + rhs'))
+execute (InstructionSUBSD lhs rhs) = do
+  lhs' <- Trans.lift (readRegisterXMM lhs)
+  rhs' <- Trans.lift (readRegisterXMM rhs)
+  Trans.lift (writeRegisterXMM lhs (lhs' - rhs'))
+execute (InstructionMULSD lhs rhs) = do
+  lhs' <- Trans.lift (readRegisterXMM lhs)
+  rhs' <- Trans.lift (readRegisterXMM rhs)
+  Trans.lift (writeRegisterXMM lhs (lhs' * rhs'))
+execute (InstructionDIVSD lhs rhs) = do
+  lhs' <- Trans.lift (readRegisterXMM lhs)
+  rhs' <- Trans.lift (readRegisterXMM rhs)
+  Trans.lift (writeRegisterXMM lhs (lhs' / rhs'))
+execute (InstructionCOMISD lhs rhs) = do
+  lhs' <- Trans.lift (readRegisterXMM lhs)
+  rhs' <- Trans.lift (readRegisterXMM rhs)
+  let (zf, cf) =
+        case (compare lhs' rhs') of
+          EQ -> (True, False)
+          LT -> (False, True)
+          GT -> (False, False)
+  State.modify $ \env ->
+    env {regEFLAGS = (regEFLAGS env) {efZF = zf, efCF = cf}}
+execute (InstructionMOVSD_XMM_XMM lhs rhs) = do
+  res <- Trans.lift (readRegisterXMM rhs)
+  Trans.lift (writeRegisterXMM lhs res)
+execute (InstructionMOVSD_XMM_M64 lhs rhs) = do
+  res <- Trans.lift (readPointer rhs)
+  Trans.lift (writeRegisterXMM lhs res)
+execute (InstructionMOVSD_M64_XMM lhs rhs) = do
+  res <- Trans.lift (readRegisterXMM rhs)
+  Trans.lift (writePointer lhs res)
+execute (InstructionCVTSI2SD lhs rhs) = do
+  ValueInt i <- Trans.lift (readIntOperand rhs)
+  Trans.lift (writeRegisterXMM lhs $ ValueFloat $ fromIntegral i)

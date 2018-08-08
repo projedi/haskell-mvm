@@ -10,14 +10,11 @@ module ASMSyntax
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
-  , BinOp(..)
-  , binOpTypeFromArgs
   , Register(..)
   , RegisterXMM(..)
   , Pointer(..)
   , IntOperand(..)
   , intOperandType
-  , FloatOperand(..)
   , Immediate(..)
   , immediateType
   ) where
@@ -81,46 +78,10 @@ intOperandType :: IntOperand -> VarType
 intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
 
-data FloatOperand
-  = FloatOperandRegister RegisterXMM
-  | FloatOperandPointer Pointer
-
-data BinOp
-  = BinPlusFloat
-  | BinMinusFloat
-  | BinTimesFloat
-  | BinDivFloat
-
-binOpTypeFromArgs :: BinOp -> VarType -> VarType -> VarType
-binOpTypeFromArgs BinPlusFloat VarTypeFloat VarTypeFloat = VarTypeFloat
-binOpTypeFromArgs BinPlusFloat _ _ = error "Type mismatch"
-binOpTypeFromArgs BinMinusFloat VarTypeFloat VarTypeFloat = VarTypeFloat
-binOpTypeFromArgs BinMinusFloat _ _ = error "Type mismatch"
-binOpTypeFromArgs BinTimesFloat VarTypeFloat VarTypeFloat = VarTypeFloat
-binOpTypeFromArgs BinTimesFloat _ _ = error "Type mismatch"
-binOpTypeFromArgs BinDivFloat VarTypeFloat VarTypeFloat = VarTypeFloat
-binOpTypeFromArgs BinDivFloat _ _ = error "Type mismatch"
-
 data Statement
-  -- Stores result in XMM0
-  = StatementBinOp BinOp
-                   FloatOperand
-                   FloatOperand
-  -- Stores result in RAX
-  | StatementEqFloat FloatOperand
-                     FloatOperand
-  -- Stores result in RAX
-  | StatementLtFloat FloatOperand
-                     FloatOperand
-  -- Stores result in XMM0
-  | StatementNegFloat FloatOperand
-  -- Stores result in XMM0
-  | StatementIntToFloat IntOperand
-  | StatementPushOnStack IntOperand
+  = StatementPushOnStack IntOperand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType
-  | StatementAssignFloat FloatOperand
-                         FloatOperand
   --
   -- From here on, statements are directly representable as ASM instructions.
   --
@@ -133,6 +94,8 @@ data Statement
   | InstructionSetNZ IntOperand
   -- Set to 1 if SF(EFLAGS) = 1, 0 - otherwise.
   | InstructionSetS IntOperand
+  -- Set to 1 if CF(EFLAGS) = 1, 0 - otherwise.
+  | InstructionSetC IntOperand
   -- Copy from rhs to lhs.
   | InstructionMOV IntOperand
                    (Either IntOperand Immediate)
@@ -170,6 +133,31 @@ data Statement
                     IntOperand
   -- Sign extends RAX into RDX:RAX.
   | InstructionCQO
+  -- Add low double precision in lhs to low double precision in rhs and store in rhs.
+  | InstructionADDSD RegisterXMM
+                     RegisterXMM
+  -- Subtract low double precision in rhs from low double precision in lhs and store in lhs.
+  | InstructionSUBSD RegisterXMM
+                     RegisterXMM
+  -- Multiply low double precision in lhs by low double precision in rhs and store in lhs.
+  | InstructionMULSD RegisterXMM
+                     RegisterXMM
+  -- Divide low double precision in lhs by low double precision in rhs and store in lhs.
+  | InstructionDIVSD RegisterXMM
+                     RegisterXMM
+  -- Compare low double precision in lhs with low double precision in rhs and set EFLAGS.
+  | InstructionCOMISD RegisterXMM
+                      RegisterXMM
+  -- Move from rhs to lhs.
+  | InstructionMOVSD_XMM_XMM RegisterXMM
+                             RegisterXMM
+  | InstructionMOVSD_XMM_M64 RegisterXMM
+                             Pointer
+  | InstructionMOVSD_M64_XMM Pointer
+                             RegisterXMM
+  -- Convert from integer in rhs to double precision in lhs.
+  | InstructionCVTSI2SD RegisterXMM
+                        IntOperand
 
 data FunctionDef = FunctionDef
   { funDefBody :: [Statement]
