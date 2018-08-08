@@ -85,18 +85,12 @@ data FloatOperand
   = FloatOperandRegister RegisterXMM
   | FloatOperandPointer Pointer
 
-data BinOp
-  = BinPlusFloat
-  | BinMinusFloat
-  | BinTimesFloat
+data BinOp =
+  BinPlusFloat
 
 binOpTypeFromArgs :: BinOp -> VarType -> VarType -> VarType
 binOpTypeFromArgs BinPlusFloat VarTypeFloat VarTypeFloat = VarTypeFloat
 binOpTypeFromArgs BinPlusFloat _ _ = error "Type mismatch"
-binOpTypeFromArgs BinMinusFloat VarTypeFloat VarTypeFloat = VarTypeFloat
-binOpTypeFromArgs BinMinusFloat _ _ = error "Type mismatch"
-binOpTypeFromArgs BinTimesFloat VarTypeFloat VarTypeFloat = VarTypeFloat
-binOpTypeFromArgs BinTimesFloat _ _ = error "Type mismatch"
 
 data Statement
   -- Stores result in XMM0

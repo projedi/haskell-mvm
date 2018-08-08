@@ -333,8 +333,6 @@ readFloatOperand (FloatOperandPointer p) = readPointer p
 
 evaluateBinOp :: BinOp -> (Value -> Value -> Value)
 evaluateBinOp BinPlusFloat = (+)
-evaluateBinOp BinMinusFloat = (-)
-evaluateBinOp BinTimesFloat = (*)
 
 data ConstEnv = ConstEnv
   { constEnvInstructions :: Array Int Statement
