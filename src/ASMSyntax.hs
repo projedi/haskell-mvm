@@ -89,7 +89,6 @@ data BinOp
   = BinPlusFloat
   | BinMinusFloat
   | BinTimesFloat
-  | BinDivFloat
 
 binOpTypeFromArgs :: BinOp -> VarType -> VarType -> VarType
 binOpTypeFromArgs BinPlusFloat VarTypeFloat VarTypeFloat = VarTypeFloat
@@ -98,8 +97,6 @@ binOpTypeFromArgs BinMinusFloat VarTypeFloat VarTypeFloat = VarTypeFloat
 binOpTypeFromArgs BinMinusFloat _ _ = error "Type mismatch"
 binOpTypeFromArgs BinTimesFloat VarTypeFloat VarTypeFloat = VarTypeFloat
 binOpTypeFromArgs BinTimesFloat _ _ = error "Type mismatch"
-binOpTypeFromArgs BinDivFloat VarTypeFloat VarTypeFloat = VarTypeFloat
-binOpTypeFromArgs BinDivFloat _ _ = error "Type mismatch"
 
 data Statement
   -- Stores result in XMM0

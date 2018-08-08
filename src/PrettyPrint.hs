@@ -75,7 +75,6 @@ instance PrettyPrintSimple BinOp where
   prettyPrintSimple BinPlusFloat = "+"
   prettyPrintSimple BinMinusFloat = "-"
   prettyPrintSimple BinTimesFloat = "*"
-  prettyPrintSimple BinDivFloat = "/"
 
 instance PrettyPrintSimple IntOperand where
   prettyPrintSimple (IntOperandRegister _ r) = prettyPrintSimple r

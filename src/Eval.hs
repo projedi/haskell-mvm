@@ -335,7 +335,6 @@ evaluateBinOp :: BinOp -> (Value -> Value -> Value)
 evaluateBinOp BinPlusFloat = (+)
 evaluateBinOp BinMinusFloat = (-)
 evaluateBinOp BinTimesFloat = (*)
-evaluateBinOp BinDivFloat = (/)
 
 data ConstEnv = ConstEnv
   { constEnvInstructions :: Array Int Statement

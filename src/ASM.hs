@@ -516,10 +516,14 @@ translateBinOp LinearSyntax.BinDiv lhs rhs =
       addStatement $ ASMSyntax.InstructionIDIV rhs'
       pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
-      lhs' <- resolveVariableAsFloatOperand lhs
-      rhs' <- resolveVariableAsFloatOperand rhs
-      addStatement $ ASMSyntax.StatementBinOp ASMSyntax.BinDivFloat lhs' rhs'
-      pure $ Right ASMSyntax.RegisterXMM0
+      lhs' <- resolveVariableAsPointer lhs
+      rhs' <- resolveVariableAsPointer rhs
+      let xmm0 = ASMSyntax.RegisterXMM0
+      let xmm1 = ASMSyntax.RegisterXMM1
+      addStatement $ ASMSyntax.InstructionMOVSD_XMM_M64 xmm0 lhs'
+      addStatement $ ASMSyntax.InstructionMOVSD_XMM_M64 xmm1 rhs'
+      addStatement $ ASMSyntax.InstructionDIVSD xmm0 xmm1
+      pure $ Right xmm0
     _ -> error "Type mismatch"
 translateBinOp LinearSyntax.BinMod lhs rhs =
   case (LinearSyntax.varType lhs, LinearSyntax.varType rhs) of
