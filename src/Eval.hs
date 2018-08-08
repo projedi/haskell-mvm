@@ -140,6 +140,7 @@ prepareArgsAtCall cc = do
   where
     go :: CallingConvention.ArgLocation -> Execute Value
     go (CallingConvention.ArgLocationRegister _ r) = readRegister r
+    go (CallingConvention.ArgLocationRegisterXMM r) = readRegisterXMM r
     go (CallingConvention.ArgLocationStack t d) =
       readPointer
         Pointer
@@ -179,7 +180,10 @@ foreignFunctionCall rettype params hasVarArgs args fun
   popFromStack VarTypeInt
   case (res, CallingConvention.funRetValue cc) of
     (Nothing, Nothing) -> pure ()
-    (Just r, Just (_, rv)) -> writeRegister rv r
+    (Just r, Just (CallingConvention.RetLocationRegister _ rv)) ->
+      writeRegister rv r
+    (Just r, Just (CallingConvention.RetLocationRegisterXMM rv)) ->
+      writeRegisterXMM rv r
     _ -> error "Type mismatch"
   where
     assertVals [] [] = []
@@ -254,14 +258,16 @@ readRegister RegisterRDX = State.gets regRDX
 readRegister RegisterRCX = State.gets regRCX
 readRegister RegisterR8 = State.gets regR8
 readRegister RegisterR9 = State.gets regR9
-readRegister RegisterXMM0 = State.gets (ValueFloat . regXMM0)
-readRegister RegisterXMM1 = State.gets (ValueFloat . regXMM1)
-readRegister RegisterXMM2 = State.gets (ValueFloat . regXMM2)
-readRegister RegisterXMM3 = State.gets (ValueFloat . regXMM3)
-readRegister RegisterXMM4 = State.gets (ValueFloat . regXMM4)
-readRegister RegisterXMM5 = State.gets (ValueFloat . regXMM5)
-readRegister RegisterXMM6 = State.gets (ValueFloat . regXMM6)
-readRegister RegisterXMM7 = State.gets (ValueFloat . regXMM7)
+
+readRegisterXMM :: RegisterXMM -> Execute Value
+readRegisterXMM RegisterXMM0 = State.gets (ValueFloat . regXMM0)
+readRegisterXMM RegisterXMM1 = State.gets (ValueFloat . regXMM1)
+readRegisterXMM RegisterXMM2 = State.gets (ValueFloat . regXMM2)
+readRegisterXMM RegisterXMM3 = State.gets (ValueFloat . regXMM3)
+readRegisterXMM RegisterXMM4 = State.gets (ValueFloat . regXMM4)
+readRegisterXMM RegisterXMM5 = State.gets (ValueFloat . regXMM5)
+readRegisterXMM RegisterXMM6 = State.gets (ValueFloat . regXMM6)
+readRegisterXMM RegisterXMM7 = State.gets (ValueFloat . regXMM7)
 
 writeRegister :: Register -> Value -> Execute ()
 writeRegister RegisterRSP (ValueInt i) = State.modify $ \env -> env {regRSP = i}
@@ -275,30 +281,32 @@ writeRegister RegisterRDX v = State.modify $ \env -> env {regRDX = v}
 writeRegister RegisterRCX v = State.modify $ \env -> env {regRCX = v}
 writeRegister RegisterR8 v = State.modify $ \env -> env {regR8 = v}
 writeRegister RegisterR9 v = State.modify $ \env -> env {regR9 = v}
-writeRegister RegisterXMM0 (ValueFloat f) =
+
+writeRegisterXMM :: RegisterXMM -> Value -> Execute ()
+writeRegisterXMM RegisterXMM0 (ValueFloat f) =
   State.modify $ \env -> env {regXMM0 = f}
-writeRegister RegisterXMM0 _ = error "Type mismatch"
-writeRegister RegisterXMM1 (ValueFloat f) =
+writeRegisterXMM RegisterXMM0 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM1 (ValueFloat f) =
   State.modify $ \env -> env {regXMM1 = f}
-writeRegister RegisterXMM1 _ = error "Type mismatch"
-writeRegister RegisterXMM2 (ValueFloat f) =
+writeRegisterXMM RegisterXMM1 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM2 (ValueFloat f) =
   State.modify $ \env -> env {regXMM2 = f}
-writeRegister RegisterXMM2 _ = error "Type mismatch"
-writeRegister RegisterXMM3 (ValueFloat f) =
+writeRegisterXMM RegisterXMM2 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM3 (ValueFloat f) =
   State.modify $ \env -> env {regXMM3 = f}
-writeRegister RegisterXMM3 _ = error "Type mismatch"
-writeRegister RegisterXMM4 (ValueFloat f) =
+writeRegisterXMM RegisterXMM3 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM4 (ValueFloat f) =
   State.modify $ \env -> env {regXMM4 = f}
-writeRegister RegisterXMM4 _ = error "Type mismatch"
-writeRegister RegisterXMM5 (ValueFloat f) =
+writeRegisterXMM RegisterXMM4 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM5 (ValueFloat f) =
   State.modify $ \env -> env {regXMM5 = f}
-writeRegister RegisterXMM5 _ = error "Type mismatch"
-writeRegister RegisterXMM6 (ValueFloat f) =
+writeRegisterXMM RegisterXMM5 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM6 (ValueFloat f) =
   State.modify $ \env -> env {regXMM6 = f}
-writeRegister RegisterXMM6 _ = error "Type mismatch"
-writeRegister RegisterXMM7 (ValueFloat f) =
+writeRegisterXMM RegisterXMM6 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM7 (ValueFloat f) =
   State.modify $ \env -> env {regXMM7 = f}
-writeRegister RegisterXMM7 _ = error "Type mismatch"
+writeRegisterXMM RegisterXMM7 _ = error "Type mismatch"
 
 readPointer :: Pointer -> Execute Value
 readPointer Pointer {pointerBase = mr, pointerDisplacement = d} = do
@@ -310,29 +318,27 @@ writePointer Pointer {pointerBase = mr, pointerDisplacement = d} val = do
   b <- maybe (pure $ ValueInt 0) readRegister mr
   writeToPtr (b + ValueInt d) val
 
-readOperand :: Operand -> Execute Value
-readOperand (OperandRegister _ r) = readRegister r
-readOperand (OperandPointer p) = readPointer p
+readIntOperand :: IntOperand -> Execute Value
+readIntOperand (IntOperandRegister _ r) = readRegister r
+readIntOperand (IntOperandPointer p) = readPointer p
 
-writeOperand :: Operand -> Value -> Execute ()
-writeOperand (OperandRegister _ r) val = writeRegister r val
-writeOperand (OperandPointer p) val = writePointer p val
+writeIntOperand :: IntOperand -> Value -> Execute ()
+writeIntOperand (IntOperandRegister _ r) val = writeRegister r val
+writeIntOperand (IntOperandPointer p) val = writePointer p val
 
-evaluateUnOp :: UnOp -> (Value -> Value)
-evaluateUnOp UnNegFloat = negate
-evaluateUnOp UnIntToFloat =
-  \v ->
-    case v of
-      ValueInt i -> ValueFloat $ fromIntegral i
-      _ -> error "Type mismatch"
+readFloatOperand :: FloatOperand -> Execute Value
+readFloatOperand (FloatOperandRegister r) = readRegisterXMM r
+readFloatOperand (FloatOperandPointer p) = readPointer p
+
+writeFloatOperand :: FloatOperand -> Value -> Execute ()
+writeFloatOperand (FloatOperandRegister r) val = writeRegisterXMM r val
+writeFloatOperand (FloatOperandPointer p) val = writePointer p val
 
 evaluateBinOp :: BinOp -> (Value -> Value -> Value)
 evaluateBinOp BinPlusFloat = (+)
 evaluateBinOp BinMinusFloat = (-)
 evaluateBinOp BinTimesFloat = (*)
 evaluateBinOp BinDivFloat = (/)
-evaluateBinOp BinEqFloat = (fromBool .) . (==)
-evaluateBinOp BinLtFloat = (fromBool .) . (<)
 
 data ConstEnv = ConstEnv
   { constEnvInstructions :: Array Int Statement
@@ -374,15 +380,31 @@ execute :: Statement -> ExecuteStatement ()
 execute (InstructionCALL fcall) = functionCall fcall
 execute (StatementBinOp op el er) = do
   res <-
-    evaluateBinOp op <$> Trans.lift (readOperand el) <*>
-    Trans.lift (readOperand er)
+    evaluateBinOp op <$> Trans.lift (readFloatOperand el) <*>
+    Trans.lift (readFloatOperand er)
+  Trans.lift $ writeRegisterXMM RegisterXMM0 res
+execute (StatementEqFloat el er) = do
+  res <-
+    ((fromBool .) . (==)) <$> Trans.lift (readFloatOperand el) <*>
+    Trans.lift (readFloatOperand er)
   Trans.lift $ writeRegister RegisterRAX res
-execute (StatementUnOp op v) = do
-  res <- evaluateUnOp op <$> Trans.lift (readOperand v)
+execute (StatementLtFloat el er) = do
+  res <-
+    ((fromBool .) . (<)) <$> Trans.lift (readFloatOperand el) <*>
+    Trans.lift (readFloatOperand er)
   Trans.lift $ writeRegister RegisterRAX res
+execute (StatementNegFloat v) = do
+  res <- negate <$> Trans.lift (readFloatOperand v)
+  Trans.lift $ writeRegisterXMM RegisterXMM0 res
+execute (StatementIntToFloat v) = do
+  ValueInt i <- Trans.lift (readIntOperand v)
+  Trans.lift $ writeRegisterXMM RegisterXMM0 (ValueFloat $ fromIntegral i)
+execute (StatementAssignFloat lhs rhs) = do
+  res <- Trans.lift $ readFloatOperand rhs
+  Trans.lift $ writeFloatOperand lhs res
 execute (InstructionCMP lhs rhs) = do
-  ValueInt lhs' <- Trans.lift (readOperand lhs)
-  ValueInt rhs' <- Trans.lift (readOperand rhs)
+  ValueInt lhs' <- Trans.lift (readIntOperand lhs)
+  ValueInt rhs' <- Trans.lift (readIntOperand rhs)
   let (zf, sf) =
         case compare lhs' rhs' of
           EQ -> (True, False)
@@ -393,7 +415,7 @@ execute (InstructionCMP lhs rhs) = do
 execute (InstructionSetZ v) = do
   zf <- State.gets (efZF . regEFLAGS)
   Trans.lift $
-    writeOperand
+    writeIntOperand
       v
       (if zf
          then ValueInt 1
@@ -401,7 +423,7 @@ execute (InstructionSetZ v) = do
 execute (InstructionSetNZ v) = do
   zf <- State.gets (efZF . regEFLAGS)
   Trans.lift $
-    writeOperand
+    writeIntOperand
       v
       (if zf
          then ValueInt 0
@@ -409,16 +431,16 @@ execute (InstructionSetNZ v) = do
 execute (InstructionSetS v) = do
   sf <- State.gets (efSF . regEFLAGS)
   Trans.lift $
-    writeOperand
+    writeIntOperand
       v
       (if sf
          then ValueInt 1
          else ValueInt 0)
 execute (InstructionMOV lhs rhs) = do
-  res <- Trans.lift $ either readOperand readImmediate rhs
-  Trans.lift $ writeOperand lhs res
+  res <- Trans.lift $ either readIntOperand readImmediate rhs
+  Trans.lift $ writeIntOperand lhs res
 execute (StatementPushOnStack x) = do
-  res <- Trans.lift $ readOperand x
+  res <- Trans.lift $ readIntOperand x
   Trans.lift $ pushOnStack res
 execute (StatementAllocateOnStack t) = do
   Trans.lift $ pushOnStack (defaultValueFromType t)
@@ -430,40 +452,40 @@ execute (InstructionJZ l) = do
   zf <- State.gets (efZF . regEFLAGS)
   when zf $ jump l
 execute (InstructionNEG v) = do
-  ValueInt val <- Trans.lift (readOperand v)
-  Trans.lift $ writeOperand v (ValueInt (negate val))
+  ValueInt val <- Trans.lift (readIntOperand v)
+  Trans.lift $ writeIntOperand v (ValueInt (negate val))
 execute (InstructionAND lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' .&. rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' .&. rhs')
 execute (InstructionXOR lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' `xor` rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' `xor` rhs')
 execute (InstructionOR lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' .|. rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' .|. rhs')
 execute (InstructionADD lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' + rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' + rhs')
 execute (InstructionSUB lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' - rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' - rhs')
 execute (InstructionIDIV v)
   -- TODO: Should use RDX:RAX
  = do
   lhs' <- Trans.lift (readRegister RegisterRAX)
-  rhs' <- Trans.lift (readOperand v)
+  rhs' <- Trans.lift (readIntOperand v)
   let (q, r) = lhs' `quotRem` rhs'
   Trans.lift $ writeRegister RegisterRAX q
   Trans.lift $ writeRegister RegisterRDX r
 execute (InstructionIMUL lhs rhs) = do
-  lhs' <- Trans.lift (readOperand lhs)
-  rhs' <- Trans.lift (readOperand rhs)
-  Trans.lift $ writeOperand lhs (lhs' * rhs')
+  lhs' <- Trans.lift (readIntOperand lhs)
+  rhs' <- Trans.lift (readIntOperand rhs)
+  Trans.lift $ writeIntOperand lhs (lhs' * rhs')
 execute InstructionCQO
   -- TODO: Not implemented. We only use RAX.
  = do

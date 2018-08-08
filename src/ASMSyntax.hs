@@ -12,12 +12,12 @@ module ASMSyntax
   , FunctionCall(..)
   , BinOp(..)
   , binOpTypeFromArgs
-  , UnOp(..)
-  , unOpTypeFromArg
   , Register(..)
+  , RegisterXMM(..)
   , Pointer(..)
-  , Operand(..)
-  , operandType
+  , IntOperand(..)
+  , intOperandType
+  , FloatOperand(..)
   , Immediate(..)
   , immediateType
   ) where
@@ -55,7 +55,9 @@ data Register
   | RegisterRCX
   | RegisterR8
   | RegisterR9
-  | RegisterXMM0
+
+data RegisterXMM
+  = RegisterXMM0
   | RegisterXMM1
   | RegisterXMM2
   | RegisterXMM3
@@ -70,32 +72,24 @@ data Pointer = Pointer
   , pointerDisplacement :: Int64
   }
 
-data Operand
-  = OperandRegister VarType
-                    Register
-  | OperandPointer Pointer
+data IntOperand
+  = IntOperandRegister VarType
+                       Register
+  | IntOperandPointer Pointer
 
-operandType :: Operand -> VarType
-operandType (OperandRegister t _) = t
-operandType (OperandPointer p) = pointerType p
+intOperandType :: IntOperand -> VarType
+intOperandType (IntOperandRegister t _) = t
+intOperandType (IntOperandPointer p) = pointerType p
 
-data UnOp
-  = UnNegFloat
-  | UnIntToFloat
-
-unOpTypeFromArg :: UnOp -> VarType -> VarType
-unOpTypeFromArg UnNegFloat VarTypeFloat = VarTypeFloat
-unOpTypeFromArg UnNegFloat _ = error "Type mismatch"
-unOpTypeFromArg UnIntToFloat VarTypeInt = VarTypeFloat
-unOpTypeFromArg UnIntToFloat _ = error "Type mismatch"
+data FloatOperand
+  = FloatOperandRegister RegisterXMM
+  | FloatOperandPointer Pointer
 
 data BinOp
   = BinPlusFloat
   | BinMinusFloat
   | BinTimesFloat
   | BinDivFloat
-  | BinEqFloat
-  | BinLtFloat
 
 binOpTypeFromArgs :: BinOp -> VarType -> VarType -> VarType
 binOpTypeFromArgs BinPlusFloat VarTypeFloat VarTypeFloat = VarTypeFloat
@@ -106,37 +100,42 @@ binOpTypeFromArgs BinTimesFloat VarTypeFloat VarTypeFloat = VarTypeFloat
 binOpTypeFromArgs BinTimesFloat _ _ = error "Type mismatch"
 binOpTypeFromArgs BinDivFloat VarTypeFloat VarTypeFloat = VarTypeFloat
 binOpTypeFromArgs BinDivFloat _ _ = error "Type mismatch"
-binOpTypeFromArgs BinEqFloat VarTypeFloat VarTypeFloat = VarTypeInt
-binOpTypeFromArgs BinEqFloat _ _ = error "Type mismatch"
-binOpTypeFromArgs BinLtFloat VarTypeFloat VarTypeFloat = VarTypeInt
-binOpTypeFromArgs BinLtFloat _ _ = error "Type mismatch"
 
 data Statement
-  -- Stores result in RAX
+  -- Stores result in XMM0
   = StatementBinOp BinOp
-                   Operand
-                   Operand
+                   FloatOperand
+                   FloatOperand
   -- Stores result in RAX
-  | StatementUnOp UnOp
-                  Operand
-  | StatementPushOnStack Operand
+  | StatementEqFloat FloatOperand
+                     FloatOperand
+  -- Stores result in RAX
+  | StatementLtFloat FloatOperand
+                     FloatOperand
+  -- Stores result in XMM0
+  | StatementNegFloat FloatOperand
+  -- Stores result in XMM0
+  | StatementIntToFloat IntOperand
+  | StatementPushOnStack IntOperand
   | StatementAllocateOnStack VarType
   | StatementPopFromStack VarType
+  | StatementAssignFloat FloatOperand
+                         FloatOperand
   --
   -- From here on, statements are directly representable as ASM instructions.
   --
   -- Subtract one from the other and set EFLAGS accordingly.
-  | InstructionCMP Operand
-                   Operand
+  | InstructionCMP IntOperand
+                   IntOperand
   -- Set to 1 if ZF(EFLAGS) = 1, 0 - otherwise.
-  | InstructionSetZ Operand
+  | InstructionSetZ IntOperand
   -- Set to 1 if ZF(EFLAGS) = 0, 0 - otherwise.
-  | InstructionSetNZ Operand
+  | InstructionSetNZ IntOperand
   -- Set to 1 if SF(EFLAGS) = 1, 0 - otherwise.
-  | InstructionSetS Operand
+  | InstructionSetS IntOperand
   -- Copy from rhs to lhs.
-  | InstructionMOV Operand
-                   (Either Operand Immediate)
+  | InstructionMOV IntOperand
+                   (Either IntOperand Immediate)
   -- A nop that has a label attached.
   | InstructionLabelledNOP LabelID
   -- Unconditional jump.
@@ -148,27 +147,27 @@ data Statement
   -- Push RIP to the stack and jump.
   | InstructionCALL FunctionCall
   -- Negate integer operand
-  | InstructionNEG Operand
+  | InstructionNEG IntOperand
   -- Bitwise AND instruction. Stores result in the lhs.
-  | InstructionAND Operand
-                   Operand
+  | InstructionAND IntOperand
+                   IntOperand
   -- Bitwise XOR instruction. Stores result in the lhs.
-  | InstructionXOR Operand
-                   Operand
+  | InstructionXOR IntOperand
+                   IntOperand
   -- Bitwise OR instruction. Stores result in the lhs.
-  | InstructionOR Operand
-                  Operand
+  | InstructionOR IntOperand
+                  IntOperand
   -- lhs + rhs. Stores result in the lhs.
-  | InstructionADD Operand
-                   Operand
+  | InstructionADD IntOperand
+                   IntOperand
   -- lhs - rhs. Stores result in the lhs.
-  | InstructionSUB Operand
-                   Operand
+  | InstructionSUB IntOperand
+                   IntOperand
   -- Divides RDX:RAX by operand. Stores result quotient in RAX, remainder in RDX.
-  | InstructionIDIV Operand
+  | InstructionIDIV IntOperand
   -- lhs * rhs. Stores result in lhs.
-  | InstructionIMUL Operand
-                    Operand
+  | InstructionIMUL IntOperand
+                    IntOperand
   -- Sign extends RAX into RDX:RAX.
   | InstructionCQO
 

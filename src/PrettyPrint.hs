@@ -76,16 +76,14 @@ instance PrettyPrintSimple BinOp where
   prettyPrintSimple BinMinusFloat = "-"
   prettyPrintSimple BinTimesFloat = "*"
   prettyPrintSimple BinDivFloat = "/"
-  prettyPrintSimple BinEqFloat = "=="
-  prettyPrintSimple BinLtFloat = "<"
 
-instance PrettyPrintSimple UnOp where
-  prettyPrintSimple UnNegFloat = "-"
-  prettyPrintSimple UnIntToFloat = "(double)"
+instance PrettyPrintSimple IntOperand where
+  prettyPrintSimple (IntOperandRegister _ r) = prettyPrintSimple r
+  prettyPrintSimple (IntOperandPointer p) = prettyPrintSimple p
 
-instance PrettyPrintSimple Operand where
-  prettyPrintSimple (OperandRegister _ r) = prettyPrintSimple r
-  prettyPrintSimple (OperandPointer p) = prettyPrintSimple p
+instance PrettyPrintSimple FloatOperand where
+  prettyPrintSimple (FloatOperandRegister r) = prettyPrintSimple r
+  prettyPrintSimple (FloatOperandPointer p) = prettyPrintSimple p
 
 instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"
@@ -97,6 +95,8 @@ instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRCX = "RCX"
   prettyPrintSimple RegisterR8 = "R8"
   prettyPrintSimple RegisterR9 = "R9"
+
+instance PrettyPrintSimple RegisterXMM where
   prettyPrintSimple RegisterXMM0 = "XMM0"
   prettyPrintSimple RegisterXMM1 = "XMM1"
   prettyPrintSimple RegisterXMM2 = "XMM2"
@@ -115,8 +115,15 @@ instance PrettyPrintSimple Statement where
   prettyPrintSimple (StatementBinOp op el er) =
     prettyPrintSimple el ++
     " " ++ prettyPrintSimple op ++ " " ++ prettyPrintSimple er ++ ";"
-  prettyPrintSimple (StatementUnOp op v) =
-    prettyPrintSimple op ++ prettyPrintSimple v ++ ";"
+  prettyPrintSimple (StatementEqFloat el er) =
+    prettyPrintSimple el ++ " == " ++ prettyPrintSimple er ++ ";"
+  prettyPrintSimple (StatementLtFloat el er) =
+    prettyPrintSimple el ++ " < " ++ prettyPrintSimple er ++ ";"
+  prettyPrintSimple (StatementNegFloat v) = "-" ++ prettyPrintSimple v ++ ";"
+  prettyPrintSimple (StatementIntToFloat v) =
+    "(double)" ++ prettyPrintSimple v ++ ";"
+  prettyPrintSimple (StatementAssignFloat lhs rhs) =
+    prettyPrintSimple lhs ++ " = " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionCMP lhs rhs) =
     "CMP " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionSetZ v) = "SETZ " ++ prettyPrintSimple v

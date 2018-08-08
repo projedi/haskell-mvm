@@ -2,6 +2,7 @@ module CallingConvention
   ( FunctionCall(..)
   , CallingConvention(..)
   , ArgLocation(..)
+  , RetLocation(..)
   , computeCallingConvention
   ) where
 
@@ -9,7 +10,7 @@ import Control.Monad.State (State, runState)
 import qualified Control.Monad.State as State
 import Data.Int (Int64)
 
-import ASMSyntax (Register(..), VarType(..))
+import ASMSyntax (Register(..), RegisterXMM(..), VarType(..))
 
 data FunctionCall = FunctionCall
   { funRetType :: Maybe VarType
@@ -19,11 +20,17 @@ data FunctionCall = FunctionCall
 data ArgLocation
   = ArgLocationRegister VarType
                         Register
+  | ArgLocationRegisterXMM RegisterXMM
   | ArgLocationStack VarType
                      Int64
 
+data RetLocation
+  = RetLocationRegister VarType
+                        Register
+  | RetLocationRegisterXMM RegisterXMM
+
 data CallingConvention = CallingConvention
-  { funRetValue :: Maybe (VarType, Register)
+  { funRetValue :: Maybe RetLocation
   , funArgValues :: [ArgLocation]
   , funStackToAllocate :: [VarType] -- The top should be the last.
   , funFloatRegistersUsed :: Int
@@ -32,7 +39,7 @@ data CallingConvention = CallingConvention
 computeCallingConvention :: FunctionCall -> CallingConvention
 computeCallingConvention fcall =
   CallingConvention
-    { funRetValue = (\t -> (t, putReturnValue t)) <$> funRetType fcall
+    { funRetValue = (putReturnValue) <$> funRetType fcall
     , funArgValues = argValues
     , funStackToAllocate = stackToAllocate
     , funFloatRegistersUsed = floatRegisterUsage
@@ -41,11 +48,11 @@ computeCallingConvention fcall =
     (argValues, stackToAllocate, floatRegisterUsage) =
       putArgs $ funArgTypes fcall
 
-putReturnValue :: VarType -> Register
-putReturnValue VarTypeInt = RegisterRAX
-putReturnValue (VarTypePtr _) = RegisterRAX
-putReturnValue VarTypeString = RegisterRAX
-putReturnValue VarTypeFloat = RegisterXMM0
+putReturnValue :: VarType -> RetLocation
+putReturnValue t@VarTypeInt = RetLocationRegister t RegisterRAX
+putReturnValue t@(VarTypePtr _) = RetLocationRegister t RegisterRAX
+putReturnValue t@VarTypeString = RetLocationRegister t RegisterRAX
+putReturnValue VarTypeFloat = RetLocationRegisterXMM RegisterXMM0
 
 putArgs :: [VarType] -> ([ArgLocation], [VarType], Int)
 putArgs args = (ops, stack finalEnv, floatUsage finalEnv)
@@ -81,7 +88,7 @@ type ComputeArg = State Env
 
 data Env = Env
   { availableIntRegisters :: [Register]
-  , availableFloatRegisters :: [Register]
+  , availableFloatRegisters :: [RegisterXMM]
   , stack :: [VarType]
   , nextOffset :: Int64
   , floatUsage :: Int
@@ -100,7 +107,7 @@ putFloatArg = do
       State.modify
         (\env ->
            env {availableFloatRegisters = rs, floatUsage = 1 + floatUsage env})
-      pure $ ArgLocationRegister VarTypeFloat r
+      pure $ ArgLocationRegisterXMM r
 
 putIntArg :: VarType -> ComputeArg ArgLocation
 putIntArg t = do
