@@ -306,8 +306,6 @@ readPointer Pointer {pointerBase = mr, pointerDisplacement = d} = do
 writePointer :: Pointer -> Value -> Execute ()
 writePointer Pointer {pointerBase = mr, pointerDisplacement = d} val = do
   ValueInt b <- maybe (pure $ ValueInt 0) readRegister mr
-  target <- readFromStack (b + d)
-  unless (typesMatch (typeof target) (typeof val)) $ error "Type mismatch"
   writeToStack (b + d) val
 
 readIntOperand :: IntOperand -> Execute Value
@@ -393,8 +391,9 @@ execute (InstructionSetC v) = do
 execute (InstructionMOV lhs rhs) = do
   res <- Trans.lift $ either readIntOperand readImmediate rhs
   Trans.lift $ writeIntOperand lhs res
-execute (StatementAllocateOnStack t) = do
-  Trans.lift $ pushOnStack (defaultValueFromType t)
+execute (StatementAllocateOnStack _) = do
+  d <- State.gets regRSP
+  State.modify $ \env -> env {regRSP = d + 1}
 execute InstructionRET = functionReturn
 execute (InstructionLabelledNOP _) = pure ()
 execute (InstructionJMP l) = jump l

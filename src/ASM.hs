@@ -19,6 +19,12 @@ import CallingConvention (CallingConvention)
 import qualified CallingConvention
 import qualified LinearSyntax
 
+typeSize :: ASMSyntax.VarType -> Int64
+typeSize _ = 1
+
+typesSize :: [ASMSyntax.VarType] -> Int64
+typesSize = sum . map typeSize
+
 avenge :: LinearSyntax.Program -> ASMSyntax.Program
 avenge p =
   ASMSyntax.Program
@@ -159,8 +165,7 @@ translateFunctionDef fdef = do
     prepareArgsAtCall params cc
     mapM_ translateStatement $ LinearSyntax.funDefBody fdef
     addStatement $ ASMSyntax.InstructionLabelledNOP epilogueLbl
-    mapM_ (addStatement . ASMSyntax.InstructionPOP . opRCX . varType) $
-      reverse stackVars
+    addStatement $ ASMSyntax.InstructionMOV opRSP (Left opRBP)
     addStatement $ ASMSyntax.InstructionPOP opRBP
     addStatement $ ASMSyntax.InstructionRET
 
@@ -278,10 +283,13 @@ prepareArgsForCall cc args = do
         }
 
 cleanStackAfterCall :: CallingConvention -> ASMStatement ()
-cleanStackAfterCall cc =
-  mapM_
-    (addStatement . ASMSyntax.InstructionPOP . opRCX)
-    (reverse $ CallingConvention.funStackToAllocate cc)
+cleanStackAfterCall cc = do
+  let size = typesSize $ CallingConvention.funStackToAllocate cc
+  addStatement $
+    ASMSyntax.InstructionMOV
+      (opRCX ASMSyntax.VarTypeInt)
+      (Right $ ASMSyntax.ImmediateInt size)
+  addStatement $ ASMSyntax.InstructionSUB opRSP (opRCX ASMSyntax.VarTypeInt)
 
 prepareArgsAtCall :: [Var] -> CallingConvention -> ASMStatement ()
 prepareArgsAtCall params cc = do
