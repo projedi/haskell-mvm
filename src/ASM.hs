@@ -28,7 +28,7 @@ typesSize = sum . map typeSize
 avenge :: LinearSyntax.Program -> ASMSyntax.Program
 avenge p =
   ASMSyntax.Program
-    { ASMSyntax.programCode = ASMSyntax.FunctionDef code
+    { ASMSyntax.programCode = code
     , ASMSyntax.programLibraries = LinearSyntax.programLibraries p
     , ASMSyntax.programForeignFunctions = LinearSyntax.programForeignFunctions p
     , ASMSyntax.programStrings = LinearSyntax.programStrings p

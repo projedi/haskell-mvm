@@ -7,7 +7,6 @@ module ASMSyntax
   , LabelID(..)
   , VarType(..)
   , Instruction(..)
-  , FunctionDef(..)
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
   , Register(..)
@@ -33,7 +32,7 @@ import LinearSyntax
   )
 
 data Program = Program
-  { programCode :: FunctionDef
+  { programCode :: [Instruction]
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
   , programStrings :: IntMap String
@@ -157,10 +156,6 @@ data Instruction
   | InstructionPUSH IntOperand
   -- Pop from stack onto operand. Adjusts RSP.
   | InstructionPOP IntOperand
-
-data FunctionDef = FunctionDef
-  { funDefBody :: [Instruction]
-  }
 
 data FunctionCall
   = NativeFunctionCall { nativeFunCallName :: LabelID }

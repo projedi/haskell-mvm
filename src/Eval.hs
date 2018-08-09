@@ -111,11 +111,11 @@ runExecute m = do
   pure ()
 
 startExecute ::
-     IntMap ForeignFunctionDecl -> FunctionDef -> IntMap String -> Execute ()
+     IntMap ForeignFunctionDecl -> [Instruction] -> IntMap String -> Execute ()
 startExecute foreignFuns code strings = do
   funs <- mapM getForeignFun foreignFuns
   State.modify $ \env -> env {envForeignFunctions = funs, envStrings = strings}
-  executeFunctionBody (funDefBody code)
+  executeFunctionBody code
   where
     getForeignFun fdecl = do
       Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
