@@ -168,8 +168,7 @@ popFromStack t = do
   pure v
 
 prepareArgsAtCall :: CallingConvention -> Execute [Value]
-prepareArgsAtCall cc = do
-  mapM go (CallingConvention.funArgValues cc)
+prepareArgsAtCall cc = mapM go (CallingConvention.funArgValues cc)
   where
     go :: CallingConvention.ArgLocation -> Execute Value
     go (CallingConvention.ArgLocationRegister _ r) = readRegister r
@@ -239,7 +238,7 @@ readImmediate :: Immediate -> Execute Value
 readImmediate (ImmediateInt i) = pure $ ValueInt i
 readImmediate (ImmediateFloat f) = pure $ ValueFloat f
 readImmediate (ImmediateString (StringID sid)) = do
-  s <- Reader.asks $ ((IntMap.! sid) . constEnvStrings)
+  s <- Reader.asks ((IntMap.! sid) . constEnvStrings)
   pure $ ValueString $ Right s
 
 readRegister :: Register -> Execute Value
@@ -330,8 +329,8 @@ jump (LabelID lid) = do
 execute :: Instruction -> Execute ()
 execute (InstructionCALL fcall) = functionCall fcall
 execute (InstructionCMP lhs rhs) = do
-  ValueInt lhs' <- (readIntOperand lhs)
-  ValueInt rhs' <- (readIntOperand rhs)
+  ValueInt lhs' <- readIntOperand lhs
+  ValueInt rhs' <- readIntOperand rhs
   let (zf, sf) =
         case compare lhs' rhs' of
           EQ -> (True, False)
@@ -379,82 +378,81 @@ execute (InstructionJZ l) = do
   zf <- State.gets (efZF . regEFLAGS)
   when zf $ jump l
 execute (InstructionNEG v) = do
-  ValueInt val <- (readIntOperand v)
+  ValueInt val <- readIntOperand v
   writeIntOperand v (ValueInt (negate val))
 execute (InstructionAND lhs rhs) = do
-  lhs' <- (readIntOperand lhs)
-  rhs' <- (readIntOperand rhs)
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
   writeIntOperand lhs (lhs' .&. rhs')
 execute (InstructionXOR lhs rhs) = do
-  lhs' <- (readIntOperand lhs)
-  rhs' <- (readIntOperand rhs)
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
   writeIntOperand lhs (lhs' `xor` rhs')
 execute (InstructionOR lhs rhs) = do
-  lhs' <- (readIntOperand lhs)
-  rhs' <- (readIntOperand rhs)
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
   writeIntOperand lhs (lhs' .|. rhs')
 execute (InstructionADD lhs rhs) = do
-  lhs' <- (readIntOperand lhs)
-  rhs' <- (readIntOperand rhs)
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
   writeIntOperand lhs (lhs' + rhs')
 execute (InstructionSUB lhs rhs) = do
-  lhs' <- (readIntOperand lhs)
-  rhs' <- (readIntOperand rhs)
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
   writeIntOperand lhs (lhs' - rhs')
 execute (InstructionIDIV v)
   -- TODO: Should use RDX:RAX
  = do
-  lhs' <- (readRegister RegisterRAX)
-  rhs' <- (readIntOperand v)
+  lhs' <- readRegister RegisterRAX
+  rhs' <- readIntOperand v
   let (q, r) = lhs' `quotRem` rhs'
   writeRegister RegisterRAX q
   writeRegister RegisterRDX r
 execute (InstructionIMUL lhs rhs) = do
-  lhs' <- (readIntOperand lhs)
-  rhs' <- (readIntOperand rhs)
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
   writeIntOperand lhs (lhs' * rhs')
 execute InstructionCQO
   -- TODO: Not implemented. We only use RAX.
- = do
-  pure ()
+ = pure ()
 execute (InstructionADDSD lhs rhs) = do
-  lhs' <- (readRegisterXMM lhs)
-  rhs' <- (readRegisterXMM rhs)
-  (writeRegisterXMM lhs (lhs' + rhs'))
+  lhs' <- readRegisterXMM lhs
+  rhs' <- readRegisterXMM rhs
+  writeRegisterXMM lhs (lhs' + rhs')
 execute (InstructionSUBSD lhs rhs) = do
-  lhs' <- (readRegisterXMM lhs)
-  rhs' <- (readRegisterXMM rhs)
-  (writeRegisterXMM lhs (lhs' - rhs'))
+  lhs' <- readRegisterXMM lhs
+  rhs' <- readRegisterXMM rhs
+  writeRegisterXMM lhs (lhs' - rhs')
 execute (InstructionMULSD lhs rhs) = do
-  lhs' <- (readRegisterXMM lhs)
-  rhs' <- (readRegisterXMM rhs)
-  (writeRegisterXMM lhs (lhs' * rhs'))
+  lhs' <- readRegisterXMM lhs
+  rhs' <- readRegisterXMM rhs
+  writeRegisterXMM lhs (lhs' * rhs')
 execute (InstructionDIVSD lhs rhs) = do
-  lhs' <- (readRegisterXMM lhs)
-  rhs' <- (readRegisterXMM rhs)
-  (writeRegisterXMM lhs (lhs' / rhs'))
+  lhs' <- readRegisterXMM lhs
+  rhs' <- readRegisterXMM rhs
+  writeRegisterXMM lhs (lhs' / rhs')
 execute (InstructionCOMISD lhs rhs) = do
-  lhs' <- (readRegisterXMM lhs)
-  rhs' <- (readRegisterXMM rhs)
+  lhs' <- readRegisterXMM lhs
+  rhs' <- readRegisterXMM rhs
   let (zf, cf) =
-        case (compare lhs' rhs') of
+        case compare lhs' rhs' of
           EQ -> (True, False)
           LT -> (False, True)
           GT -> (False, False)
   State.modify $ \env ->
     env {regEFLAGS = (regEFLAGS env) {efZF = zf, efCF = cf}}
 execute (InstructionMOVSD_XMM_XMM lhs rhs) = do
-  res <- (readRegisterXMM rhs)
-  (writeRegisterXMM lhs res)
+  res <- readRegisterXMM rhs
+  writeRegisterXMM lhs res
 execute (InstructionMOVSD_XMM_M64 lhs rhs) = do
-  res <- (readPointer rhs)
-  (writeRegisterXMM lhs res)
+  res <- readPointer rhs
+  writeRegisterXMM lhs res
 execute (InstructionMOVSD_M64_XMM lhs rhs) = do
-  res <- (readRegisterXMM rhs)
-  (writePointer lhs res)
+  res <- readRegisterXMM rhs
+  writePointer lhs res
 execute (InstructionCVTSI2SD lhs rhs) = do
-  ValueInt i <- (readIntOperand rhs)
-  (writeRegisterXMM lhs $ ValueFloat $ fromIntegral i)
+  ValueInt i <- readIntOperand rhs
+  writeRegisterXMM lhs $ ValueFloat $ fromIntegral i
 execute (InstructionPUSH x) = do
   res <- readIntOperand x
   pushOnStack res

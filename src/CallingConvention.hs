@@ -39,7 +39,7 @@ data CallingConvention = CallingConvention
 computeCallingConvention :: FunctionCall -> CallingConvention
 computeCallingConvention fcall =
   CallingConvention
-    { funRetValue = (putReturnValue) <$> funRetType fcall
+    { funRetValue = putReturnValue <$> funRetType fcall
     , funArgValues = argValues
     , funStackToAllocate = stackToAllocate
     , funFloatRegistersUsed = floatRegisterUsage

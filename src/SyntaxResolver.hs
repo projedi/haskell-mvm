@@ -472,7 +472,7 @@ resolveExpr (PreSyntax.ExprInt i) =
 resolveExpr (PreSyntax.ExprFloat f) =
   pure $ ResolvedSyntax.ExprConst $ ResolvedSyntax.ImmediateFloat f
 resolveExpr (PreSyntax.ExprString s) =
-  (ResolvedSyntax.ExprConst . ResolvedSyntax.ImmediateString) <$>
+  ResolvedSyntax.ExprConst . ResolvedSyntax.ImmediateString <$>
   introduceString s
 resolveExpr (PreSyntax.ExprNeg e) = ResolvedSyntax.ExprNeg <$> resolveExpr e
 resolveExpr (PreSyntax.ExprPlus lhs rhs) =

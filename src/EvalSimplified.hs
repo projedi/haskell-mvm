@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module EvalSimplified
   ( eval
   ) where
@@ -317,16 +319,14 @@ writeToPtr ptr val = do
 evaluateUnOp :: UnOp -> (Value -> Value)
 evaluateUnOp UnNeg = negate
 evaluateUnOp UnNot =
-  \v ->
-    case v of
-      ValueInt 0 -> ValueInt 1
-      ValueInt _ -> ValueInt 0
-      _ -> error "Type mismatch"
+  \case
+    ValueInt 0 -> ValueInt 1
+    ValueInt _ -> ValueInt 0
+    _ -> error "Type mismatch"
 evaluateUnOp UnIntToFloat =
-  \v ->
-    case v of
-      ValueInt i -> ValueFloat $ fromIntegral i
-      _ -> error "Type mismatch"
+  \case
+    ValueInt i -> ValueFloat $ fromIntegral i
+    _ -> error "Type mismatch"
 
 evaluateBinOp :: BinOp -> (Value -> Value -> Value)
 evaluateBinOp BinPlus = (+)

@@ -106,7 +106,7 @@ instance PrettyPrintSimple RegisterXMM where
 
 instance PrettyPrintSimple Pointer where
   prettyPrintSimple Pointer {pointerBase = mr, pointerDisplacement = d} =
-    "[" ++ (maybe "" ((++ "+") . prettyPrintSimple) mr) ++ show d ++ "]"
+    "[" ++ maybe "" ((++ "+") . prettyPrintSimple) mr ++ show d ++ "]"
 
 instance PrettyPrintSimple Instruction where
   prettyPrintSimple (InstructionCALL fcall) = "CALL " ++ prettyPrintSimple fcall
