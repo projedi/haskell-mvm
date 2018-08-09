@@ -101,7 +101,7 @@ instance PrettyPrintSimple Pointer where
   prettyPrintSimple Pointer {pointerBase = mr, pointerDisplacement = d} =
     "[" ++ (maybe "" ((++ "+") . prettyPrintSimple) mr) ++ show d ++ "]"
 
-instance PrettyPrintSimple Statement where
+instance PrettyPrintSimple Instruction where
   prettyPrintSimple (InstructionCALL fcall) = "CALL " ++ prettyPrintSimple fcall
   prettyPrintSimple (InstructionCMP lhs rhs) =
     "CMP " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
@@ -157,7 +157,7 @@ instance PrettyPrintSimple FunctionDef where
   prettyPrintSimple FunctionDef {funDefBody = body} =
     "Code:\n" ++ List.intercalate "\n" (map printLine (zip [0 ..] body))
     where
-      printLine :: (Int, Statement) -> String
+      printLine :: (Int, Instruction) -> String
       printLine (line, stmt) = show line ++ ": " ++ prettyPrintSimple stmt
 
 instance PrettyPrintSimple Immediate where

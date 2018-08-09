@@ -58,7 +58,7 @@ data Env = Env
   , funIdToLabelID :: IntMap ASMSyntax.LabelID
   }
 
-type ASM = WriterT [ASMSyntax.Statement] (State Env)
+type ASM = WriterT [ASMSyntax.Instruction] (State Env)
 
 nextLabel :: MonadState Env m => m ASMSyntax.LabelID
 nextLabel = do
@@ -186,7 +186,7 @@ runASMStatement :: ConstEnv -> ASMStatement a -> ASM a
 runASMStatement env m = runReaderT m env
 
 addStatement ::
-     MonadWriter [ASMSyntax.Statement] m => ASMSyntax.Statement -> m ()
+     MonadWriter [ASMSyntax.Instruction] m => ASMSyntax.Instruction -> m ()
 addStatement s = Writer.tell [s]
 
 translateStatement :: LinearSyntax.Statement -> ASMStatement ()
@@ -305,7 +305,7 @@ prepareArgsAtCall params cc = do
   let vals = map go (CallingConvention.funArgValues cc)
   generateAssignments params vals
   where
-    go :: CallingConvention.ArgLocation -> Var -> ASMSyntax.Statement
+    go :: CallingConvention.ArgLocation -> Var -> ASMSyntax.Instruction
     go (CallingConvention.ArgLocationRegister t r) v =
       ASMSyntax.InstructionMOV
         (ASMSyntax.IntOperandPointer $ pointerForLocalVar v)
@@ -317,7 +317,7 @@ prepareArgsAtCall params cc = do
         (ASMSyntax.IntOperandPointer $ pointerForLocalVar v)
         (Left $ ASMSyntax.IntOperandPointer $ pointerForParamVar t d)
     generateAssignments ::
-         [Var] -> [(Var -> ASMSyntax.Statement)] -> ASMStatement ()
+         [Var] -> [(Var -> ASMSyntax.Instruction)] -> ASMStatement ()
     generateAssignments [] [] = pure ()
     generateAssignments (v:vs) (val:vals) = do
       addStatement $ val v

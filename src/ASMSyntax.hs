@@ -6,7 +6,7 @@ module ASMSyntax
   , StringID(..)
   , LabelID(..)
   , VarType(..)
-  , Statement(..)
+  , Instruction(..)
   , FunctionDef(..)
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
@@ -79,7 +79,7 @@ intOperandType :: IntOperand -> VarType
 intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
 
-data Statement
+data Instruction
   -- Subtract one from the other and set EFLAGS accordingly.
   = InstructionCMP IntOperand
                    IntOperand
@@ -159,7 +159,7 @@ data Statement
   | InstructionPOP IntOperand
 
 data FunctionDef = FunctionDef
-  { funDefBody :: [Statement]
+  { funDefBody :: [Instruction]
   }
 
 data FunctionCall

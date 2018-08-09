@@ -214,7 +214,7 @@ functionCall NativeFunctionCall {nativeFunCallName = lbl} = do
   Trans.lift $ pushOnStack (ValueInt $ fromIntegral ip)
   jump lbl
 
-executeFunctionBody :: [Statement] -> Execute ()
+executeFunctionBody :: [Instruction] -> Execute ()
 executeFunctionBody [] = pure ()
 executeFunctionBody ss = do
   State.modify $ \env -> env {regRIP = 0}
@@ -321,7 +321,7 @@ writeIntOperand (IntOperandRegister _ r) val = writeRegister r val
 writeIntOperand (IntOperandPointer p) val = writePointer p val
 
 data ConstEnv = ConstEnv
-  { constEnvInstructions :: Array Int Statement
+  { constEnvInstructions :: Array Int Instruction
   , constEnvLabelMap :: IntMap Int
   }
 
@@ -348,7 +348,7 @@ functionReturn = do
   ValueInt ip <- Trans.lift $ popFromStack VarTypeInt -- popping RIP
   State.modify $ \env -> env {regRIP = fromIntegral ip}
 
-execute :: Statement -> ExecuteStatement ()
+execute :: Instruction -> ExecuteStatement ()
 execute (InstructionCALL fcall) = functionCall fcall
 execute (InstructionCMP lhs rhs) = do
   ValueInt lhs' <- Trans.lift (readIntOperand lhs)
