@@ -46,6 +46,7 @@ data Register
   = RegisterRSP
   | RegisterRBP
   | RegisterRAX
+  | RegisterRBX
   | RegisterRDI
   | RegisterRSI
   | RegisterRDX
@@ -79,14 +80,8 @@ intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
 
 data Statement
-  = StatementPushOnStack IntOperand
-  | StatementAllocateOnStack VarType
-  | StatementPopFromStack VarType
-  --
-  -- From here on, statements are directly representable as ASM instructions.
-  --
   -- Subtract one from the other and set EFLAGS accordingly.
-  | InstructionCMP IntOperand
+  = InstructionCMP IntOperand
                    IntOperand
   -- Set to 1 if ZF(EFLAGS) = 1, 0 - otherwise.
   | InstructionSetZ IntOperand
@@ -158,6 +153,10 @@ data Statement
   -- Convert from integer in rhs to double precision in lhs.
   | InstructionCVTSI2SD RegisterXMM
                         IntOperand
+  -- Push operand on stack. Adjusts RSP.
+  | InstructionPUSH IntOperand
+  -- Pop from stack onto operand. Adjusts RSP.
+  | InstructionPOP IntOperand
 
 data FunctionDef = FunctionDef
   { funDefBody :: [Statement]

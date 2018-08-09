@@ -10,11 +10,12 @@ import qualified Control.Monad.State as State
 import qualified Control.Monad.Trans as Trans
 import Data.Array (Array)
 import qualified Data.Array as Array
+import Data.Array.IO (IOArray)
+import qualified Data.Array.IO as IOArray
 import Data.Bits
 import Data.Int (Int64)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import qualified Data.List as List
 
 import ASMSyntax
 import CallingConvention (CallingConvention)
@@ -48,11 +49,12 @@ data EFLAGS = EFLAGS
 data Env = Env
   { envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   , envStrings :: IntMap String
-  , envStack :: [Value]
+  , envStack :: IOArray Int64 Value
   , regRIP :: Int
   , regRBP :: Int64
   , regRSP :: Int64
   , regRAX :: Value
+  , regRBX :: Value
   , regRDI :: Value
   , regRSI :: Value
   , regRDX :: Value
@@ -70,46 +72,42 @@ data Env = Env
   , regEFLAGS :: EFLAGS
   }
 
-instance Show Env where
-  show env =
-    "rip = " ++
-    show (regRIP env) ++
-    ", rbp = " ++
-    show (regRBP env) ++
-    ", rsp = " ++ show (regRSP env) ++ ", stack = " ++ show (envStack env)
-
-emptyEnv :: Env
-emptyEnv =
-  Env
-    { envForeignFunctions = IntMap.empty
-    , envStrings = IntMap.empty
-    , regRIP = 0
-    , envStack = []
-    , regRBP = 0
-    , regRSP = 0
-    , regRAX = ValueInt 0
-    , regRDI = ValueInt 0
-    , regRSI = ValueInt 0
-    , regRDX = ValueInt 0
-    , regRCX = ValueInt 0
-    , regR8 = ValueInt 0
-    , regR9 = ValueInt 0
-    , regXMM0 = 0
-    , regXMM1 = 0
-    , regXMM2 = 0
-    , regXMM3 = 0
-    , regXMM4 = 0
-    , regXMM5 = 0
-    , regXMM6 = 0
-    , regXMM7 = 0
-    , regEFLAGS = EFLAGS {efZF = False, efSF = False, efCF = False}
-    }
+emptyEnv :: IO Env
+emptyEnv = do
+  stack <- IOArray.newArray_ (0, 10000000)
+  pure $
+    Env
+      { envForeignFunctions = IntMap.empty
+      , envStrings = IntMap.empty
+      , regRIP = 0
+      , envStack = stack
+      , regRBP = 0
+      , regRSP = 0
+      , regRAX = ValueInt 0
+      , regRBX = ValueInt 0
+      , regRDI = ValueInt 0
+      , regRSI = ValueInt 0
+      , regRDX = ValueInt 0
+      , regRCX = ValueInt 0
+      , regR8 = ValueInt 0
+      , regR9 = ValueInt 0
+      , regXMM0 = 0
+      , regXMM1 = 0
+      , regXMM2 = 0
+      , regXMM3 = 0
+      , regXMM4 = 0
+      , regXMM5 = 0
+      , regXMM6 = 0
+      , regXMM7 = 0
+      , regEFLAGS = EFLAGS {efZF = False, efSF = False, efCF = False}
+      }
 
 type Execute = StateT Env IO
 
 runExecute :: Execute () -> IO ()
 runExecute m = do
-  _ <- runStateT m emptyEnv
+  env <- emptyEnv
+  _ <- runStateT m env
   pure ()
 
 startExecute ::
@@ -123,17 +121,29 @@ startExecute foreignFuns code strings = do
       Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
       pure (fdecl, f)
 
-pushOnStack :: Value -> Execute ()
-pushOnStack v =
-  State.modify $ \env ->
-    env {regRSP = regRSP env + 1, envStack = envStack env ++ [v]}
+readFromStack :: Int64 -> Execute Value
+readFromStack d = do
+  stack <- State.gets envStack
+  Trans.liftIO $ IOArray.readArray stack d
 
-popFromStack :: VarType -> Execute ()
+writeToStack :: Int64 -> Value -> Execute ()
+writeToStack d val = do
+  stack <- State.gets envStack
+  Trans.liftIO $ IOArray.writeArray stack d val
+
+pushOnStack :: Value -> Execute ()
+pushOnStack v = do
+  d <- State.gets regRSP
+  writeToStack d v
+  State.modify $ \env -> env {regRSP = d + 1}
+
+popFromStack :: VarType -> Execute Value
 popFromStack t = do
-  v <- State.gets (List.last . envStack)
+  d <- State.gets regRSP
+  v <- readFromStack (d - 1)
   unless (typesMatch (typeof v) t) $ error "Type mismatch"
-  State.modify $ \env ->
-    env {regRSP = regRSP env - 1, envStack = List.init (envStack env)}
+  State.modify $ \env -> env {regRSP = d - 1}
+  pure v
 
 prepareArgsAtCall :: CallingConvention -> Execute [Value]
 prepareArgsAtCall cc = do
@@ -169,16 +179,9 @@ foreignFunctionCall rettype params hasVarArgs args fun
   writeRegister RegisterRBP rsp1
   vals <- prepareArgsAtCall cc
   res <- Trans.liftIO $ call fun rettype (assertVals params vals)
-  rbp2 <-
-    readPointer $
-    Pointer
-      { pointerType = VarTypeInt
-      , pointerBase = Just RegisterRSP
-      , pointerDisplacement = -1
-      }
+  rbp2 <- popFromStack VarTypeInt
   writeRegister RegisterRBP rbp2
-  popFromStack VarTypeInt
-  popFromStack VarTypeInt
+  _ <- popFromStack VarTypeInt -- Popping RIP
   case (res, CallingConvention.funRetValue cc) of
     (Nothing, Nothing) -> pure ()
     (Just r, Just (CallingConvention.RetLocationRegister _ rv)) ->
@@ -237,22 +240,11 @@ readImmediate (ImmediateString (StringID sid)) = do
   s <- State.gets $ ((IntMap.! sid) . envStrings)
   pure $ ValueString $ Right s
 
-dereference :: Value -> Execute Value
-dereference (ValueInt d) = State.gets ((!! (fromIntegral d)) . envStack)
-dereference _ = error "Type mismatch"
-
-writeToPtr :: Value -> Value -> Execute ()
-writeToPtr (ValueInt d) val = do
-  (before, target:after) <-
-    State.gets (List.splitAt (fromIntegral d) . envStack)
-  unless (typesMatch (typeof target) (typeof val)) $ error "Type mismatch"
-  State.modify $ \env -> env {envStack = before ++ [val] ++ after}
-writeToPtr _ _ = error "Type mismatch"
-
 readRegister :: Register -> Execute Value
 readRegister RegisterRSP = State.gets (ValueInt . regRSP)
 readRegister RegisterRBP = State.gets (ValueInt . regRBP)
 readRegister RegisterRAX = State.gets regRAX
+readRegister RegisterRBX = State.gets regRBX
 readRegister RegisterRDI = State.gets regRDI
 readRegister RegisterRSI = State.gets regRSI
 readRegister RegisterRDX = State.gets regRDX
@@ -276,6 +268,7 @@ writeRegister RegisterRSP _ = error "Type mismatch"
 writeRegister RegisterRBP (ValueInt i) = State.modify $ \env -> env {regRBP = i}
 writeRegister RegisterRBP _ = error "Type mismatch"
 writeRegister RegisterRAX v = State.modify $ \env -> env {regRAX = v}
+writeRegister RegisterRBX v = State.modify $ \env -> env {regRBX = v}
 writeRegister RegisterRDI v = State.modify $ \env -> env {regRDI = v}
 writeRegister RegisterRSI v = State.modify $ \env -> env {regRSI = v}
 writeRegister RegisterRDX v = State.modify $ \env -> env {regRDX = v}
@@ -311,13 +304,13 @@ writeRegisterXMM RegisterXMM7 _ = error "Type mismatch"
 
 readPointer :: Pointer -> Execute Value
 readPointer Pointer {pointerBase = mr, pointerDisplacement = d} = do
-  b <- maybe (pure $ ValueInt 0) readRegister mr
-  dereference $ b + ValueInt d
+  ValueInt b <- maybe (pure $ ValueInt 0) readRegister mr
+  readFromStack (b + d)
 
 writePointer :: Pointer -> Value -> Execute ()
 writePointer Pointer {pointerBase = mr, pointerDisplacement = d} val = do
-  b <- maybe (pure $ ValueInt 0) readRegister mr
-  writeToPtr (b + ValueInt d) val
+  ValueInt b <- maybe (pure $ ValueInt 0) readRegister mr
+  writeToStack (b + d) val
 
 readIntOperand :: IntOperand -> Execute Value
 readIntOperand (IntOperandRegister _ r) = readRegister r
@@ -352,15 +345,7 @@ executeStatement = do
 
 functionReturn :: ExecuteStatement ()
 functionReturn = do
-  ValueInt ip <-
-    Trans.lift $
-    readPointer $
-    Pointer
-      { pointerType = VarTypeInt
-      , pointerBase = Just RegisterRSP
-      , pointerDisplacement = -1
-      }
-  Trans.lift $ popFromStack VarTypeInt -- popping RIP
+  ValueInt ip <- Trans.lift $ popFromStack VarTypeInt -- popping RIP
   State.modify $ \env -> env {regRIP = fromIntegral ip}
 
 execute :: Statement -> ExecuteStatement ()
@@ -410,12 +395,6 @@ execute (InstructionSetC v) = do
 execute (InstructionMOV lhs rhs) = do
   res <- Trans.lift $ either readIntOperand readImmediate rhs
   Trans.lift $ writeIntOperand lhs res
-execute (StatementPushOnStack x) = do
-  res <- Trans.lift $ readIntOperand x
-  Trans.lift $ pushOnStack res
-execute (StatementAllocateOnStack t) = do
-  Trans.lift $ pushOnStack (defaultValueFromType t)
-execute (StatementPopFromStack t) = Trans.lift $ popFromStack t
 execute InstructionRET = functionReturn
 execute (InstructionLabelledNOP _) = pure ()
 execute (InstructionJMP l) = jump l
@@ -499,3 +478,9 @@ execute (InstructionMOVSD_M64_XMM lhs rhs) = do
 execute (InstructionCVTSI2SD lhs rhs) = do
   ValueInt i <- Trans.lift (readIntOperand rhs)
   Trans.lift (writeRegisterXMM lhs $ ValueFloat $ fromIntegral i)
+execute (InstructionPUSH x) = do
+  res <- Trans.lift $ readIntOperand x
+  Trans.lift $ pushOnStack res
+execute (InstructionPOP x) = do
+  v <- Trans.lift $ popFromStack (intOperandType x)
+  Trans.lift $ writeIntOperand x v

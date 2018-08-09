@@ -19,6 +19,12 @@ import CallingConvention (CallingConvention)
 import qualified CallingConvention
 import qualified LinearSyntax
 
+typeSize :: ASMSyntax.VarType -> Int64
+typeSize _ = 1
+
+typesSize :: [ASMSyntax.VarType] -> Int64
+typesSize = sum . map typeSize
+
 avenge :: LinearSyntax.Program -> ASMSyntax.Program
 avenge p =
   ASMSyntax.Program
@@ -71,20 +77,14 @@ opRSP = ASMSyntax.IntOperandRegister ASMSyntax.VarTypeInt ASMSyntax.RegisterRSP
 opRAX :: ASMSyntax.VarType -> ASMSyntax.IntOperand
 opRAX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRAX
 
+opRBX :: ASMSyntax.VarType -> ASMSyntax.IntOperand
+opRBX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRBX
+
 opRCX :: ASMSyntax.VarType -> ASMSyntax.IntOperand
 opRCX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRCX
 
 opRDX :: ASMSyntax.VarType -> ASMSyntax.IntOperand
 opRDX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRDX
-
-peekStack :: ASMSyntax.VarType -> ASMSyntax.IntOperand
-peekStack t =
-  ASMSyntax.IntOperandPointer
-    ASMSyntax.Pointer
-      { ASMSyntax.pointerType = t
-      , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRSP
-      , ASMSyntax.pointerDisplacement = -1
-      }
 
 introduceVariable :: LinearSyntax.Var -> ASM Var
 introduceVariable LinearSyntax.Var { LinearSyntax.varName = LinearSyntax.VarID vid
@@ -160,19 +160,19 @@ translateFunctionDef fdef = do
     funLbl <- State.gets ((IntMap.! fid) . funIdToLabelID)
     addStatement $ ASMSyntax.InstructionLabelledNOP funLbl
     let stackVars = params ++ locals
-    addStatement $ ASMSyntax.StatementPushOnStack opRBP
+    addStatement $ ASMSyntax.InstructionPUSH opRBP
     addStatement $ ASMSyntax.InstructionMOV opRBP (Left opRSP)
-    mapM_
-      (addStatement . ASMSyntax.StatementAllocateOnStack . varType)
-      stackVars
+    let size = typesSize $ map varType stackVars
+    addStatement $
+      ASMSyntax.InstructionMOV
+        (opRBX ASMSyntax.VarTypeInt)
+        (Right $ ASMSyntax.ImmediateInt size)
+    addStatement $ ASMSyntax.InstructionADD opRSP (opRBX ASMSyntax.VarTypeInt)
     prepareArgsAtCall params cc
     mapM_ translateStatement $ LinearSyntax.funDefBody fdef
     addStatement $ ASMSyntax.InstructionLabelledNOP epilogueLbl
-    mapM_ (addStatement . ASMSyntax.StatementPopFromStack . varType) $
-      reverse stackVars
-    addStatement $
-      ASMSyntax.InstructionMOV opRBP (Left $ peekStack ASMSyntax.VarTypeInt)
-    addStatement $ ASMSyntax.StatementPopFromStack ASMSyntax.VarTypeInt
+    addStatement $ ASMSyntax.InstructionMOV opRSP (Left opRBP)
+    addStatement $ ASMSyntax.InstructionPOP opRBP
     addStatement $ ASMSyntax.InstructionRET
 
 type ASMStatement = ReaderT ConstEnv ASM
@@ -254,9 +254,12 @@ translateStatement (LinearSyntax.StatementJumpIfZero v l) = do
 
 prepareArgsForCall :: CallingConvention -> [LinearSyntax.Var] -> ASMStatement ()
 prepareArgsForCall cc args = do
-  mapM_
-    (addStatement . ASMSyntax.StatementAllocateOnStack)
-    (CallingConvention.funStackToAllocate cc)
+  let size = typesSize $ CallingConvention.funStackToAllocate cc
+  addStatement $
+    ASMSyntax.InstructionMOV
+      (opRAX ASMSyntax.VarTypeInt)
+      (Right $ ASMSyntax.ImmediateInt size)
+  addStatement $ ASMSyntax.InstructionADD opRSP (opRAX ASMSyntax.VarTypeInt)
   mapM_ go (zip args (CallingConvention.funArgValues cc))
   addStatement $
     ASMSyntax.InstructionMOV (opRAX ASMSyntax.VarTypeInt) $
@@ -289,10 +292,13 @@ prepareArgsForCall cc args = do
         }
 
 cleanStackAfterCall :: CallingConvention -> ASMStatement ()
-cleanStackAfterCall cc =
-  mapM_
-    (addStatement . ASMSyntax.StatementPopFromStack)
-    (reverse $ CallingConvention.funStackToAllocate cc)
+cleanStackAfterCall cc = do
+  let size = typesSize $ CallingConvention.funStackToAllocate cc
+  addStatement $
+    ASMSyntax.InstructionMOV
+      (opRCX ASMSyntax.VarTypeInt)
+      (Right $ ASMSyntax.ImmediateInt size)
+  addStatement $ ASMSyntax.InstructionSUB opRSP (opRCX ASMSyntax.VarTypeInt)
 
 prepareArgsAtCall :: [Var] -> CallingConvention -> ASMStatement ()
 prepareArgsAtCall params cc = do
