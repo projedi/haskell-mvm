@@ -123,17 +123,29 @@ startExecute foreignFuns code strings = do
       Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
       pure (fdecl, f)
 
+readFromStack :: Int64 -> Execute Value
+readFromStack d = State.gets ((!! (fromIntegral d)) . envStack)
+
+writeToStack :: Int64 -> Value -> Execute ()
+writeToStack d val = do
+  (before, after) <- State.gets (List.splitAt (fromIntegral d) . envStack)
+  case after of
+    _:after' ->
+      State.modify $ \env -> env {envStack = before ++ [val] ++ after'}
+    [] -> State.modify $ \env -> env {envStack = before ++ [val]}
+
 pushOnStack :: Value -> Execute ()
-pushOnStack v =
-  State.modify $ \env ->
-    env {regRSP = regRSP env + 1, envStack = envStack env ++ [v]}
+pushOnStack v = do
+  d <- State.gets regRSP
+  writeToStack d v
+  State.modify $ \env -> env {regRSP = d + 1}
 
 popFromStack :: VarType -> Execute Value
 popFromStack t = do
-  v <- State.gets (List.last . envStack)
+  d <- State.gets regRSP
+  v <- readFromStack (d - 1)
   unless (typesMatch (typeof v) t) $ error "Type mismatch"
-  State.modify $ \env ->
-    env {regRSP = regRSP env - 1, envStack = List.init (envStack env)}
+  State.modify $ \env -> env {regRSP = d - 1}
   pure v
 
 prepareArgsAtCall :: CallingConvention -> Execute [Value]
@@ -231,18 +243,6 @@ readImmediate (ImmediateString (StringID sid)) = do
   s <- State.gets $ ((IntMap.! sid) . envStrings)
   pure $ ValueString $ Right s
 
-dereference :: Value -> Execute Value
-dereference (ValueInt d) = State.gets ((!! (fromIntegral d)) . envStack)
-dereference _ = error "Type mismatch"
-
-writeToPtr :: Value -> Value -> Execute ()
-writeToPtr (ValueInt d) val = do
-  (before, target:after) <-
-    State.gets (List.splitAt (fromIntegral d) . envStack)
-  unless (typesMatch (typeof target) (typeof val)) $ error "Type mismatch"
-  State.modify $ \env -> env {envStack = before ++ [val] ++ after}
-writeToPtr _ _ = error "Type mismatch"
-
 readRegister :: Register -> Execute Value
 readRegister RegisterRSP = State.gets (ValueInt . regRSP)
 readRegister RegisterRBP = State.gets (ValueInt . regRBP)
@@ -305,13 +305,15 @@ writeRegisterXMM RegisterXMM7 _ = error "Type mismatch"
 
 readPointer :: Pointer -> Execute Value
 readPointer Pointer {pointerBase = mr, pointerDisplacement = d} = do
-  b <- maybe (pure $ ValueInt 0) readRegister mr
-  dereference $ b + ValueInt d
+  ValueInt b <- maybe (pure $ ValueInt 0) readRegister mr
+  readFromStack (b + d)
 
 writePointer :: Pointer -> Value -> Execute ()
 writePointer Pointer {pointerBase = mr, pointerDisplacement = d} val = do
-  b <- maybe (pure $ ValueInt 0) readRegister mr
-  writeToPtr (b + ValueInt d) val
+  ValueInt b <- maybe (pure $ ValueInt 0) readRegister mr
+  target <- readFromStack (b + d)
+  unless (typesMatch (typeof target) (typeof val)) $ error "Type mismatch"
+  writeToStack (b + d) val
 
 readIntOperand :: IntOperand -> Execute Value
 readIntOperand (IntOperandRegister _ r) = readRegister r
