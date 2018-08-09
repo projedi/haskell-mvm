@@ -79,6 +79,7 @@ instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterRSP = "RSP"
   prettyPrintSimple RegisterRBP = "RBP"
   prettyPrintSimple RegisterRAX = "RAX"
+  prettyPrintSimple RegisterRBX = "RBX"
   prettyPrintSimple RegisterRDI = "RDI"
   prettyPrintSimple RegisterRSI = "RSI"
   prettyPrintSimple RegisterRDX = "RDX"
@@ -112,8 +113,6 @@ instance PrettyPrintSimple Statement where
     "MOV " ++
     prettyPrintSimple lhs ++
     " " ++ either prettyPrintSimple prettyPrintSimple rhs
-  prettyPrintSimple (StatementAllocateOnStack t) =
-    "alloc " ++ prettyPrintSimple t ++ ";"
   prettyPrintSimple InstructionRET = "RET"
   prettyPrintSimple (InstructionLabelledNOP l) = show l ++ ": NOP"
   prettyPrintSimple (InstructionJMP l) = "JMP " ++ show l

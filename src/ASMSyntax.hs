@@ -46,6 +46,7 @@ data Register
   = RegisterRSP
   | RegisterRBP
   | RegisterRAX
+  | RegisterRBX
   | RegisterRDI
   | RegisterRSI
   | RegisterRDX
@@ -79,12 +80,8 @@ intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
 
 data Statement
-  = StatementAllocateOnStack VarType
-  --
-  -- From here on, statements are directly representable as ASM instructions.
-  --
   -- Subtract one from the other and set EFLAGS accordingly.
-  | InstructionCMP IntOperand
+  = InstructionCMP IntOperand
                    IntOperand
   -- Set to 1 if ZF(EFLAGS) = 1, 0 - otherwise.
   | InstructionSetZ IntOperand

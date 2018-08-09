@@ -54,6 +54,7 @@ data Env = Env
   , regRBP :: Int64
   , regRSP :: Int64
   , regRAX :: Value
+  , regRBX :: Value
   , regRDI :: Value
   , regRSI :: Value
   , regRDX :: Value
@@ -83,6 +84,7 @@ emptyEnv = do
       , regRBP = 0
       , regRSP = 0
       , regRAX = ValueInt 0
+      , regRBX = ValueInt 0
       , regRDI = ValueInt 0
       , regRSI = ValueInt 0
       , regRDX = ValueInt 0
@@ -242,6 +244,7 @@ readRegister :: Register -> Execute Value
 readRegister RegisterRSP = State.gets (ValueInt . regRSP)
 readRegister RegisterRBP = State.gets (ValueInt . regRBP)
 readRegister RegisterRAX = State.gets regRAX
+readRegister RegisterRBX = State.gets regRBX
 readRegister RegisterRDI = State.gets regRDI
 readRegister RegisterRSI = State.gets regRSI
 readRegister RegisterRDX = State.gets regRDX
@@ -265,6 +268,7 @@ writeRegister RegisterRSP _ = error "Type mismatch"
 writeRegister RegisterRBP (ValueInt i) = State.modify $ \env -> env {regRBP = i}
 writeRegister RegisterRBP _ = error "Type mismatch"
 writeRegister RegisterRAX v = State.modify $ \env -> env {regRAX = v}
+writeRegister RegisterRBX v = State.modify $ \env -> env {regRBX = v}
 writeRegister RegisterRDI v = State.modify $ \env -> env {regRDI = v}
 writeRegister RegisterRSI v = State.modify $ \env -> env {regRSI = v}
 writeRegister RegisterRDX v = State.modify $ \env -> env {regRDX = v}
@@ -391,9 +395,6 @@ execute (InstructionSetC v) = do
 execute (InstructionMOV lhs rhs) = do
   res <- Trans.lift $ either readIntOperand readImmediate rhs
   Trans.lift $ writeIntOperand lhs res
-execute (StatementAllocateOnStack _) = do
-  d <- State.gets regRSP
-  State.modify $ \env -> env {regRSP = d + 1}
 execute InstructionRET = functionReturn
 execute (InstructionLabelledNOP _) = pure ()
 execute (InstructionJMP l) = jump l

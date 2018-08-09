@@ -77,6 +77,9 @@ opRSP = ASMSyntax.IntOperandRegister ASMSyntax.VarTypeInt ASMSyntax.RegisterRSP
 opRAX :: ASMSyntax.VarType -> ASMSyntax.IntOperand
 opRAX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRAX
 
+opRBX :: ASMSyntax.VarType -> ASMSyntax.IntOperand
+opRBX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRBX
+
 opRCX :: ASMSyntax.VarType -> ASMSyntax.IntOperand
 opRCX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRCX
 
@@ -159,9 +162,12 @@ translateFunctionDef fdef = do
     let stackVars = params ++ locals
     addStatement $ ASMSyntax.InstructionPUSH opRBP
     addStatement $ ASMSyntax.InstructionMOV opRBP (Left opRSP)
-    mapM_
-      (addStatement . ASMSyntax.StatementAllocateOnStack . varType)
-      stackVars
+    let size = typesSize $ map varType stackVars
+    addStatement $
+      ASMSyntax.InstructionMOV
+        (opRBX ASMSyntax.VarTypeInt)
+        (Right $ ASMSyntax.ImmediateInt size)
+    addStatement $ ASMSyntax.InstructionADD opRSP (opRBX ASMSyntax.VarTypeInt)
     prepareArgsAtCall params cc
     mapM_ translateStatement $ LinearSyntax.funDefBody fdef
     addStatement $ ASMSyntax.InstructionLabelledNOP epilogueLbl
@@ -248,9 +254,12 @@ translateStatement (LinearSyntax.StatementJumpIfZero v l) = do
 
 prepareArgsForCall :: CallingConvention -> [LinearSyntax.Var] -> ASMStatement ()
 prepareArgsForCall cc args = do
-  mapM_
-    (addStatement . ASMSyntax.StatementAllocateOnStack)
-    (CallingConvention.funStackToAllocate cc)
+  let size = typesSize $ CallingConvention.funStackToAllocate cc
+  addStatement $
+    ASMSyntax.InstructionMOV
+      (opRAX ASMSyntax.VarTypeInt)
+      (Right $ ASMSyntax.ImmediateInt size)
+  addStatement $ ASMSyntax.InstructionADD opRSP (opRAX ASMSyntax.VarTypeInt)
   mapM_ go (zip args (CallingConvention.funArgValues cc))
   addStatement $
     ASMSyntax.InstructionMOV (opRAX ASMSyntax.VarTypeInt) $
