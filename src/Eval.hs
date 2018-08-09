@@ -10,11 +10,12 @@ import qualified Control.Monad.State as State
 import qualified Control.Monad.Trans as Trans
 import Data.Array (Array)
 import qualified Data.Array as Array
+import Data.Array.IO (IOArray)
+import qualified Data.Array.IO as IOArray
 import Data.Bits
 import Data.Int (Int64)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import qualified Data.List as List
 
 import ASMSyntax
 import CallingConvention (CallingConvention)
@@ -48,7 +49,7 @@ data EFLAGS = EFLAGS
 data Env = Env
   { envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
   , envStrings :: IntMap String
-  , envStack :: [Value]
+  , envStack :: IOArray Int64 Value
   , regRIP :: Int
   , regRBP :: Int64
   , regRSP :: Int64
@@ -70,46 +71,41 @@ data Env = Env
   , regEFLAGS :: EFLAGS
   }
 
-instance Show Env where
-  show env =
-    "rip = " ++
-    show (regRIP env) ++
-    ", rbp = " ++
-    show (regRBP env) ++
-    ", rsp = " ++ show (regRSP env) ++ ", stack = " ++ show (envStack env)
-
-emptyEnv :: Env
-emptyEnv =
-  Env
-    { envForeignFunctions = IntMap.empty
-    , envStrings = IntMap.empty
-    , regRIP = 0
-    , envStack = []
-    , regRBP = 0
-    , regRSP = 0
-    , regRAX = ValueInt 0
-    , regRDI = ValueInt 0
-    , regRSI = ValueInt 0
-    , regRDX = ValueInt 0
-    , regRCX = ValueInt 0
-    , regR8 = ValueInt 0
-    , regR9 = ValueInt 0
-    , regXMM0 = 0
-    , regXMM1 = 0
-    , regXMM2 = 0
-    , regXMM3 = 0
-    , regXMM4 = 0
-    , regXMM5 = 0
-    , regXMM6 = 0
-    , regXMM7 = 0
-    , regEFLAGS = EFLAGS {efZF = False, efSF = False, efCF = False}
-    }
+emptyEnv :: IO Env
+emptyEnv = do
+  stack <- IOArray.newArray_ (0, 10000000)
+  pure $
+    Env
+      { envForeignFunctions = IntMap.empty
+      , envStrings = IntMap.empty
+      , regRIP = 0
+      , envStack = stack
+      , regRBP = 0
+      , regRSP = 0
+      , regRAX = ValueInt 0
+      , regRDI = ValueInt 0
+      , regRSI = ValueInt 0
+      , regRDX = ValueInt 0
+      , regRCX = ValueInt 0
+      , regR8 = ValueInt 0
+      , regR9 = ValueInt 0
+      , regXMM0 = 0
+      , regXMM1 = 0
+      , regXMM2 = 0
+      , regXMM3 = 0
+      , regXMM4 = 0
+      , regXMM5 = 0
+      , regXMM6 = 0
+      , regXMM7 = 0
+      , regEFLAGS = EFLAGS {efZF = False, efSF = False, efCF = False}
+      }
 
 type Execute = StateT Env IO
 
 runExecute :: Execute () -> IO ()
 runExecute m = do
-  _ <- runStateT m emptyEnv
+  env <- emptyEnv
+  _ <- runStateT m env
   pure ()
 
 startExecute ::
@@ -124,15 +120,14 @@ startExecute foreignFuns code strings = do
       pure (fdecl, f)
 
 readFromStack :: Int64 -> Execute Value
-readFromStack d = State.gets ((!! (fromIntegral d)) . envStack)
+readFromStack d = do
+  stack <- State.gets envStack
+  Trans.liftIO $ IOArray.readArray stack d
 
 writeToStack :: Int64 -> Value -> Execute ()
 writeToStack d val = do
-  (before, after) <- State.gets (List.splitAt (fromIntegral d) . envStack)
-  case after of
-    _:after' ->
-      State.modify $ \env -> env {envStack = before ++ [val] ++ after'}
-    [] -> State.modify $ \env -> env {envStack = before ++ [val]}
+  stack <- State.gets envStack
+  Trans.liftIO $ IOArray.writeArray stack d val
 
 pushOnStack :: Value -> Execute ()
 pushOnStack v = do
