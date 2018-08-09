@@ -107,7 +107,7 @@ simplifyFunctionDef fdef = do
       resultingMapping =
         IntMap.fromList $
         map
-          (\((SimplifiedSyntax.VarDecl _ pid), (SimplifiedSyntax.VarID vid)) ->
+          (\(SimplifiedSyntax.VarDecl _ pid, SimplifiedSyntax.VarID vid) ->
              (vid, pid))
           resultingCaptures
   State.modify $ \env -> env {vars = newVs}
@@ -152,7 +152,7 @@ simplifyFunctionDef fdef = do
     inc :: SimplifiedSyntax.VarID -> SimplifiedSyntax.VarID
     inc (SimplifiedSyntax.VarID vid) = SimplifiedSyntax.VarID (vid + 1)
 
-data ConstEnv = ConstEnv
+newtype ConstEnv = ConstEnv
   { capturesMapping :: IntMap SimplifiedSyntax.VarID
   }
 

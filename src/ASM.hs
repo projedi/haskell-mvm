@@ -28,7 +28,7 @@ typesSize = sum . map typeSize
 avenge :: LinearSyntax.Program -> ASMSyntax.Program
 avenge p =
   ASMSyntax.Program
-    { ASMSyntax.programCode = ASMSyntax.FunctionDef code
+    { ASMSyntax.programCode = code
     , ASMSyntax.programLibraries = LinearSyntax.programLibraries p
     , ASMSyntax.programForeignFunctions = LinearSyntax.programForeignFunctions p
     , ASMSyntax.programStrings = LinearSyntax.programStrings p
@@ -58,7 +58,7 @@ data Env = Env
   , funIdToLabelID :: IntMap ASMSyntax.LabelID
   }
 
-type ASM = WriterT [ASMSyntax.Statement] (State Env)
+type ASM = WriterT [ASMSyntax.Instruction] (State Env)
 
 nextLabel :: MonadState Env m => m ASMSyntax.LabelID
 nextLabel = do
@@ -130,7 +130,7 @@ translateCode fs = do
     ASMSyntax.InstructionCALL $
     ASMSyntax.NativeFunctionCall
       {ASMSyntax.nativeFunCallName = funMap IntMap.! 0}
-  addStatement $ ASMSyntax.InstructionRET
+  addStatement ASMSyntax.InstructionRET
   mapM_ translateFunctionDef fs
 
 retValueFromCallingConvention :: CallingConvention -> Maybe SomeRegister
@@ -173,7 +173,7 @@ translateFunctionDef fdef = do
     addStatement $ ASMSyntax.InstructionLabelledNOP epilogueLbl
     addStatement $ ASMSyntax.InstructionMOV opRSP (Left opRBP)
     addStatement $ ASMSyntax.InstructionPOP opRBP
-    addStatement $ ASMSyntax.InstructionRET
+    addStatement ASMSyntax.InstructionRET
 
 type ASMStatement = ReaderT ConstEnv ASM
 
@@ -186,7 +186,7 @@ runASMStatement :: ConstEnv -> ASMStatement a -> ASM a
 runASMStatement env m = runReaderT m env
 
 addStatement ::
-     MonadWriter [ASMSyntax.Statement] m => ASMSyntax.Statement -> m ()
+     MonadWriter [ASMSyntax.Instruction] m => ASMSyntax.Instruction -> m ()
 addStatement s = Writer.tell [s]
 
 translateStatement :: LinearSyntax.Statement -> ASMStatement ()
@@ -305,7 +305,7 @@ prepareArgsAtCall params cc = do
   let vals = map go (CallingConvention.funArgValues cc)
   generateAssignments params vals
   where
-    go :: CallingConvention.ArgLocation -> Var -> ASMSyntax.Statement
+    go :: CallingConvention.ArgLocation -> Var -> ASMSyntax.Instruction
     go (CallingConvention.ArgLocationRegister t r) v =
       ASMSyntax.InstructionMOV
         (ASMSyntax.IntOperandPointer $ pointerForLocalVar v)
@@ -317,7 +317,7 @@ prepareArgsAtCall params cc = do
         (ASMSyntax.IntOperandPointer $ pointerForLocalVar v)
         (Left $ ASMSyntax.IntOperandPointer $ pointerForParamVar t d)
     generateAssignments ::
-         [Var] -> [(Var -> ASMSyntax.Statement)] -> ASMStatement ()
+         [Var] -> [Var -> ASMSyntax.Instruction] -> ASMStatement ()
     generateAssignments [] [] = pure ()
     generateAssignments (v:vs) (val:vals) = do
       addStatement $ val v
@@ -425,7 +425,7 @@ translateExpr (LinearSyntax.ExprUnOp op v) = translateUnOp op v
 translateUnOp ::
      LinearSyntax.UnOp -> LinearSyntax.Var -> ASMStatement SomeRegister
 translateUnOp LinearSyntax.UnNeg v =
-  case (LinearSyntax.varType v) of
+  case LinearSyntax.varType v of
     ASMSyntax.VarTypeInt -> do
       v' <- resolveVariableAsIntOperand v
       let res = opRAX ASMSyntax.VarTypeInt
@@ -525,7 +525,7 @@ translateBinOp LinearSyntax.BinDiv lhs rhs =
       rhs' <- resolveVariableAsIntOperand rhs
       let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
-      addStatement $ ASMSyntax.InstructionCQO
+      addStatement ASMSyntax.InstructionCQO
       addStatement $ ASMSyntax.InstructionIDIV rhs'
       pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
@@ -545,7 +545,7 @@ translateBinOp LinearSyntax.BinMod lhs rhs =
       rhs' <- resolveVariableAsIntOperand rhs
       let res = opRAX ASMSyntax.VarTypeInt
       addStatement $ ASMSyntax.InstructionMOV res (Left lhs')
-      addStatement $ ASMSyntax.InstructionCQO
+      addStatement ASMSyntax.InstructionCQO
       addStatement $ ASMSyntax.InstructionIDIV rhs'
       addStatement $
         ASMSyntax.InstructionMOV res (Left $ opRDX ASMSyntax.VarTypeInt)

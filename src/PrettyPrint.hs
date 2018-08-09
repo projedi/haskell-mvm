@@ -16,11 +16,18 @@ prettyPrint p =
     [ printLibs $ programLibraries p
     , printForeignFunctions $ programForeignFunctions p
     , printStrings $ programStrings p
-    , prettyPrintSimple $ programCode p
+    , printCode $ programCode p
     ]
 
 printLibs :: [String] -> String
 printLibs libs = "Libraries: " ++ unwords libs
+
+printCode :: [Instruction] -> String
+printCode body =
+  "Code:\n" ++ List.intercalate "\n" (map printLine (zip [0 ..] body))
+  where
+    printLine :: (Int, Instruction) -> String
+    printLine (line, stmt) = show line ++ ": " ++ prettyPrintSimple stmt
 
 printForeignFunctions :: IntMap ForeignFunctionDecl -> String
 printForeignFunctions funs =
@@ -99,9 +106,9 @@ instance PrettyPrintSimple RegisterXMM where
 
 instance PrettyPrintSimple Pointer where
   prettyPrintSimple Pointer {pointerBase = mr, pointerDisplacement = d} =
-    "[" ++ (maybe "" ((++ "+") . prettyPrintSimple) mr) ++ show d ++ "]"
+    "[" ++ maybe "" ((++ "+") . prettyPrintSimple) mr ++ show d ++ "]"
 
-instance PrettyPrintSimple Statement where
+instance PrettyPrintSimple Instruction where
   prettyPrintSimple (InstructionCALL fcall) = "CALL " ++ prettyPrintSimple fcall
   prettyPrintSimple (InstructionCMP lhs rhs) =
     "CMP " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
@@ -152,13 +159,6 @@ instance PrettyPrintSimple Statement where
     "CVTSI2SD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionPUSH v) = "PUSH " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionPOP v) = "POP " ++ prettyPrintSimple v
-
-instance PrettyPrintSimple FunctionDef where
-  prettyPrintSimple FunctionDef {funDefBody = body} =
-    "Code:\n" ++ List.intercalate "\n" (map printLine (zip [0 ..] body))
-    where
-      printLine :: (Int, Statement) -> String
-      printLine (line, stmt) = show line ++ ": " ++ prettyPrintSimple stmt
 
 instance PrettyPrintSimple Immediate where
   prettyPrintSimple (ImmediateInt i) = show i

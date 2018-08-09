@@ -6,8 +6,7 @@ module ASMSyntax
   , StringID(..)
   , LabelID(..)
   , VarType(..)
-  , Statement(..)
-  , FunctionDef(..)
+  , Instruction(..)
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
   , Register(..)
@@ -33,7 +32,7 @@ import LinearSyntax
   )
 
 data Program = Program
-  { programCode :: FunctionDef
+  { programCode :: [Instruction]
   , programLibraries :: [String]
   , programForeignFunctions :: IntMap ForeignFunctionDecl
   , programStrings :: IntMap String
@@ -79,7 +78,7 @@ intOperandType :: IntOperand -> VarType
 intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
 
-data Statement
+data Instruction
   -- Subtract one from the other and set EFLAGS accordingly.
   = InstructionCMP IntOperand
                    IntOperand
@@ -157,10 +156,6 @@ data Statement
   | InstructionPUSH IntOperand
   -- Pop from stack onto operand. Adjusts RSP.
   | InstructionPOP IntOperand
-
-data FunctionDef = FunctionDef
-  { funDefBody :: [Statement]
-  }
 
 data FunctionCall
   = NativeFunctionCall { nativeFunCallName :: LabelID }

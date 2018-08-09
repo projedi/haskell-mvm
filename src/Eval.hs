@@ -5,7 +5,7 @@ module Eval
 import Control.Monad (forM, forM_, unless, when)
 import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Control.Monad.Reader as Reader
-import Control.Monad.State (StateT, runStateT)
+import Control.Monad.State (StateT, evalStateT)
 import qualified Control.Monad.State as State
 import qualified Control.Monad.Trans as Trans
 import Data.Array (Array)
@@ -31,14 +31,38 @@ typesMatch (VarTypePtr _) VarTypeInt = True
 typesMatch _ _ = False
 
 eval :: Program -> IO ()
+eval Program {programCode = []} = pure ()
 eval p = do
   libhandles <-
     forM (programLibraries p) $ \l -> do
       Right h <- dlopen l
       pure h
-  runExecute $
-    startExecute (programForeignFunctions p) (programCode p) (programStrings p)
+  funs <-
+    forM (programForeignFunctions p) $ \fdecl -> do
+      Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
+      pure (fdecl, f)
+  let code =
+        Array.listArray
+          (0, fromIntegral $ length (programCode p) - 1)
+          (programCode p)
+  stack <- IOArray.newArray_ (0, 10000000)
+  evalStateT
+    (runReaderT
+       executeCode
+       ConstEnv
+         { constEnvInstructions = code
+         , constEnvLabelMap = buildLabelMap $ Array.assocs code
+         , constEnvForeignFunctions = funs
+         , constEnvStrings = programStrings p
+         , constEnvStack = stack
+         })
+    emptyEnv
   forM_ libhandles dlclose
+  where
+    buildLabelMap [] = IntMap.empty
+    buildLabelMap ((i, InstructionLabelledNOP (LabelID lid)):is) =
+      IntMap.insert lid i $ buildLabelMap is
+    buildLabelMap (_:is) = buildLabelMap is
 
 data EFLAGS = EFLAGS
   { efZF :: Bool
@@ -47,10 +71,7 @@ data EFLAGS = EFLAGS
   }
 
 data Env = Env
-  { envForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
-  , envStrings :: IntMap String
-  , envStack :: IOArray Int64 Value
-  , regRIP :: Int
+  { regRIP :: Int64
   , regRBP :: Int64
   , regRSP :: Int64
   , regRAX :: Value
@@ -72,63 +93,64 @@ data Env = Env
   , regEFLAGS :: EFLAGS
   }
 
-emptyEnv :: IO Env
-emptyEnv = do
-  stack <- IOArray.newArray_ (0, 10000000)
-  pure $
-    Env
-      { envForeignFunctions = IntMap.empty
-      , envStrings = IntMap.empty
-      , regRIP = 0
-      , envStack = stack
-      , regRBP = 0
-      , regRSP = 0
-      , regRAX = ValueInt 0
-      , regRBX = ValueInt 0
-      , regRDI = ValueInt 0
-      , regRSI = ValueInt 0
-      , regRDX = ValueInt 0
-      , regRCX = ValueInt 0
-      , regR8 = ValueInt 0
-      , regR9 = ValueInt 0
-      , regXMM0 = 0
-      , regXMM1 = 0
-      , regXMM2 = 0
-      , regXMM3 = 0
-      , regXMM4 = 0
-      , regXMM5 = 0
-      , regXMM6 = 0
-      , regXMM7 = 0
-      , regEFLAGS = EFLAGS {efZF = False, efSF = False, efCF = False}
-      }
+emptyEnv :: Env
+emptyEnv =
+  Env
+    { regRIP = 0
+    , regRBP = 0
+    , regRSP = 0
+    , regRAX = ValueInt 0
+    , regRBX = ValueInt 0
+    , regRDI = ValueInt 0
+    , regRSI = ValueInt 0
+    , regRDX = ValueInt 0
+    , regRCX = ValueInt 0
+    , regR8 = ValueInt 0
+    , regR9 = ValueInt 0
+    , regXMM0 = 0
+    , regXMM1 = 0
+    , regXMM2 = 0
+    , regXMM3 = 0
+    , regXMM4 = 0
+    , regXMM5 = 0
+    , regXMM6 = 0
+    , regXMM7 = 0
+    , regEFLAGS = EFLAGS {efZF = False, efSF = False, efCF = False}
+    }
 
-type Execute = StateT Env IO
+data ConstEnv = ConstEnv
+  { constEnvInstructions :: Array Int64 Instruction
+  , constEnvLabelMap :: IntMap Int64
+  , constEnvForeignFunctions :: IntMap (ForeignFunctionDecl, ForeignFun)
+  , constEnvStrings :: IntMap String
+  , constEnvStack :: IOArray Int64 Value
+  }
 
-runExecute :: Execute () -> IO ()
-runExecute m = do
-  env <- emptyEnv
-  _ <- runStateT m env
-  pure ()
+type Execute = ReaderT ConstEnv (StateT Env IO)
 
-startExecute ::
-     IntMap ForeignFunctionDecl -> FunctionDef -> IntMap String -> Execute ()
-startExecute foreignFuns code strings = do
-  funs <- mapM getForeignFun foreignFuns
-  State.modify $ \env -> env {envForeignFunctions = funs, envStrings = strings}
-  executeFunctionBody (funDefBody code)
+executeCode :: Execute ()
+executeCode = do
+  pushOnStack (ValueInt specialRIPValue)
+  go
   where
-    getForeignFun fdecl = do
-      Just f <- Trans.liftIO $ findSymbol $ foreignFunDeclRealName fdecl
-      pure (fdecl, f)
+    specialRIPValue = -42
+    go = do
+      ipBefore <- State.gets regRIP
+      arr <- Reader.asks constEnvInstructions
+      execute (arr Array.! ipBefore)
+      ipAfter <- State.gets regRIP
+      let nextIP = ipAfter + 1
+      State.modify $ \env -> env {regRIP = nextIP}
+      unless (nextIP == specialRIPValue + 1) go
 
 readFromStack :: Int64 -> Execute Value
 readFromStack d = do
-  stack <- State.gets envStack
+  stack <- Reader.asks constEnvStack
   Trans.liftIO $ IOArray.readArray stack d
 
 writeToStack :: Int64 -> Value -> Execute ()
 writeToStack d val = do
-  stack <- State.gets envStack
+  stack <- Reader.asks constEnvStack
   Trans.liftIO $ IOArray.writeArray stack d val
 
 pushOnStack :: Value -> Execute ()
@@ -146,8 +168,7 @@ popFromStack t = do
   pure v
 
 prepareArgsAtCall :: CallingConvention -> Execute [Value]
-prepareArgsAtCall cc = do
-  mapM go (CallingConvention.funArgValues cc)
+prepareArgsAtCall cc = mapM go (CallingConvention.funArgValues cc)
   where
     go :: CallingConvention.ArgLocation -> Execute Value
     go (CallingConvention.ArgLocationRegister _ r) = readRegister r
@@ -172,7 +193,7 @@ foreignFunctionCall rettype params hasVarArgs args fun
             , CallingConvention.funArgTypes = args
             }
   ip <- State.gets regRIP
-  pushOnStack (ValueInt $ fromIntegral ip)
+  pushOnStack (ValueInt ip)
   rbp1 <- readRegister RegisterRBP
   pushOnStack rbp1
   rsp1 <- readRegister RegisterRSP
@@ -197,47 +218,27 @@ foreignFunctionCall rettype params hasVarArgs args fun
       | hasVarArgs = vs
     assertVals _ _ = error "Type mismatch"
 
-functionCall :: FunctionCall -> ExecuteStatement ()
+functionCall :: FunctionCall -> Execute ()
 functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
                                  , foreignFunCallArgTypes = args
                                  } = do
-  Just (fdecl, f) <- State.gets (IntMap.lookup fid . envForeignFunctions)
-  Trans.lift $
-    foreignFunctionCall
-      (foreignFunDeclRetType fdecl)
-      (foreignFunDeclParams fdecl)
-      (foreignFunDeclHasVarArgs fdecl)
-      args
-      f
+  Just (fdecl, f) <- Reader.asks (IntMap.lookup fid . constEnvForeignFunctions)
+  foreignFunctionCall
+    (foreignFunDeclRetType fdecl)
+    (foreignFunDeclParams fdecl)
+    (foreignFunDeclHasVarArgs fdecl)
+    args
+    f
 functionCall NativeFunctionCall {nativeFunCallName = lbl} = do
   ip <- State.gets regRIP
-  Trans.lift $ pushOnStack (ValueInt $ fromIntegral ip)
+  pushOnStack (ValueInt ip)
   jump lbl
-
-executeFunctionBody :: [Statement] -> Execute ()
-executeFunctionBody [] = pure ()
-executeFunctionBody ss = do
-  State.modify $ \env -> env {regRIP = 0}
-  let instructions = Array.listArray (0, length ss - 1) ss
-  pushOnStack (ValueInt (-2))
-  startExecution instructions
-  where
-    startExecution instructions =
-      runReaderT executeStatement $
-      ConstEnv
-        { constEnvInstructions = instructions
-        , constEnvLabelMap = buildLabelMap $ Array.assocs instructions
-        }
-    buildLabelMap [] = IntMap.empty
-    buildLabelMap ((i, InstructionLabelledNOP (LabelID lid)):is) =
-      IntMap.insert lid i $ buildLabelMap is
-    buildLabelMap (_:is) = buildLabelMap is
 
 readImmediate :: Immediate -> Execute Value
 readImmediate (ImmediateInt i) = pure $ ValueInt i
 readImmediate (ImmediateFloat f) = pure $ ValueFloat f
 readImmediate (ImmediateString (StringID sid)) = do
-  s <- State.gets $ ((IntMap.! sid) . envStrings)
+  s <- Reader.asks ((IntMap.! sid) . constEnvStrings)
   pure $ ValueString $ Right s
 
 readRegister :: Register -> Execute Value
@@ -320,39 +321,16 @@ writeIntOperand :: IntOperand -> Value -> Execute ()
 writeIntOperand (IntOperandRegister _ r) val = writeRegister r val
 writeIntOperand (IntOperandPointer p) val = writePointer p val
 
-data ConstEnv = ConstEnv
-  { constEnvInstructions :: Array Int Statement
-  , constEnvLabelMap :: IntMap Int
-  }
-
-type ExecuteStatement = ReaderT ConstEnv Execute
-
-jump :: LabelID -> ExecuteStatement ()
+jump :: LabelID -> Execute ()
 jump (LabelID lid) = do
   ip <- Reader.asks ((IntMap.! lid) . constEnvLabelMap)
   State.modify $ \env -> env {regRIP = ip - 1}
 
-executeStatement :: ExecuteStatement ()
-executeStatement = do
-  ipBefore <- State.gets regRIP
-  arr <- Reader.asks constEnvInstructions
-  execute (arr Array.! ipBefore)
-  ipAfter <- State.gets regRIP
-  let nextIP = ipAfter + 1
-  when (nextIP <= snd (Array.bounds arr) && nextIP >= fst (Array.bounds arr)) $ do
-    State.modify $ \env -> env {regRIP = nextIP}
-    executeStatement
-
-functionReturn :: ExecuteStatement ()
-functionReturn = do
-  ValueInt ip <- Trans.lift $ popFromStack VarTypeInt -- popping RIP
-  State.modify $ \env -> env {regRIP = fromIntegral ip}
-
-execute :: Statement -> ExecuteStatement ()
+execute :: Instruction -> Execute ()
 execute (InstructionCALL fcall) = functionCall fcall
 execute (InstructionCMP lhs rhs) = do
-  ValueInt lhs' <- Trans.lift (readIntOperand lhs)
-  ValueInt rhs' <- Trans.lift (readIntOperand rhs)
+  ValueInt lhs' <- readIntOperand lhs
+  ValueInt rhs' <- readIntOperand rhs
   let (zf, sf) =
         case compare lhs' rhs' of
           EQ -> (True, False)
@@ -362,125 +340,122 @@ execute (InstructionCMP lhs rhs) = do
     env {regEFLAGS = (regEFLAGS env) {efZF = zf, efSF = sf}}
 execute (InstructionSetZ v) = do
   zf <- State.gets (efZF . regEFLAGS)
-  Trans.lift $
-    writeIntOperand
-      v
-      (if zf
-         then ValueInt 1
-         else ValueInt 0)
+  writeIntOperand
+    v
+    (if zf
+       then ValueInt 1
+       else ValueInt 0)
 execute (InstructionSetNZ v) = do
   zf <- State.gets (efZF . regEFLAGS)
-  Trans.lift $
-    writeIntOperand
-      v
-      (if zf
-         then ValueInt 0
-         else ValueInt 1)
+  writeIntOperand
+    v
+    (if zf
+       then ValueInt 0
+       else ValueInt 1)
 execute (InstructionSetS v) = do
   sf <- State.gets (efSF . regEFLAGS)
-  Trans.lift $
-    writeIntOperand
-      v
-      (if sf
-         then ValueInt 1
-         else ValueInt 0)
+  writeIntOperand
+    v
+    (if sf
+       then ValueInt 1
+       else ValueInt 0)
 execute (InstructionSetC v) = do
   cf <- State.gets (efCF . regEFLAGS)
-  Trans.lift $
-    writeIntOperand
-      v
-      (if cf
-         then ValueInt 1
-         else ValueInt 0)
+  writeIntOperand
+    v
+    (if cf
+       then ValueInt 1
+       else ValueInt 0)
 execute (InstructionMOV lhs rhs) = do
-  res <- Trans.lift $ either readIntOperand readImmediate rhs
-  Trans.lift $ writeIntOperand lhs res
-execute InstructionRET = functionReturn
+  res <- either readIntOperand readImmediate rhs
+  writeIntOperand lhs res
+execute InstructionRET = do
+  ValueInt ip <- popFromStack VarTypeInt -- popping RIP
+  State.modify $ \env -> env {regRIP = ip}
 execute (InstructionLabelledNOP _) = pure ()
 execute (InstructionJMP l) = jump l
 execute (InstructionJZ l) = do
   zf <- State.gets (efZF . regEFLAGS)
   when zf $ jump l
 execute (InstructionNEG v) = do
-  ValueInt val <- Trans.lift (readIntOperand v)
-  Trans.lift $ writeIntOperand v (ValueInt (negate val))
+  ValueInt val <- readIntOperand v
+  writeIntOperand v (ValueInt (negate val))
 execute (InstructionAND lhs rhs) = do
-  lhs' <- Trans.lift (readIntOperand lhs)
-  rhs' <- Trans.lift (readIntOperand rhs)
-  Trans.lift $ writeIntOperand lhs (lhs' .&. rhs')
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
+  writeIntOperand lhs (lhs' .&. rhs')
 execute (InstructionXOR lhs rhs) = do
-  lhs' <- Trans.lift (readIntOperand lhs)
-  rhs' <- Trans.lift (readIntOperand rhs)
-  Trans.lift $ writeIntOperand lhs (lhs' `xor` rhs')
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
+  writeIntOperand lhs (lhs' `xor` rhs')
 execute (InstructionOR lhs rhs) = do
-  lhs' <- Trans.lift (readIntOperand lhs)
-  rhs' <- Trans.lift (readIntOperand rhs)
-  Trans.lift $ writeIntOperand lhs (lhs' .|. rhs')
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
+  writeIntOperand lhs (lhs' .|. rhs')
 execute (InstructionADD lhs rhs) = do
-  lhs' <- Trans.lift (readIntOperand lhs)
-  rhs' <- Trans.lift (readIntOperand rhs)
-  Trans.lift $ writeIntOperand lhs (lhs' + rhs')
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
+  writeIntOperand lhs (lhs' + rhs')
 execute (InstructionSUB lhs rhs) = do
-  lhs' <- Trans.lift (readIntOperand lhs)
-  rhs' <- Trans.lift (readIntOperand rhs)
-  Trans.lift $ writeIntOperand lhs (lhs' - rhs')
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
+  writeIntOperand lhs (lhs' - rhs')
 execute (InstructionIDIV v)
   -- TODO: Should use RDX:RAX
  = do
-  lhs' <- Trans.lift (readRegister RegisterRAX)
-  rhs' <- Trans.lift (readIntOperand v)
+  lhs' <- readRegister RegisterRAX
+  rhs' <- readIntOperand v
   let (q, r) = lhs' `quotRem` rhs'
-  Trans.lift $ writeRegister RegisterRAX q
-  Trans.lift $ writeRegister RegisterRDX r
+  writeRegister RegisterRAX q
+  writeRegister RegisterRDX r
 execute (InstructionIMUL lhs rhs) = do
-  lhs' <- Trans.lift (readIntOperand lhs)
-  rhs' <- Trans.lift (readIntOperand rhs)
-  Trans.lift $ writeIntOperand lhs (lhs' * rhs')
+  lhs' <- readIntOperand lhs
+  rhs' <- readIntOperand rhs
+  writeIntOperand lhs (lhs' * rhs')
 execute InstructionCQO
   -- TODO: Not implemented. We only use RAX.
- = do
-  pure ()
+ = pure ()
 execute (InstructionADDSD lhs rhs) = do
-  lhs' <- Trans.lift (readRegisterXMM lhs)
-  rhs' <- Trans.lift (readRegisterXMM rhs)
-  Trans.lift (writeRegisterXMM lhs (lhs' + rhs'))
+  lhs' <- readRegisterXMM lhs
+  rhs' <- readRegisterXMM rhs
+  writeRegisterXMM lhs (lhs' + rhs')
 execute (InstructionSUBSD lhs rhs) = do
-  lhs' <- Trans.lift (readRegisterXMM lhs)
-  rhs' <- Trans.lift (readRegisterXMM rhs)
-  Trans.lift (writeRegisterXMM lhs (lhs' - rhs'))
+  lhs' <- readRegisterXMM lhs
+  rhs' <- readRegisterXMM rhs
+  writeRegisterXMM lhs (lhs' - rhs')
 execute (InstructionMULSD lhs rhs) = do
-  lhs' <- Trans.lift (readRegisterXMM lhs)
-  rhs' <- Trans.lift (readRegisterXMM rhs)
-  Trans.lift (writeRegisterXMM lhs (lhs' * rhs'))
+  lhs' <- readRegisterXMM lhs
+  rhs' <- readRegisterXMM rhs
+  writeRegisterXMM lhs (lhs' * rhs')
 execute (InstructionDIVSD lhs rhs) = do
-  lhs' <- Trans.lift (readRegisterXMM lhs)
-  rhs' <- Trans.lift (readRegisterXMM rhs)
-  Trans.lift (writeRegisterXMM lhs (lhs' / rhs'))
+  lhs' <- readRegisterXMM lhs
+  rhs' <- readRegisterXMM rhs
+  writeRegisterXMM lhs (lhs' / rhs')
 execute (InstructionCOMISD lhs rhs) = do
-  lhs' <- Trans.lift (readRegisterXMM lhs)
-  rhs' <- Trans.lift (readRegisterXMM rhs)
+  lhs' <- readRegisterXMM lhs
+  rhs' <- readRegisterXMM rhs
   let (zf, cf) =
-        case (compare lhs' rhs') of
+        case compare lhs' rhs' of
           EQ -> (True, False)
           LT -> (False, True)
           GT -> (False, False)
   State.modify $ \env ->
     env {regEFLAGS = (regEFLAGS env) {efZF = zf, efCF = cf}}
 execute (InstructionMOVSD_XMM_XMM lhs rhs) = do
-  res <- Trans.lift (readRegisterXMM rhs)
-  Trans.lift (writeRegisterXMM lhs res)
+  res <- readRegisterXMM rhs
+  writeRegisterXMM lhs res
 execute (InstructionMOVSD_XMM_M64 lhs rhs) = do
-  res <- Trans.lift (readPointer rhs)
-  Trans.lift (writeRegisterXMM lhs res)
+  res <- readPointer rhs
+  writeRegisterXMM lhs res
 execute (InstructionMOVSD_M64_XMM lhs rhs) = do
-  res <- Trans.lift (readRegisterXMM rhs)
-  Trans.lift (writePointer lhs res)
+  res <- readRegisterXMM rhs
+  writePointer lhs res
 execute (InstructionCVTSI2SD lhs rhs) = do
-  ValueInt i <- Trans.lift (readIntOperand rhs)
-  Trans.lift (writeRegisterXMM lhs $ ValueFloat $ fromIntegral i)
+  ValueInt i <- readIntOperand rhs
+  writeRegisterXMM lhs $ ValueFloat $ fromIntegral i
 execute (InstructionPUSH x) = do
-  res <- Trans.lift $ readIntOperand x
-  Trans.lift $ pushOnStack res
+  res <- readIntOperand x
+  pushOnStack res
 execute (InstructionPOP x) = do
-  v <- Trans.lift $ popFromStack (intOperandType x)
-  Trans.lift $ writeIntOperand x v
+  v <- popFromStack (intOperandType x)
+  writeIntOperand x v
