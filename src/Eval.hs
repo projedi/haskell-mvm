@@ -410,9 +410,6 @@ execute (InstructionSetC v) = do
 execute (InstructionMOV lhs rhs) = do
   res <- Trans.lift $ either readIntOperand readImmediate rhs
   Trans.lift $ writeIntOperand lhs res
-execute (StatementPushOnStack x) = do
-  res <- Trans.lift $ readIntOperand x
-  Trans.lift $ pushOnStack res
 execute (StatementAllocateOnStack t) = do
   Trans.lift $ pushOnStack (defaultValueFromType t)
 execute (StatementPopFromStack t) = Trans.lift $ popFromStack t
@@ -499,3 +496,6 @@ execute (InstructionMOVSD_M64_XMM lhs rhs) = do
 execute (InstructionCVTSI2SD lhs rhs) = do
   ValueInt i <- Trans.lift (readIntOperand rhs)
   Trans.lift (writeRegisterXMM lhs $ ValueFloat $ fromIntegral i)
+execute (InstructionPUSH x) = do
+  res <- Trans.lift $ readIntOperand x
+  Trans.lift $ pushOnStack res

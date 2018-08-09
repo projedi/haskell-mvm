@@ -160,7 +160,7 @@ translateFunctionDef fdef = do
     funLbl <- State.gets ((IntMap.! fid) . funIdToLabelID)
     addStatement $ ASMSyntax.InstructionLabelledNOP funLbl
     let stackVars = params ++ locals
-    addStatement $ ASMSyntax.StatementPushOnStack opRBP
+    addStatement $ ASMSyntax.InstructionPUSH opRBP
     addStatement $ ASMSyntax.InstructionMOV opRBP (Left opRSP)
     mapM_
       (addStatement . ASMSyntax.StatementAllocateOnStack . varType)

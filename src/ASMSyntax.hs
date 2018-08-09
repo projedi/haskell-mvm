@@ -79,8 +79,7 @@ intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
 
 data Statement
-  = StatementPushOnStack IntOperand
-  | StatementAllocateOnStack VarType
+  = StatementAllocateOnStack VarType
   | StatementPopFromStack VarType
   --
   -- From here on, statements are directly representable as ASM instructions.
@@ -158,6 +157,8 @@ data Statement
   -- Convert from integer in rhs to double precision in lhs.
   | InstructionCVTSI2SD RegisterXMM
                         IntOperand
+  -- Push operand on stack. Adjusts RSP.
+  | InstructionPUSH IntOperand
 
 data FunctionDef = FunctionDef
   { funDefBody :: [Statement]
