@@ -114,8 +114,6 @@ instance PrettyPrintSimple Statement where
     " " ++ either prettyPrintSimple prettyPrintSimple rhs
   prettyPrintSimple (StatementAllocateOnStack t) =
     "alloc " ++ prettyPrintSimple t ++ ";"
-  prettyPrintSimple (StatementPopFromStack t) =
-    "pop " ++ prettyPrintSimple t ++ ";"
   prettyPrintSimple InstructionRET = "RET"
   prettyPrintSimple (InstructionLabelledNOP l) = show l ++ ": NOP"
   prettyPrintSimple (InstructionJMP l) = "JMP " ++ show l
@@ -153,8 +151,8 @@ instance PrettyPrintSimple Statement where
     "MOVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionCVTSI2SD lhs rhs) =
     "CVTSI2SD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionPUSH v) =
-    "PUSH " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionPUSH v) = "PUSH " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionPOP v) = "POP " ++ prettyPrintSimple v
 
 instance PrettyPrintSimple FunctionDef where
   prettyPrintSimple FunctionDef {funDefBody = body} =

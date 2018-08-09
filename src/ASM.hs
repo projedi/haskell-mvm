@@ -77,15 +77,6 @@ opRCX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRCX
 opRDX :: ASMSyntax.VarType -> ASMSyntax.IntOperand
 opRDX t = ASMSyntax.IntOperandRegister t ASMSyntax.RegisterRDX
 
-peekStack :: ASMSyntax.VarType -> ASMSyntax.IntOperand
-peekStack t =
-  ASMSyntax.IntOperandPointer
-    ASMSyntax.Pointer
-      { ASMSyntax.pointerType = t
-      , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRSP
-      , ASMSyntax.pointerDisplacement = -1
-      }
-
 introduceVariable :: LinearSyntax.Var -> ASM Var
 introduceVariable LinearSyntax.Var { LinearSyntax.varName = LinearSyntax.VarID vid
                                    , LinearSyntax.varType = t
@@ -168,11 +159,9 @@ translateFunctionDef fdef = do
     prepareArgsAtCall params cc
     mapM_ translateStatement $ LinearSyntax.funDefBody fdef
     addStatement $ ASMSyntax.InstructionLabelledNOP epilogueLbl
-    mapM_ (addStatement . ASMSyntax.StatementPopFromStack . varType) $
+    mapM_ (addStatement . ASMSyntax.InstructionPOP . opRCX . varType) $
       reverse stackVars
-    addStatement $
-      ASMSyntax.InstructionMOV opRBP (Left $ peekStack ASMSyntax.VarTypeInt)
-    addStatement $ ASMSyntax.StatementPopFromStack ASMSyntax.VarTypeInt
+    addStatement $ ASMSyntax.InstructionPOP opRBP
     addStatement $ ASMSyntax.InstructionRET
 
 type ASMStatement = ReaderT ConstEnv ASM
@@ -291,7 +280,7 @@ prepareArgsForCall cc args = do
 cleanStackAfterCall :: CallingConvention -> ASMStatement ()
 cleanStackAfterCall cc =
   mapM_
-    (addStatement . ASMSyntax.StatementPopFromStack)
+    (addStatement . ASMSyntax.InstructionPOP . opRCX)
     (reverse $ CallingConvention.funStackToAllocate cc)
 
 prepareArgsAtCall :: [Var] -> CallingConvention -> ASMStatement ()

@@ -128,12 +128,13 @@ pushOnStack v =
   State.modify $ \env ->
     env {regRSP = regRSP env + 1, envStack = envStack env ++ [v]}
 
-popFromStack :: VarType -> Execute ()
+popFromStack :: VarType -> Execute Value
 popFromStack t = do
   v <- State.gets (List.last . envStack)
   unless (typesMatch (typeof v) t) $ error "Type mismatch"
   State.modify $ \env ->
     env {regRSP = regRSP env - 1, envStack = List.init (envStack env)}
+  pure v
 
 prepareArgsAtCall :: CallingConvention -> Execute [Value]
 prepareArgsAtCall cc = do
@@ -169,16 +170,9 @@ foreignFunctionCall rettype params hasVarArgs args fun
   writeRegister RegisterRBP rsp1
   vals <- prepareArgsAtCall cc
   res <- Trans.liftIO $ call fun rettype (assertVals params vals)
-  rbp2 <-
-    readPointer $
-    Pointer
-      { pointerType = VarTypeInt
-      , pointerBase = Just RegisterRSP
-      , pointerDisplacement = -1
-      }
+  rbp2 <- popFromStack VarTypeInt
   writeRegister RegisterRBP rbp2
-  popFromStack VarTypeInt
-  popFromStack VarTypeInt
+  _ <- popFromStack VarTypeInt -- Popping RIP
   case (res, CallingConvention.funRetValue cc) of
     (Nothing, Nothing) -> pure ()
     (Just r, Just (CallingConvention.RetLocationRegister _ rv)) ->
@@ -352,15 +346,7 @@ executeStatement = do
 
 functionReturn :: ExecuteStatement ()
 functionReturn = do
-  ValueInt ip <-
-    Trans.lift $
-    readPointer $
-    Pointer
-      { pointerType = VarTypeInt
-      , pointerBase = Just RegisterRSP
-      , pointerDisplacement = -1
-      }
-  Trans.lift $ popFromStack VarTypeInt -- popping RIP
+  ValueInt ip <- Trans.lift $ popFromStack VarTypeInt -- popping RIP
   State.modify $ \env -> env {regRIP = fromIntegral ip}
 
 execute :: Statement -> ExecuteStatement ()
@@ -412,7 +398,6 @@ execute (InstructionMOV lhs rhs) = do
   Trans.lift $ writeIntOperand lhs res
 execute (StatementAllocateOnStack t) = do
   Trans.lift $ pushOnStack (defaultValueFromType t)
-execute (StatementPopFromStack t) = Trans.lift $ popFromStack t
 execute InstructionRET = functionReturn
 execute (InstructionLabelledNOP _) = pure ()
 execute (InstructionJMP l) = jump l
@@ -499,3 +484,6 @@ execute (InstructionCVTSI2SD lhs rhs) = do
 execute (InstructionPUSH x) = do
   res <- Trans.lift $ readIntOperand x
   Trans.lift $ pushOnStack res
+execute (InstructionPOP x) = do
+  v <- Trans.lift $ popFromStack (intOperandType x)
+  Trans.lift $ writeIntOperand x v

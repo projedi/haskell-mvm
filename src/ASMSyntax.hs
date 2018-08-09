@@ -80,7 +80,6 @@ intOperandType (IntOperandPointer p) = pointerType p
 
 data Statement
   = StatementAllocateOnStack VarType
-  | StatementPopFromStack VarType
   --
   -- From here on, statements are directly representable as ASM instructions.
   --
@@ -159,6 +158,8 @@ data Statement
                         IntOperand
   -- Push operand on stack. Adjusts RSP.
   | InstructionPUSH IntOperand
+  -- Pop from stack onto operand. Adjusts RSP.
+  | InstructionPOP IntOperand
 
 data FunctionDef = FunctionDef
   { funDefBody :: [Statement]
