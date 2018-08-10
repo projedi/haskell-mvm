@@ -106,7 +106,7 @@ emptyEnv =
   Env
     { regRIP = 0
     , regRBP = 0
-    , regRSP = 0
+    , regRSP = stackSize
     , regRAX = ValueInt 0
     , regRBX = ValueInt 0
     , regRDI = ValueInt 0
@@ -165,14 +165,14 @@ pushOnStack :: Value -> Execute ()
 pushOnStack v = do
   d <- State.gets regRSP
   writeToStack d v
-  State.modify $ \env -> env {regRSP = d + typeSize (typeof v)}
+  State.modify $ \env -> env {regRSP = d - typeSize (typeof v)}
 
 popFromStack :: VarType -> Execute Value
 popFromStack t = do
   d <- State.gets regRSP
-  v <- readFromStack (d - typeSize t)
+  v <- readFromStack (d + typeSize t)
   unless (typesMatch (typeof v) t) $ error "Type mismatch"
-  State.modify $ \env -> env {regRSP = d - typeSize t}
+  State.modify $ \env -> env {regRSP = d + typeSize t}
   pure v
 
 prepareArgsAtCall :: CallingConvention -> Execute [Value]
@@ -186,7 +186,7 @@ prepareArgsAtCall cc = mapM go (CallingConvention.funArgValues cc)
         Pointer
           { pointerType = t
           , pointerBase = Just RegisterRBP
-          , pointerDisplacement = -(d + 2 * typeSize VarTypeInt + typeSize t)
+          , pointerDisplacement = d + 2 * typeSize VarTypeInt + typeSize t
           }
 
 foreignFunctionCall ::
