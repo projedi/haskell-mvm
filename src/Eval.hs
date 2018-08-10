@@ -23,6 +23,14 @@ import qualified CallingConvention
 import ForeignEval
 import Value
 
+-- In reality all our types are 8 bytes long, so our stack addresses at 8 bytes
+stackScale :: Int64
+stackScale = 8
+
+-- Stack size in bytes.
+stackSize :: Int64
+stackSize = 80000000
+
 typesMatch :: VarType -> VarType -> Bool
 typesMatch lhs rhs
   | lhs == rhs = True
@@ -45,7 +53,7 @@ eval p = do
         Array.listArray
           (0, fromIntegral $ length (programCode p) - 1)
           (programCode p)
-  stack <- IOArray.newArray_ (0, 10000000)
+  stack <- IOArray.newArray_ (0, stackSize `div` stackScale)
   evalStateT
     (runReaderT
        executeCode
@@ -146,12 +154,12 @@ executeCode = do
 readFromStack :: Int64 -> Execute Value
 readFromStack d = do
   stack <- Reader.asks constEnvStack
-  Trans.liftIO $ IOArray.readArray stack d
+  Trans.liftIO $ IOArray.readArray stack (d `div` stackScale)
 
 writeToStack :: Int64 -> Value -> Execute ()
 writeToStack d val = do
   stack <- Reader.asks constEnvStack
-  Trans.liftIO $ IOArray.writeArray stack d val
+  Trans.liftIO $ IOArray.writeArray stack (d `div` stackScale) val
 
 pushOnStack :: Value -> Execute ()
 pushOnStack v = do

@@ -166,7 +166,7 @@ data FunctionCall
                         , foreignFunCallArgTypes :: [VarType] }
 
 typeSize :: VarType -> Int64
-typeSize _ = 1
+typeSize _ = 8
 
 typesSize :: [VarType] -> Int64
 typesSize = sum . map typeSize
