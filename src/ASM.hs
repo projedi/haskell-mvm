@@ -103,7 +103,8 @@ resolveVariableAsPointer v = do
     ASMSyntax.Pointer
       { ASMSyntax.pointerType = t
       , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
-      , ASMSyntax.pointerDisplacement = -d
+      , ASMSyntax.pointerDisplacement =
+          -d - ASMSyntax.typeSize (ASMSyntax.VarTypeInt)
       }
 
 resolveVariableAsIntOperand ::
@@ -282,7 +283,7 @@ prepareArgsForCall cc args = do
       ASMSyntax.Pointer
         { ASMSyntax.pointerType = t
         , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRSP
-        , ASMSyntax.pointerDisplacement = d + ASMSyntax.typeSize t
+        , ASMSyntax.pointerDisplacement = d
         }
 
 cleanStackAfterCall :: CallingConvention -> ASMStatement ()
@@ -323,15 +324,15 @@ prepareArgsAtCall params cc = do
         { ASMSyntax.pointerType = t
         , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
         , ASMSyntax.pointerDisplacement =
-            d + 2 * ASMSyntax.typeSize ASMSyntax.VarTypeInt +
-            ASMSyntax.typeSize t
+            d + 2 * ASMSyntax.typeSize ASMSyntax.VarTypeInt
         }
     pointerForLocalVar :: Var -> ASMSyntax.Pointer
     pointerForLocalVar Var {varType = t, varDisplacement = d} =
       ASMSyntax.Pointer
         { ASMSyntax.pointerType = t
         , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
-        , ASMSyntax.pointerDisplacement = -d
+        , ASMSyntax.pointerDisplacement =
+            -d - ASMSyntax.typeSize ASMSyntax.VarTypeInt
         }
 
 translateFunctionCall ::
@@ -406,7 +407,8 @@ translateExpr (LinearSyntax.ExprAddressOf v) = do
   addStatement $
     ASMSyntax.InstructionMOV
       (opRCX ASMSyntax.VarTypeInt)
-      (Right $ ASMSyntax.ImmediateInt d)
+      (Right $
+       ASMSyntax.ImmediateInt (d + ASMSyntax.typeSize ASMSyntax.VarTypeInt))
   let rax = opRAX ASMSyntax.VarTypeInt
   addStatement $ ASMSyntax.InstructionMOV rax (Left opRBP)
   addStatement $ ASMSyntax.InstructionSUB rax (opRCX ASMSyntax.VarTypeInt)
