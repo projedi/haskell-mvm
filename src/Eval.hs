@@ -23,6 +23,14 @@ import qualified CallingConvention
 import ForeignEval
 import Value
 
+-- In reality all our types are 8 bytes long, so our stack addresses at 8 bytes
+stackScale :: Int64
+stackScale = 8
+
+-- Stack size in bytes.
+stackSize :: Int64
+stackSize = 80000000
+
 typesMatch :: VarType -> VarType -> Bool
 typesMatch lhs rhs
   | lhs == rhs = True
@@ -45,7 +53,7 @@ eval p = do
         Array.listArray
           (0, fromIntegral $ length (programCode p) - 1)
           (programCode p)
-  stack <- IOArray.newArray_ (0, 10000000)
+  stack <- IOArray.newArray_ (0, stackSize `div` stackScale)
   evalStateT
     (runReaderT
        executeCode
@@ -98,7 +106,7 @@ emptyEnv =
   Env
     { regRIP = 0
     , regRBP = 0
-    , regRSP = 0
+    , regRSP = stackSize
     , regRAX = ValueInt 0
     , regRBX = ValueInt 0
     , regRDI = ValueInt 0
@@ -146,25 +154,26 @@ executeCode = do
 readFromStack :: Int64 -> Execute Value
 readFromStack d = do
   stack <- Reader.asks constEnvStack
-  Trans.liftIO $ IOArray.readArray stack d
+  Trans.liftIO $ IOArray.readArray stack (d `div` stackScale)
 
 writeToStack :: Int64 -> Value -> Execute ()
 writeToStack d val = do
   stack <- Reader.asks constEnvStack
-  Trans.liftIO $ IOArray.writeArray stack d val
+  Trans.liftIO $ IOArray.writeArray stack (d `div` stackScale) val
 
 pushOnStack :: Value -> Execute ()
 pushOnStack v = do
   d <- State.gets regRSP
-  writeToStack d v
-  State.modify $ \env -> env {regRSP = d + 1}
+  let d' = d - typeSize (typeof v)
+  writeToStack d' v
+  State.modify $ \env -> env {regRSP = d'}
 
 popFromStack :: VarType -> Execute Value
 popFromStack t = do
   d <- State.gets regRSP
-  v <- readFromStack (d - 1)
+  v <- readFromStack d
   unless (typesMatch (typeof v) t) $ error "Type mismatch"
-  State.modify $ \env -> env {regRSP = d - 1}
+  State.modify $ \env -> env {regRSP = d + typeSize t}
   pure v
 
 prepareArgsAtCall :: CallingConvention -> Execute [Value]
@@ -178,7 +187,7 @@ prepareArgsAtCall cc = mapM go (CallingConvention.funArgValues cc)
         Pointer
           { pointerType = t
           , pointerBase = Just RegisterRBP
-          , pointerDisplacement = -(d + 3)
+          , pointerDisplacement = d + 2 * typeSize VarTypeInt
           }
 
 foreignFunctionCall ::
