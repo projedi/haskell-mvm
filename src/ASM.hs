@@ -19,12 +19,6 @@ import CallingConvention (CallingConvention)
 import qualified CallingConvention
 import qualified LinearSyntax
 
-typeSize :: ASMSyntax.VarType -> Int64
-typeSize _ = 1
-
-typesSize :: [ASMSyntax.VarType] -> Int64
-typesSize = sum . map typeSize
-
 avenge :: LinearSyntax.Program -> ASMSyntax.Program
 avenge p =
   ASMSyntax.Program
@@ -90,7 +84,7 @@ introduceVariable :: LinearSyntax.Var -> ASM Var
 introduceVariable LinearSyntax.Var { LinearSyntax.varName = LinearSyntax.VarID vid
                                    , LinearSyntax.varType = t
                                    } = do
-  d <- State.gets (fromIntegral . length . varStack)
+  d <- State.gets (ASMSyntax.typesSize . varStack)
   let var = Var {varType = t, varDisplacement = d}
   State.modify $ \env ->
     env
@@ -162,7 +156,7 @@ translateFunctionDef fdef = do
     let stackVars = params ++ locals
     addStatement $ ASMSyntax.InstructionPUSH opRBP
     addStatement $ ASMSyntax.InstructionMOV opRBP (Left opRSP)
-    let size = typesSize $ map varType stackVars
+    let size = ASMSyntax.typesSize $ map varType stackVars
     addStatement $
       ASMSyntax.InstructionMOV
         (opRBX ASMSyntax.VarTypeInt)
@@ -254,7 +248,7 @@ translateStatement (LinearSyntax.StatementJumpIfZero v l) = do
 
 prepareArgsForCall :: CallingConvention -> [LinearSyntax.Var] -> ASMStatement ()
 prepareArgsForCall cc args = do
-  let size = typesSize $ CallingConvention.funStackToAllocate cc
+  let size = ASMSyntax.typesSize $ CallingConvention.funStackToAllocate cc
   addStatement $
     ASMSyntax.InstructionMOV
       (opRAX ASMSyntax.VarTypeInt)
@@ -288,12 +282,12 @@ prepareArgsForCall cc args = do
       ASMSyntax.Pointer
         { ASMSyntax.pointerType = t
         , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRSP
-        , ASMSyntax.pointerDisplacement = -(d + 1)
+        , ASMSyntax.pointerDisplacement = -(d + ASMSyntax.typeSize t)
         }
 
 cleanStackAfterCall :: CallingConvention -> ASMStatement ()
 cleanStackAfterCall cc = do
-  let size = typesSize $ CallingConvention.funStackToAllocate cc
+  let size = ASMSyntax.typesSize $ CallingConvention.funStackToAllocate cc
   addStatement $
     ASMSyntax.InstructionMOV
       (opRCX ASMSyntax.VarTypeInt)
@@ -328,7 +322,9 @@ prepareArgsAtCall params cc = do
       ASMSyntax.Pointer
         { ASMSyntax.pointerType = t
         , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
-        , ASMSyntax.pointerDisplacement = -(d + 3)
+        , ASMSyntax.pointerDisplacement =
+            -(d + 2 * ASMSyntax.typeSize ASMSyntax.VarTypeInt +
+              ASMSyntax.typeSize t)
         }
     pointerForLocalVar :: Var -> ASMSyntax.Pointer
     pointerForLocalVar Var {varType = t, varDisplacement = d} =

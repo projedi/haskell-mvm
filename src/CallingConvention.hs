@@ -10,7 +10,7 @@ import Control.Monad.State (State, runState)
 import qualified Control.Monad.State as State
 import Data.Int (Int64)
 
-import ASMSyntax (Register(..), RegisterXMM(..), VarType(..))
+import ASMSyntax (Register(..), RegisterXMM(..), VarType(..), typeSize)
 
 data FunctionCall = FunctionCall
   { funRetType :: Maybe VarType
@@ -121,5 +121,6 @@ putIntArg t = do
 putArgOnStack :: VarType -> ComputeArg ArgLocation
 putArgOnStack t = do
   offset <- State.gets nextOffset
-  State.modify $ \env -> env {stack = t : stack env, nextOffset = offset + 1}
+  State.modify $ \env ->
+    env {stack = t : stack env, nextOffset = offset + typeSize t}
   pure $ ArgLocationStack t offset
