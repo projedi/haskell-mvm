@@ -91,16 +91,20 @@ data Instruction
   = InstructionCMP Register
                    IntOperand
   -- Set to 1 if ZF(EFLAGS) = 1, 0 - otherwise.
-  | InstructionSetZ IntOperand
+  | InstructionSetZ IntOperand -- TODO: r/m8
   -- Set to 1 if ZF(EFLAGS) = 0, 0 - otherwise.
-  | InstructionSetNZ IntOperand
+  | InstructionSetNZ IntOperand -- TODO: r/m8
   -- Set to 1 if SF(EFLAGS) = 1, 0 - otherwise.
-  | InstructionSetS IntOperand
+  | InstructionSetS IntOperand -- TODO: r/m8
   -- Set to 1 if CF(EFLAGS) = 1, 0 - otherwise.
-  | InstructionSetC IntOperand
+  | InstructionSetC IntOperand -- TODO: r/m8
   -- Copy from rhs to lhs.
-  | InstructionMOV IntOperand
-                   (Either IntOperand Immediate)
+  | InstructionMOV_R64_IMM64 Register
+                             Immediate
+  | InstructionMOV_RM64_R64 IntOperand
+                            Register
+  | InstructionMOV_R64_RM64 Register
+                            IntOperand
   -- A nop that has a label attached.
   | InstructionLabelledNOP LabelID
   -- Unconditional jump.
@@ -114,24 +118,24 @@ data Instruction
   -- Negate integer operand
   | InstructionNEG IntOperand
   -- Bitwise AND instruction. Stores result in the lhs.
-  | InstructionAND IntOperand
+  | InstructionAND Register
                    IntOperand
   -- Bitwise XOR instruction. Stores result in the lhs.
-  | InstructionXOR IntOperand
+  | InstructionXOR Register
                    IntOperand
   -- Bitwise OR instruction. Stores result in the lhs.
-  | InstructionOR IntOperand
+  | InstructionOR Register
                   IntOperand
   -- lhs + rhs. Stores result in the lhs.
-  | InstructionADD IntOperand
+  | InstructionADD Register
                    IntOperand
   -- lhs - rhs. Stores result in the lhs.
-  | InstructionSUB IntOperand
+  | InstructionSUB Register
                    IntOperand
   -- Divides RDX:RAX by operand. Stores result quotient in RAX, remainder in RDX.
   | InstructionIDIV IntOperand
   -- lhs * rhs. Stores result in lhs.
-  | InstructionIMUL IntOperand
+  | InstructionIMUL Register
                     IntOperand
   -- Sign extends RAX into RDX:RAX.
   | InstructionCQO

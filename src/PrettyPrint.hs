@@ -87,57 +87,57 @@ instance PrettyPrintSimple Pointer where
         | x < 0 = " - " ++ show (-x)
         | otherwise = " + " ++ show x
 
+printUnOp :: (PrettyPrintSimple t) => String -> t -> String
+printUnOp n t = n ++ " " ++ prettyPrintSimple t
+
+printBinOp ::
+     (PrettyPrintSimple t1, PrettyPrintSimple t2)
+  => String
+  -> t1
+  -> t2
+  -> String
+printBinOp n t1 t2 =
+  n ++ " " ++ prettyPrintSimple t1 ++ ", " ++ prettyPrintSimple t2
+
 instance PrettyPrintSimple Instruction where
-  prettyPrintSimple (InstructionCALL fcall) = "call " ++ prettyPrintSimple fcall
-  prettyPrintSimple (InstructionCMP lhs rhs) =
-    "cmp " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionSetZ v) = "setz " ++ prettyPrintSimple v
-  prettyPrintSimple (InstructionSetNZ v) = "setnz " ++ prettyPrintSimple v
-  prettyPrintSimple (InstructionSetS v) = "sets " ++ prettyPrintSimple v
-  prettyPrintSimple (InstructionSetC v) = "setc " ++ prettyPrintSimple v
-  prettyPrintSimple (InstructionMOV lhs rhs) =
-    "mov " ++
-    prettyPrintSimple lhs ++
-    ", " ++ either prettyPrintSimple prettyPrintSimple rhs
+  prettyPrintSimple (InstructionCALL fcall) = printUnOp "call" fcall
+  prettyPrintSimple (InstructionCMP lhs rhs) = printBinOp "cmp" lhs rhs
+  prettyPrintSimple (InstructionSetZ v) = printUnOp "setz" v
+  prettyPrintSimple (InstructionSetNZ v) = printUnOp "setnz" v
+  prettyPrintSimple (InstructionSetS v) = printUnOp "sets" v
+  prettyPrintSimple (InstructionSetC v) = printUnOp "setc" v
+  prettyPrintSimple (InstructionMOV_R64_IMM64 lhs rhs) =
+    printBinOp "mov" lhs rhs
+  prettyPrintSimple (InstructionMOV_R64_RM64 lhs rhs) = printBinOp "mov" lhs rhs
+  prettyPrintSimple (InstructionMOV_RM64_R64 lhs rhs) = printBinOp "mov" lhs rhs
   prettyPrintSimple InstructionRET = "ret"
   prettyPrintSimple (InstructionLabelledNOP l) = show l ++ ": nop"
   prettyPrintSimple (InstructionJMP l) = "jmp " ++ show l
   prettyPrintSimple (InstructionJZ l) = "jz " ++ show l
-  prettyPrintSimple (InstructionNEG v) = "neg " ++ prettyPrintSimple v
-  prettyPrintSimple (InstructionAND lhs rhs) =
-    "and " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionXOR lhs rhs) =
-    "xor " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionOR lhs rhs) =
-    "or " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionADD lhs rhs) =
-    "add " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionSUB lhs rhs) =
-    "sub " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionIDIV v) = "idiv " ++ prettyPrintSimple v
-  prettyPrintSimple (InstructionIMUL lhs rhs) =
-    "imul " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionNEG v) = printUnOp "neg" v
+  prettyPrintSimple (InstructionAND lhs rhs) = printBinOp "and" lhs rhs
+  prettyPrintSimple (InstructionXOR lhs rhs) = printBinOp "xor" lhs rhs
+  prettyPrintSimple (InstructionOR lhs rhs) = printBinOp "or" lhs rhs
+  prettyPrintSimple (InstructionADD lhs rhs) = printBinOp "add" lhs rhs
+  prettyPrintSimple (InstructionSUB lhs rhs) = printBinOp "sub" lhs rhs
+  prettyPrintSimple (InstructionIDIV v) = printUnOp "idiv" v
+  prettyPrintSimple (InstructionIMUL lhs rhs) = printBinOp "imul" lhs rhs
   prettyPrintSimple InstructionCQO = "cqo"
-  prettyPrintSimple (InstructionADDSD lhs rhs) =
-    "addsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionSUBSD lhs rhs) =
-    "subsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionMULSD lhs rhs) =
-    "mulsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionDIVSD lhs rhs) =
-    "divsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionCOMISD lhs rhs) =
-    "comisd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionADDSD lhs rhs) = printBinOp "addsd" lhs rhs
+  prettyPrintSimple (InstructionSUBSD lhs rhs) = printBinOp "subsd" lhs rhs
+  prettyPrintSimple (InstructionMULSD lhs rhs) = printBinOp "mulsd" lhs rhs
+  prettyPrintSimple (InstructionDIVSD lhs rhs) = printBinOp "divsd" lhs rhs
+  prettyPrintSimple (InstructionCOMISD lhs rhs) = printBinOp "comisd" lhs rhs
   prettyPrintSimple (InstructionMOVSD_XMM_XMM lhs rhs) =
-    "movsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
+    printBinOp "movsd" lhs rhs
   prettyPrintSimple (InstructionMOVSD_XMM_M64 lhs rhs) =
-    "movsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
+    printBinOp "movsd" lhs rhs
   prettyPrintSimple (InstructionMOVSD_M64_XMM lhs rhs) =
-    "movsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
+    printBinOp "movsd" lhs rhs
   prettyPrintSimple (InstructionCVTSI2SD lhs rhs) =
-    "cvtsi2sd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionPUSH v) = "push " ++ prettyPrintSimple v
-  prettyPrintSimple (InstructionPOP v) = "pop " ++ prettyPrintSimple v
+    printBinOp "cvtsi2sd" lhs rhs
+  prettyPrintSimple (InstructionPUSH v) = printUnOp "push" v
+  prettyPrintSimple (InstructionPOP v) = printUnOp "pop" v
   prettyPrintSimple (InstructionLEA r s) =
     "lea " ++ prettyPrintSimple r ++ ", [rip + " ++ show s ++ "]"
 

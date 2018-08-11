@@ -372,8 +372,14 @@ execute (InstructionSetC v) = do
     (if cf
        then ValueInt 1
        else ValueInt 0)
-execute (InstructionMOV lhs rhs) = do
-  res <- either readIntOperand readImmediate rhs
+execute (InstructionMOV_R64_IMM64 lhs rhs) = do
+  res <- readImmediate rhs
+  writeRegister lhs res
+execute (InstructionMOV_R64_RM64 lhs rhs) = do
+  res <- readIntOperand rhs
+  writeRegister lhs res
+execute (InstructionMOV_RM64_R64 lhs rhs) = do
+  res <- readRegister rhs
   writeIntOperand lhs res
 execute InstructionRET = do
   ValueInt ip <- popFromStack VarTypeInt -- popping RIP
@@ -387,25 +393,25 @@ execute (InstructionNEG v) = do
   ValueInt val <- readIntOperand v
   writeIntOperand v (ValueInt (negate val))
 execute (InstructionAND lhs rhs) = do
-  lhs' <- readIntOperand lhs
+  lhs' <- readRegister lhs
   rhs' <- readIntOperand rhs
-  writeIntOperand lhs (lhs' .&. rhs')
+  writeRegister lhs (lhs' .&. rhs')
 execute (InstructionXOR lhs rhs) = do
-  lhs' <- readIntOperand lhs
+  lhs' <- readRegister lhs
   rhs' <- readIntOperand rhs
-  writeIntOperand lhs (lhs' `xor` rhs')
+  writeRegister lhs (lhs' `xor` rhs')
 execute (InstructionOR lhs rhs) = do
-  lhs' <- readIntOperand lhs
+  lhs' <- readRegister lhs
   rhs' <- readIntOperand rhs
-  writeIntOperand lhs (lhs' .|. rhs')
+  writeRegister lhs (lhs' .|. rhs')
 execute (InstructionADD lhs rhs) = do
-  lhs' <- readIntOperand lhs
+  lhs' <- readRegister lhs
   rhs' <- readIntOperand rhs
-  writeIntOperand lhs (lhs' + rhs')
+  writeRegister lhs (lhs' + rhs')
 execute (InstructionSUB lhs rhs) = do
-  lhs' <- readIntOperand lhs
+  lhs' <- readRegister lhs
   rhs' <- readIntOperand rhs
-  writeIntOperand lhs (lhs' - rhs')
+  writeRegister lhs (lhs' - rhs')
 execute (InstructionIDIV v)
   -- TODO: Should use RDX:RAX
  = do
@@ -415,9 +421,9 @@ execute (InstructionIDIV v)
   writeRegister RegisterRAX q
   writeRegister RegisterRDX r
 execute (InstructionIMUL lhs rhs) = do
-  lhs' <- readIntOperand lhs
+  lhs' <- readRegister lhs
   rhs' <- readIntOperand rhs
-  writeIntOperand lhs (lhs' * rhs')
+  writeRegister lhs (lhs' * rhs')
 execute InstructionCQO
   -- TODO: Not implemented. We only use RAX.
  = pure ()
