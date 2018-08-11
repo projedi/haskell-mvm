@@ -10,6 +10,7 @@ module ASMSyntax
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
   , Register(..)
+  , Register8(..)
   , RegisterXMM(..)
   , Pointer(..)
   , IntOperand(..)
@@ -26,11 +27,9 @@ import Data.IntMap (IntMap)
 import LinearSyntax
   ( ForeignFunctionDecl(..)
   , FunID(..)
-  , Immediate(..)
   , LabelID(..)
   , StringID(..)
   , VarType(..)
-  , immediateType
   )
 
 data Program = Program
@@ -55,6 +54,11 @@ data Register
   | RegisterR8
   | RegisterR9
 
+data Register8
+  = RegisterAL
+  | RegisterCL
+  | RegisterDL
+
 data RegisterXMM
   = RegisterXMM0
   | RegisterXMM1
@@ -67,7 +71,7 @@ data RegisterXMM
 
 data Pointer = Pointer
   { pointerType :: VarType
-  , pointerBase :: Maybe Register
+  , pointerBase :: Register
   , pointerDisplacement :: Int64
   }
 
@@ -80,21 +84,33 @@ intOperandType :: IntOperand -> VarType
 intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
 
+data Immediate
+  = ImmediateInt Int64
+  | ImmediateFloat Double
+
+immediateType :: Immediate -> VarType
+immediateType (ImmediateInt _) = VarTypeInt
+immediateType (ImmediateFloat _) = VarTypeFloat
+
 data Instruction
   -- Subtract one from the other and set EFLAGS accordingly.
-  = InstructionCMP IntOperand
+  = InstructionCMP Register
                    IntOperand
   -- Set to 1 if ZF(EFLAGS) = 1, 0 - otherwise.
-  | InstructionSetZ IntOperand
+  | InstructionSetZ Register8
   -- Set to 1 if ZF(EFLAGS) = 0, 0 - otherwise.
-  | InstructionSetNZ IntOperand
+  | InstructionSetNZ Register8
   -- Set to 1 if SF(EFLAGS) = 1, 0 - otherwise.
-  | InstructionSetS IntOperand
+  | InstructionSetS Register8
   -- Set to 1 if CF(EFLAGS) = 1, 0 - otherwise.
-  | InstructionSetC IntOperand
+  | InstructionSetC Register8
   -- Copy from rhs to lhs.
-  | InstructionMOV IntOperand
-                   (Either IntOperand Immediate)
+  | InstructionMOV_R64_IMM64 Register
+                             Immediate
+  | InstructionMOV_RM64_R64 IntOperand
+                            Register
+  | InstructionMOV_R64_RM64 Register
+                            IntOperand
   -- A nop that has a label attached.
   | InstructionLabelledNOP LabelID
   -- Unconditional jump.
@@ -108,24 +124,24 @@ data Instruction
   -- Negate integer operand
   | InstructionNEG IntOperand
   -- Bitwise AND instruction. Stores result in the lhs.
-  | InstructionAND IntOperand
+  | InstructionAND Register
                    IntOperand
   -- Bitwise XOR instruction. Stores result in the lhs.
-  | InstructionXOR IntOperand
+  | InstructionXOR Register
                    IntOperand
   -- Bitwise OR instruction. Stores result in the lhs.
-  | InstructionOR IntOperand
+  | InstructionOR Register
                   IntOperand
   -- lhs + rhs. Stores result in the lhs.
-  | InstructionADD IntOperand
+  | InstructionADD Register
                    IntOperand
   -- lhs - rhs. Stores result in the lhs.
-  | InstructionSUB IntOperand
+  | InstructionSUB Register
                    IntOperand
   -- Divides RDX:RAX by operand. Stores result quotient in RAX, remainder in RDX.
   | InstructionIDIV IntOperand
   -- lhs * rhs. Stores result in lhs.
-  | InstructionIMUL IntOperand
+  | InstructionIMUL Register
                     IntOperand
   -- Sign extends RAX into RDX:RAX.
   | InstructionCQO
@@ -158,10 +174,14 @@ data Instruction
   | InstructionPUSH IntOperand
   -- Pop from stack onto operand. Adjusts RSP.
   | InstructionPOP IntOperand
+  -- Store address of string in register
+  | InstructionLEA Register
+                   StringID
 
 data FunctionCall
   = NativeFunctionCall { nativeFunCallName :: LabelID }
   | ForeignFunctionCall { foreignFunCallName :: FunID
+                        , foreignFunCallRealName :: String
                         , foreignFunCallRetType :: Maybe VarType
                         , foreignFunCallArgTypes :: [VarType] }
 
