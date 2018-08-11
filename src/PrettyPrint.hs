@@ -1,11 +1,15 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 
 module PrettyPrint
   ( prettyPrint
   ) where
 
+import Data.Array.ST (MArray, STUArray, newArray, readArray)
+import Data.Array.Unsafe (castSTUArray)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import Data.Word (Word64)
+import GHC.ST (ST, runST)
 
 import ASMSyntax
 
@@ -137,6 +141,14 @@ instance PrettyPrintSimple Instruction where
   prettyPrintSimple (InstructionLEA r s) =
     "lea " ++ prettyPrintSimple r ++ ", [rip + " ++ show s ++ "]"
 
+{-# INLINE cast #-}
+cast ::
+     (MArray (STUArray s) a (ST s), MArray (STUArray s) b (ST s)) => a -> ST s b
+cast x = newArray (0 :: Int, 0) x >>= castSTUArray >>= flip readArray 0
+
+doubleToWord64 :: Double -> Word64
+doubleToWord64 x = runST (cast x)
+
 instance PrettyPrintSimple Immediate where
   prettyPrintSimple (ImmediateInt i) = show i
-  prettyPrintSimple (ImmediateFloat f) = show f
+  prettyPrintSimple (ImmediateFloat f) = show $ doubleToWord64 f
