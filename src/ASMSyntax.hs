@@ -65,7 +65,7 @@ data RegisterXMM
 
 data Pointer = Pointer
   { pointerType :: VarType
-  , pointerBase :: Maybe Register
+  , pointerBase :: Register
   , pointerDisplacement :: Int64
   }
 

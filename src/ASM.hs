@@ -104,7 +104,7 @@ resolveVariableAsPointer v = do
   pure $
     ASMSyntax.Pointer
       { ASMSyntax.pointerType = t
-      , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
+      , ASMSyntax.pointerBase = ASMSyntax.RegisterRBP
       , ASMSyntax.pointerDisplacement =
           -d - ASMSyntax.typeSize (ASMSyntax.VarTypeInt)
       }
@@ -220,7 +220,7 @@ translateStatement (LinearSyntax.StatementAssignToPtr p v) = do
       (ASMSyntax.IntOperandPointer
          ASMSyntax.Pointer
            { ASMSyntax.pointerType = ASMSyntax.intOperandType v'
-           , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRAX
+           , ASMSyntax.pointerBase = ASMSyntax.RegisterRAX
            , ASMSyntax.pointerDisplacement = 0
            })
       (Left v')
@@ -284,7 +284,7 @@ prepareArgsForCall cc args = do
     pointerForStack t d =
       ASMSyntax.Pointer
         { ASMSyntax.pointerType = t
-        , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRSP
+        , ASMSyntax.pointerBase = ASMSyntax.RegisterRSP
         , ASMSyntax.pointerDisplacement = d
         }
 
@@ -324,7 +324,7 @@ prepareArgsAtCall params cc = do
     pointerForParamVar t d =
       ASMSyntax.Pointer
         { ASMSyntax.pointerType = t
-        , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
+        , ASMSyntax.pointerBase = ASMSyntax.RegisterRBP
         , ASMSyntax.pointerDisplacement =
             d + 2 * ASMSyntax.typeSize ASMSyntax.VarTypeInt
         }
@@ -332,7 +332,7 @@ prepareArgsAtCall params cc = do
     pointerForLocalVar Var {varType = t, varDisplacement = d} =
       ASMSyntax.Pointer
         { ASMSyntax.pointerType = t
-        , ASMSyntax.pointerBase = Just ASMSyntax.RegisterRBP
+        , ASMSyntax.pointerBase = ASMSyntax.RegisterRBP
         , ASMSyntax.pointerDisplacement =
             -d - ASMSyntax.typeSize ASMSyntax.VarTypeInt
         }
@@ -402,7 +402,7 @@ translateExpr (LinearSyntax.ExprDereference v) = do
       (Left $
        ASMSyntax.IntOperandPointer
          ASMSyntax.Pointer
-           { ASMSyntax.pointerBase = Just ASMSyntax.RegisterRCX
+           { ASMSyntax.pointerBase = ASMSyntax.RegisterRCX
            , ASMSyntax.pointerDisplacement = 0
            , ASMSyntax.pointerType = ASMSyntax.intOperandType v'
            })

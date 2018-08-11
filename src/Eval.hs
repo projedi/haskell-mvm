@@ -186,7 +186,7 @@ prepareArgsAtCall cc = mapM go (CallingConvention.funArgValues cc)
       readPointer
         Pointer
           { pointerType = t
-          , pointerBase = Just RegisterRBP
+          , pointerBase = RegisterRBP
           , pointerDisplacement = d + 2 * typeSize VarTypeInt
           }
 
@@ -310,13 +310,13 @@ writeRegisterXMM RegisterXMM7 (ValueFloat f) =
 writeRegisterXMM RegisterXMM7 _ = error "Type mismatch"
 
 readPointer :: Pointer -> Execute Value
-readPointer Pointer {pointerBase = mr, pointerDisplacement = d} = do
-  ValueInt b <- maybe (pure $ ValueInt 0) readRegister mr
+readPointer Pointer {pointerBase = r, pointerDisplacement = d} = do
+  ValueInt b <- readRegister r
   readFromStack (b + d)
 
 writePointer :: Pointer -> Value -> Execute ()
-writePointer Pointer {pointerBase = mr, pointerDisplacement = d} val = do
-  ValueInt b <- maybe (pure $ ValueInt 0) readRegister mr
+writePointer Pointer {pointerBase = r, pointerDisplacement = d} val = do
+  ValueInt b <- readRegister r
   writeToStack (b + d) val
 
 readIntOperand :: IntOperand -> Execute Value
