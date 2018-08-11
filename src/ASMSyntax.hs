@@ -171,6 +171,7 @@ data Instruction
 data FunctionCall
   = NativeFunctionCall { nativeFunCallName :: LabelID }
   | ForeignFunctionCall { foreignFunCallName :: FunID
+                        , foreignFunCallRealName :: String
                         , foreignFunCallRetType :: Maybe VarType
                         , foreignFunCallArgTypes :: [VarType] }
 

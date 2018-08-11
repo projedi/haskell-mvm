@@ -24,7 +24,7 @@ avenge p =
   ASMSyntax.Program
     { ASMSyntax.programCode = code
     , ASMSyntax.programLibraries = LinearSyntax.programLibraries p
-    , ASMSyntax.programForeignFunctions = LinearSyntax.programForeignFunctions p
+    , ASMSyntax.programForeignFunctions = foreignFunctions finalEnv
     , ASMSyntax.programStrings = LinearSyntax.programStrings p
     , ASMSyntax.programLastFunID = LinearSyntax.programLastFunID p
     , ASMSyntax.programLastStringID = LinearSyntax.programLastStringID p
@@ -38,6 +38,7 @@ avenge p =
         , varStack = []
         , lastLabelID = LinearSyntax.programLastLabelID p
         , funIdToLabelID = IntMap.empty
+        , foreignFunctions = LinearSyntax.programForeignFunctions p
         }
 
 data Var = Var
@@ -50,6 +51,7 @@ data Env = Env
   , varStack :: [ASMSyntax.VarType]
   , lastLabelID :: ASMSyntax.LabelID
   , funIdToLabelID :: IntMap ASMSyntax.LabelID
+  , foreignFunctions :: IntMap ASMSyntax.ForeignFunctionDecl
   }
 
 type ASM = WriterT [ASMSyntax.Instruction] (State Env)
@@ -354,7 +356,7 @@ translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
     ASMSyntax.NativeFunctionCall {ASMSyntax.nativeFunCallName = flbl}
   cleanStackAfterCall cc
   pure cc
-translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
+translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {LinearSyntax.foreignFunCallName = ASMSyntax.FunID fid} = do
   let args = LinearSyntax.foreignFunCallArgs fcall
   let cc =
         CallingConvention.computeCallingConvention
@@ -364,10 +366,13 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {} = do
             , CallingConvention.funArgTypes = map LinearSyntax.varType args
             }
   prepareArgsForCall cc args
+  fdecl <- State.gets ((IntMap.! fid) . foreignFunctions)
   addStatement $
     ASMSyntax.InstructionCALL $
     ASMSyntax.ForeignFunctionCall
-      { ASMSyntax.foreignFunCallName = LinearSyntax.foreignFunCallName fcall
+      { ASMSyntax.foreignFunCallName = ASMSyntax.FunID fid
+      , ASMSyntax.foreignFunCallRealName =
+          ASMSyntax.foreignFunDeclRealName fdecl
       , ASMSyntax.foreignFunCallRetType =
           LinearSyntax.foreignFunCallRetType fcall
       , ASMSyntax.foreignFunCallArgTypes = map LinearSyntax.varType args
