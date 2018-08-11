@@ -105,10 +105,12 @@ tests = testGroup "Golden" [passTests, failTests, intensiveTests, graphicsTests]
 data TestRuntime
   = TestRuntimeDumb
   | TestRuntimeASM
+  | TestRuntimeRealASM
 
 runtimeName :: TestRuntime -> String
 runtimeName TestRuntimeDumb = "Dumb"
 runtimeName TestRuntimeASM = "ASM"
+runtimeName TestRuntimeRealASM = "RealASM"
 
 passTests :: TestTree
 passTests =
@@ -116,6 +118,7 @@ passTests =
     "Pass"
     [ testsWithParams TestRuntimeDumb 1 "expected" names
     , testsWithParams TestRuntimeASM 1 "expected" names
+    , testsWithParams TestRuntimeRealASM 1 "expected" names
     ]
   where
     names = testList ++ originalTestList
@@ -127,6 +130,7 @@ failTests =
     "Fail"
     [ testsWithParams TestRuntimeDumb 1 "expected" names
     , testsWithParams TestRuntimeASM 1 "expected" names
+    , testsWithParams TestRuntimeRealASM 1 "expected" names
     ]
   where
     names = failTestList ++ originalFailTestList
@@ -137,6 +141,7 @@ intensiveTests =
     "Intensive"
     [ testsWithParams TestRuntimeDumb 30 "expected" names
     , testsWithParams TestRuntimeASM 30 "expected" names
+    , testsWithParams TestRuntimeRealASM 30 "expected" names
     ]
   where
     names = intensiveTestList ++ originalIntensiveTestList
@@ -147,12 +152,12 @@ graphicsTests =
     "Graphics"
     [ testsWithParams TestRuntimeDumb 30 "ppm" names
     , testsWithParams TestRuntimeASM 30 "ppm" names
+    , testsWithParams TestRuntimeRealASM 30 "expected" names
     ]
   where
     names = graphicsTestList ++ originalGraphicsTestList
 
-testsWithParams ::
-     TestRuntime -> Integer -> String -> [String] -> TestTree
+testsWithParams :: TestRuntime -> Integer -> String -> [String] -> TestTree
 testsWithParams runtime timeout expectedExtension names =
   localOption (mkTimeout (1000000 * timeout)) $
   testGroup (runtimeName runtime) $ map (test runtime expectedExtension) names
@@ -172,8 +177,8 @@ runEvaluateWithFlags :: TestRuntime -> FilePath -> IO String
 runEvaluateWithFlags runtime fname = do
   (ec, res, err) <-
     System.Process.readProcessWithExitCode
-      "mvm-haskell-exe"
-      (flags runtime ++ [fname])
+      "/bin/sh"
+      (["-c", cmd runtime ++ " " ++ fname])
       ""
   case (ec, err) of
     (ExitSuccess, []) -> pure res
@@ -181,8 +186,9 @@ runEvaluateWithFlags runtime fname = do
     (_, []) -> error $ show ec
     (_, _) -> error $ show ec ++ ":\n" ++ err
   where
-    flags TestRuntimeDumb = ["--dumb"]
-    flags TestRuntimeASM = ["--asm"]
+    cmd TestRuntimeDumb = "mvm-haskell-exe --dumb"
+    cmd TestRuntimeASM = "mvm-haskell-exe --asm"
+    cmd TestRuntimeRealASM = "test/runasm.sh"
 
 compareResult :: String -> String -> IO (Maybe String)
 compareResult lhs rhs = do
