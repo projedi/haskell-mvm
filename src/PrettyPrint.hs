@@ -76,7 +76,7 @@ instance PrettyPrintSimple RegisterXMM where
 
 instance PrettyPrintSimple Pointer where
   prettyPrintSimple Pointer {pointerBase = r, pointerDisplacement = d} =
-    "[" ++ prettyPrintSimple r ++ printDisplacement d ++ "]"
+    "qword ptr [" ++ prettyPrintSimple r ++ printDisplacement d ++ "]"
     where
       printDisplacement 0 = ""
       printDisplacement x
