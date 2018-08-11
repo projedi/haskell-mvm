@@ -10,6 +10,7 @@ module ASMSyntax
   , ForeignFunctionDecl(..)
   , FunctionCall(..)
   , Register(..)
+  , Register8(..)
   , RegisterXMM(..)
   , Pointer(..)
   , IntOperand(..)
@@ -53,6 +54,11 @@ data Register
   | RegisterR8
   | RegisterR9
 
+data Register8
+  = RegisterAL
+  | RegisterCL
+  | RegisterDL
+
 data RegisterXMM
   = RegisterXMM0
   | RegisterXMM1
@@ -91,13 +97,13 @@ data Instruction
   = InstructionCMP Register
                    IntOperand
   -- Set to 1 if ZF(EFLAGS) = 1, 0 - otherwise.
-  | InstructionSetZ IntOperand -- TODO: r/m8
+  | InstructionSetZ Register8
   -- Set to 1 if ZF(EFLAGS) = 0, 0 - otherwise.
-  | InstructionSetNZ IntOperand -- TODO: r/m8
+  | InstructionSetNZ Register8
   -- Set to 1 if SF(EFLAGS) = 1, 0 - otherwise.
-  | InstructionSetS IntOperand -- TODO: r/m8
+  | InstructionSetS Register8
   -- Set to 1 if CF(EFLAGS) = 1, 0 - otherwise.
-  | InstructionSetC IntOperand -- TODO: r/m8
+  | InstructionSetC Register8
   -- Copy from rhs to lhs.
   | InstructionMOV_R64_IMM64 Register
                              Immediate

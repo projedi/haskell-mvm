@@ -283,6 +283,19 @@ writeRegister RegisterRCX v = State.modify $ \env -> env {regRCX = v}
 writeRegister RegisterR8 v = State.modify $ \env -> env {regR8 = v}
 writeRegister RegisterR9 v = State.modify $ \env -> env {regR9 = v}
 
+writeLowByte :: Value -> Value -> Value
+writeLowByte (ValueInt byte) (ValueInt originalValue) =
+  ValueInt $ (originalValue `div` 0xff) * 0xff + (byte `rem` 0xff)
+writeLowByte _ _ = error "Type mismatch"
+
+writeRegister8 :: Register8 -> Value -> Execute ()
+writeRegister8 RegisterAL v =
+  State.modify $ \env -> env {regRAX = writeLowByte v (regRAX env)}
+writeRegister8 RegisterCL v =
+  State.modify $ \env -> env {regRCX = writeLowByte v (regRCX env)}
+writeRegister8 RegisterDL v =
+  State.modify $ \env -> env {regRDX = writeLowByte v (regRDX env)}
+
 writeRegisterXMM :: RegisterXMM -> Value -> Execute ()
 writeRegisterXMM RegisterXMM0 (ValueFloat f) =
   State.modify $ \env -> env {regXMM0 = f}
@@ -346,28 +359,28 @@ execute (InstructionCMP lhs rhs) = do
     env {regEFLAGS = (regEFLAGS env) {efZF = zf, efSF = sf}}
 execute (InstructionSetZ v) = do
   zf <- State.gets (efZF . regEFLAGS)
-  writeIntOperand
+  writeRegister8
     v
     (if zf
        then ValueInt 1
        else ValueInt 0)
 execute (InstructionSetNZ v) = do
   zf <- State.gets (efZF . regEFLAGS)
-  writeIntOperand
+  writeRegister8
     v
     (if zf
        then ValueInt 0
        else ValueInt 1)
 execute (InstructionSetS v) = do
   sf <- State.gets (efSF . regEFLAGS)
-  writeIntOperand
+  writeRegister8
     v
     (if sf
        then ValueInt 1
        else ValueInt 0)
 execute (InstructionSetC v) = do
   cf <- State.gets (efCF . regEFLAGS)
-  writeIntOperand
+  writeRegister8
     v
     (if cf
        then ValueInt 1

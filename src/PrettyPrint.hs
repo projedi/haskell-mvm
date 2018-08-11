@@ -68,6 +68,11 @@ instance PrettyPrintSimple Register where
   prettyPrintSimple RegisterR8 = "r8"
   prettyPrintSimple RegisterR9 = "r9"
 
+instance PrettyPrintSimple Register8 where
+  prettyPrintSimple RegisterAL = "al"
+  prettyPrintSimple RegisterCL = "cl"
+  prettyPrintSimple RegisterDL = "dl"
+
 instance PrettyPrintSimple RegisterXMM where
   prettyPrintSimple RegisterXMM0 = "xmm0"
   prettyPrintSimple RegisterXMM1 = "xmm1"
