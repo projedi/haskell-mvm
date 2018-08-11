@@ -6,7 +6,6 @@ module PrettyPrint
 
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import qualified Data.List as List
 
 import ASMSyntax
 
@@ -14,45 +13,23 @@ prettyPrint :: Program -> String
 prettyPrint p =
   unlines
     [ printLibs $ programLibraries p
-    , printForeignFunctions $ programForeignFunctions p
     , printStrings $ programStrings p
     , printCode $ programCode p
     ]
 
 printLibs :: [String] -> String
-printLibs libs = "Libraries: " ++ unwords libs
+printLibs libs = "# LINKER: " ++ unwords libs
 
 printCode :: [Instruction] -> String
 printCode body =
-  "Code:\n" ++ List.intercalate "\n" (map printLine (zip [0 ..] body))
-  where
-    printLine :: (Int, Instruction) -> String
-    printLine (line, stmt) = show line ++ ": " ++ prettyPrintSimple stmt
-
-printForeignFunctions :: IntMap ForeignFunctionDecl -> String
-printForeignFunctions funs =
-  "Foreign functions: " ++
-  IntMap.foldrWithKey
-    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ printForeignFun val)
-    ""
-    funs
-
-printForeignFun :: ForeignFunctionDecl -> String
-printForeignFun fdecl =
-  show (foreignFunDeclRetType fdecl) ++
-  " " ++
-  foreignFunDeclRealName fdecl ++
-  " " ++
-  show (foreignFunDeclParams fdecl) ++
-  (if foreignFunDeclHasVarArgs fdecl
-     then " + varargs"
-     else "")
+  unlines $ [".text", ".global _main", "_main: "] ++ map prettyPrintSimple body
 
 printStrings :: IntMap String -> String
 printStrings vals =
-  "Strings: " ++
+  ".data" ++
   IntMap.foldrWithKey
-    (\key val rest -> rest ++ "\n" ++ show key ++ ": " ++ show val)
+    (\key val rest ->
+       rest ++ "\n" ++ show (StringID key) ++ ": .asciz " ++ show val)
     ""
     vals
 
@@ -68,99 +45,92 @@ instance PrettyPrintSimple LabelID where
 instance PrettyPrintSimple FunctionCall where
   prettyPrintSimple NativeFunctionCall {nativeFunCallName = funname} =
     prettyPrintSimple funname
-  prettyPrintSimple ForeignFunctionCall {foreignFunCallName = funname} =
-    prettyPrintSimple funname
-
-instance PrettyPrintSimple VarType where
-  prettyPrintSimple = show
-
-instance PrettyPrintSimple (Maybe VarType) where
-  prettyPrintSimple (Just vtype) = prettyPrintSimple vtype
-  prettyPrintSimple Nothing = "void"
+  prettyPrintSimple ForeignFunctionCall {foreignFunCallRealName = funname} =
+    funname
 
 instance PrettyPrintSimple IntOperand where
   prettyPrintSimple (IntOperandRegister _ r) = prettyPrintSimple r
   prettyPrintSimple (IntOperandPointer p) = prettyPrintSimple p
 
 instance PrettyPrintSimple Register where
-  prettyPrintSimple RegisterRSP = "RSP"
-  prettyPrintSimple RegisterRBP = "RBP"
-  prettyPrintSimple RegisterRAX = "RAX"
-  prettyPrintSimple RegisterRBX = "RBX"
-  prettyPrintSimple RegisterRDI = "RDI"
-  prettyPrintSimple RegisterRSI = "RSI"
-  prettyPrintSimple RegisterRDX = "RDX"
-  prettyPrintSimple RegisterRCX = "RCX"
-  prettyPrintSimple RegisterR8 = "R8"
-  prettyPrintSimple RegisterR9 = "R9"
+  prettyPrintSimple RegisterRSP = "rsp"
+  prettyPrintSimple RegisterRBP = "rbp"
+  prettyPrintSimple RegisterRAX = "rax"
+  prettyPrintSimple RegisterRBX = "rbx"
+  prettyPrintSimple RegisterRDI = "rdi"
+  prettyPrintSimple RegisterRSI = "rsi"
+  prettyPrintSimple RegisterRDX = "rdx"
+  prettyPrintSimple RegisterRCX = "rcx"
+  prettyPrintSimple RegisterR8 = "r8"
+  prettyPrintSimple RegisterR9 = "r9"
 
 instance PrettyPrintSimple RegisterXMM where
-  prettyPrintSimple RegisterXMM0 = "XMM0"
-  prettyPrintSimple RegisterXMM1 = "XMM1"
-  prettyPrintSimple RegisterXMM2 = "XMM2"
-  prettyPrintSimple RegisterXMM3 = "XMM3"
-  prettyPrintSimple RegisterXMM4 = "XMM4"
-  prettyPrintSimple RegisterXMM5 = "XMM5"
-  prettyPrintSimple RegisterXMM6 = "XMM6"
-  prettyPrintSimple RegisterXMM7 = "XMM7"
+  prettyPrintSimple RegisterXMM0 = "xmm0"
+  prettyPrintSimple RegisterXMM1 = "xmm1"
+  prettyPrintSimple RegisterXMM2 = "xmm2"
+  prettyPrintSimple RegisterXMM3 = "xmm3"
+  prettyPrintSimple RegisterXMM4 = "xmm4"
+  prettyPrintSimple RegisterXMM5 = "xmm5"
+  prettyPrintSimple RegisterXMM6 = "xmm6"
+  prettyPrintSimple RegisterXMM7 = "xmm7"
 
 instance PrettyPrintSimple Pointer where
   prettyPrintSimple Pointer {pointerBase = mr, pointerDisplacement = d} =
     "[" ++ maybe "" ((++ "+") . prettyPrintSimple) mr ++ show d ++ "]"
 
 instance PrettyPrintSimple Instruction where
-  prettyPrintSimple (InstructionCALL fcall) = "CALL " ++ prettyPrintSimple fcall
+  prettyPrintSimple (InstructionCALL fcall) = "call " ++ prettyPrintSimple fcall
   prettyPrintSimple (InstructionCMP lhs rhs) =
-    "CMP " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionSetZ v) = "SETZ " ++ prettyPrintSimple v
-  prettyPrintSimple (InstructionSetNZ v) = "SETNZ " ++ prettyPrintSimple v
-  prettyPrintSimple (InstructionSetS v) = "SETS " ++ prettyPrintSimple v
-  prettyPrintSimple (InstructionSetC v) = "SETC " ++ prettyPrintSimple v
+    "cmp " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionSetZ v) = "setz " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionSetNZ v) = "setnz " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionSetS v) = "sets " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionSetC v) = "setc " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionMOV lhs rhs) =
-    "MOV " ++
+    "mov " ++
     prettyPrintSimple lhs ++
-    " " ++ either prettyPrintSimple prettyPrintSimple rhs
-  prettyPrintSimple InstructionRET = "RET"
-  prettyPrintSimple (InstructionLabelledNOP l) = show l ++ ": NOP"
-  prettyPrintSimple (InstructionJMP l) = "JMP " ++ show l
-  prettyPrintSimple (InstructionJZ l) = "JZ " ++ show l
-  prettyPrintSimple (InstructionNEG v) = "NEG " ++ prettyPrintSimple v
+    ", " ++ either prettyPrintSimple prettyPrintSimple rhs
+  prettyPrintSimple InstructionRET = "ret"
+  prettyPrintSimple (InstructionLabelledNOP l) = show l ++ ": nop"
+  prettyPrintSimple (InstructionJMP l) = "jmp " ++ show l
+  prettyPrintSimple (InstructionJZ l) = "jz " ++ show l
+  prettyPrintSimple (InstructionNEG v) = "neg " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionAND lhs rhs) =
-    "AND " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "and " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionXOR lhs rhs) =
-    "XOR " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "xor " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionOR lhs rhs) =
-    "OR " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "or " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionADD lhs rhs) =
-    "ADD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "add " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionSUB lhs rhs) =
-    "SUB " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionIDIV v) = "IDIV " ++ prettyPrintSimple v
+    "sub " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionIDIV v) = "idiv " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionIMUL lhs rhs) =
-    "IMUL " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
-  prettyPrintSimple InstructionCQO = "CQO"
+    "imul " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
+  prettyPrintSimple InstructionCQO = "cqo"
   prettyPrintSimple (InstructionADDSD lhs rhs) =
-    "ADDSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "addsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionSUBSD lhs rhs) =
-    "SUBSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "subsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionMULSD lhs rhs) =
-    "MULSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "mulsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionDIVSD lhs rhs) =
-    "DIVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "divsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionCOMISD lhs rhs) =
-    "COMISD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "comisd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionMOVSD_XMM_XMM lhs rhs) =
-    "MOVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "movsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionMOVSD_XMM_M64 lhs rhs) =
-    "MOVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "movsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionMOVSD_M64_XMM lhs rhs) =
-    "MOVSD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
+    "movsd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionCVTSI2SD lhs rhs) =
-    "CVTSI2SD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
-  prettyPrintSimple (InstructionPUSH v) = "PUSH " ++ prettyPrintSimple v
-  prettyPrintSimple (InstructionPOP v) = "POP " ++ prettyPrintSimple v
+    "cvtsi2sd " ++ prettyPrintSimple lhs ++ ", " ++ prettyPrintSimple rhs
+  prettyPrintSimple (InstructionPUSH v) = "push " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionPOP v) = "pop " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionLEA r s) =
-    "LEA " ++ prettyPrintSimple r ++ " " ++ show s
+    "lea " ++ prettyPrintSimple r ++ ", [rip + " ++ show s ++ "]"
 
 instance PrettyPrintSimple Immediate where
   prettyPrintSimple (ImmediateInt i) = show i

@@ -47,10 +47,16 @@ dump fname = do
   let asm = getASM expr
   putStrLn $ PrettyPrint.prettyPrint asm
 
+dumpASM :: FilePath -> IO ()
+dumpASM fname = do
+  asm <- (PrettyPrint.prettyPrint . getASM . getExpr) <$> readFile fname
+  putStrLn asm
+
 getOperation :: [String] -> (FilePath -> IO (), [String])
 getOperation [] = (const $ pure (), [])
 getOperation ("--dumb":args) = (evaluateFileDumb, args)
 getOperation ("--dump":args) = (dump, args)
+getOperation ("--dump-asm":args) = (dumpASM, args)
 getOperation ("--asm":args) = (evaluateFile, args)
 getOperation args = (evaluateFile, args)
 
