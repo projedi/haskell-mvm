@@ -102,12 +102,20 @@ sdlTestList =
 tests :: TestTree
 tests = testGroup "Golden" [passTests, failTests, intensiveTests, graphicsTests]
 
+data TestRuntime
+  = TestRuntimeDumb
+  | TestRuntimeASM
+
+runtimeName :: TestRuntime -> String
+runtimeName TestRuntimeDumb = "Dumb"
+runtimeName TestRuntimeASM = "ASM"
+
 passTests :: TestTree
 passTests =
   testGroup
     "Pass"
-    [ testsWithParams "Dumb" 1 "expected" ["--dumb"] names
-    , testsWithParams "ASM" 1 "expected" ["--asm"] names
+    [ testsWithParams TestRuntimeDumb 1 "expected" names
+    , testsWithParams TestRuntimeASM 1 "expected" names
     ]
   where
     names = testList ++ originalTestList
@@ -117,8 +125,8 @@ failTests =
   expectFail $
   testGroup
     "Fail"
-    [ testsWithParams "Dumb" 1 "expected" ["--dumb"] names
-    , testsWithParams "ASM" 1 "expected" ["--asm"] names
+    [ testsWithParams TestRuntimeDumb 1 "expected" names
+    , testsWithParams TestRuntimeASM 1 "expected" names
     ]
   where
     names = failTestList ++ originalFailTestList
@@ -127,8 +135,8 @@ intensiveTests :: TestTree
 intensiveTests =
   testGroup
     "Intensive"
-    [ testsWithParams "Dumb" 30 "expected" ["--dumb"] names
-    , testsWithParams "ASM" 30 "expected" ["--asm"] names
+    [ testsWithParams TestRuntimeDumb 30 "expected" names
+    , testsWithParams TestRuntimeASM 30 "expected" names
     ]
   where
     names = intensiveTestList ++ originalIntensiveTestList
@@ -137,41 +145,44 @@ graphicsTests :: TestTree
 graphicsTests =
   testGroup
     "Graphics"
-    [ testsWithParams "Dumb" 30 "ppm" ["--dumb"] names
-    , testsWithParams "ASM" 30 "ppm" ["--asm"] names
+    [ testsWithParams TestRuntimeDumb 30 "ppm" names
+    , testsWithParams TestRuntimeASM 30 "ppm" names
     ]
   where
     names = graphicsTestList ++ originalGraphicsTestList
 
 testsWithParams ::
-     String -> Integer -> String -> [String] -> [String] -> TestTree
-testsWithParams name timeout expectedExtension flags names =
+     TestRuntime -> Integer -> String -> [String] -> TestTree
+testsWithParams runtime timeout expectedExtension names =
   localOption (mkTimeout (1000000 * timeout)) $
-  testGroup name $ map (test expectedExtension flags) names
+  testGroup (runtimeName runtime) $ map (test runtime expectedExtension) names
 
-test :: String -> [String] -> String -> TestTree
-test expectedExtension flags name =
+test :: TestRuntime -> String -> String -> TestTree
+test runtime expectedExtension name =
   goldenTest
     name
     (BS.unpack <$> BS.readFile goldenFile)
-    (runEvaluateWithFlags flags (goldenFile `replaceExtension` "mvm"))
+    (runEvaluateWithFlags runtime (goldenFile `replaceExtension` "mvm"))
     compareResult
     (BS.writeFile goldenFile . BS.pack)
   where
     goldenFile = "examples" </> name <.> expectedExtension
 
-runEvaluateWithFlags :: [String] -> FilePath -> IO String
-runEvaluateWithFlags flags fname = do
+runEvaluateWithFlags :: TestRuntime -> FilePath -> IO String
+runEvaluateWithFlags runtime fname = do
   (ec, res, err) <-
     System.Process.readProcessWithExitCode
       "mvm-haskell-exe"
-      (flags ++ [fname])
+      (flags runtime ++ [fname])
       ""
   case (ec, err) of
     (ExitSuccess, []) -> pure res
     (ExitSuccess, _) -> putStrLn err >> pure res
     (_, []) -> error $ show ec
     (_, _) -> error $ show ec ++ ":\n" ++ err
+  where
+    flags TestRuntimeDumb = ["--dumb"]
+    flags TestRuntimeASM = ["--asm"]
 
 compareResult :: String -> String -> IO (Maybe String)
 compareResult lhs rhs = do
