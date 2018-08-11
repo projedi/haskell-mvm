@@ -335,7 +335,7 @@ jump (LabelID lid) = do
 execute :: Instruction -> Execute ()
 execute (InstructionCALL fcall) = functionCall fcall
 execute (InstructionCMP lhs rhs) = do
-  ValueInt lhs' <- readIntOperand lhs
+  ValueInt lhs' <- readRegister lhs
   ValueInt rhs' <- readIntOperand rhs
   let (zf, sf) =
         case compare lhs' rhs' of

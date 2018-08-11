@@ -88,7 +88,7 @@ immediateType (ImmediateFloat _) = VarTypeFloat
 
 data Instruction
   -- Subtract one from the other and set EFLAGS accordingly.
-  = InstructionCMP IntOperand
+  = InstructionCMP Register
                    IntOperand
   -- Set to 1 if ZF(EFLAGS) = 1, 0 - otherwise.
   | InstructionSetZ IntOperand

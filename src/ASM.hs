@@ -614,9 +614,10 @@ translateBinOp LinearSyntax.BinEq lhs rhs =
     (ASMSyntax.VarTypeInt, ASMSyntax.VarTypeInt) -> do
       lhs' <- resolveVariableAsIntOperand lhs
       rhs' <- resolveVariableAsIntOperand rhs
-      addStatement $ ASMSyntax.InstructionCMP lhs' rhs'
-      let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.InstructionSetZ res
+      let rax = opRAX ASMSyntax.VarTypeInt
+      addStatement $ ASMSyntax.InstructionMOV rax (Left lhs')
+      addStatement $ ASMSyntax.InstructionCMP ASMSyntax.RegisterRAX rhs'
+      addStatement $ ASMSyntax.InstructionSetZ rax
       pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
       lhs' <- resolveVariableAsPointer lhs
@@ -635,9 +636,10 @@ translateBinOp LinearSyntax.BinLt lhs rhs =
     (ASMSyntax.VarTypeInt, ASMSyntax.VarTypeInt) -> do
       lhs' <- resolveVariableAsIntOperand lhs
       rhs' <- resolveVariableAsIntOperand rhs
-      addStatement $ ASMSyntax.InstructionCMP lhs' rhs'
-      let res = opRAX ASMSyntax.VarTypeInt
-      addStatement $ ASMSyntax.InstructionSetS res
+      let rax = opRAX ASMSyntax.VarTypeInt
+      addStatement $ ASMSyntax.InstructionMOV rax (Left lhs')
+      addStatement $ ASMSyntax.InstructionCMP ASMSyntax.RegisterRAX rhs'
+      addStatement $ ASMSyntax.InstructionSetS rax
       pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
     (ASMSyntax.VarTypeFloat, ASMSyntax.VarTypeFloat) -> do
       lhs' <- resolveVariableAsPointer lhs
@@ -659,4 +661,4 @@ compareIntToZero v = do
     ASMSyntax.InstructionMOV
       (opRAX ASMSyntax.VarTypeInt)
       (Right $ ASMSyntax.ImmediateInt 0)
-  addStatement $ ASMSyntax.InstructionCMP v (opRAX ASMSyntax.VarTypeInt)
+  addStatement $ ASMSyntax.InstructionCMP ASMSyntax.RegisterRAX v
