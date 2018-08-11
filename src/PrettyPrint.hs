@@ -159,8 +159,9 @@ instance PrettyPrintSimple Instruction where
     "CVTSI2SD " ++ prettyPrintSimple lhs ++ " " ++ prettyPrintSimple rhs
   prettyPrintSimple (InstructionPUSH v) = "PUSH " ++ prettyPrintSimple v
   prettyPrintSimple (InstructionPOP v) = "POP " ++ prettyPrintSimple v
+  prettyPrintSimple (InstructionLEA r s) =
+    "LEA " ++ prettyPrintSimple r ++ " " ++ show s
 
 instance PrettyPrintSimple Immediate where
   prettyPrintSimple (ImmediateInt i) = show i
   prettyPrintSimple (ImmediateFloat f) = show f
-  prettyPrintSimple (ImmediateString s) = show s

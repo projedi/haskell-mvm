@@ -414,9 +414,17 @@ translateExpr (LinearSyntax.ExprAddressOf v) = do
   addStatement $ ASMSyntax.InstructionSUB rax (opRCX ASMSyntax.VarTypeInt)
   pure $ Left (ASMSyntax.VarTypeInt, ASMSyntax.RegisterRAX)
 translateExpr (LinearSyntax.ExprConst c) = do
-  let res = opRAX (ASMSyntax.immediateType c)
-  addStatement $ ASMSyntax.InstructionMOV res (Right c)
-  pure $ Left (ASMSyntax.immediateType c, ASMSyntax.RegisterRAX)
+  let res = opRAX (LinearSyntax.immediateType c)
+  case c of
+    LinearSyntax.ImmediateInt i ->
+      addStatement $
+      ASMSyntax.InstructionMOV res $ Right $ ASMSyntax.ImmediateInt i
+    LinearSyntax.ImmediateFloat f ->
+      addStatement $
+      ASMSyntax.InstructionMOV res $ Right $ ASMSyntax.ImmediateFloat f
+    LinearSyntax.ImmediateString s ->
+      addStatement $ ASMSyntax.InstructionLEA ASMSyntax.RegisterRAX s
+  pure $ Left (LinearSyntax.immediateType c, ASMSyntax.RegisterRAX)
 translateExpr (LinearSyntax.ExprBinOp op lhs rhs) = translateBinOp op lhs rhs
 translateExpr (LinearSyntax.ExprUnOp op v) = translateUnOp op v
 

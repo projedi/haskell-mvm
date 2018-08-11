@@ -26,11 +26,9 @@ import Data.IntMap (IntMap)
 import LinearSyntax
   ( ForeignFunctionDecl(..)
   , FunID(..)
-  , Immediate(..)
   , LabelID(..)
   , StringID(..)
   , VarType(..)
-  , immediateType
   )
 
 data Program = Program
@@ -79,6 +77,14 @@ data IntOperand
 intOperandType :: IntOperand -> VarType
 intOperandType (IntOperandRegister t _) = t
 intOperandType (IntOperandPointer p) = pointerType p
+
+data Immediate
+  = ImmediateInt Int64
+  | ImmediateFloat Double
+
+immediateType :: Immediate -> VarType
+immediateType (ImmediateInt _) = VarTypeInt
+immediateType (ImmediateFloat _) = VarTypeFloat
 
 data Instruction
   -- Subtract one from the other and set EFLAGS accordingly.
@@ -158,6 +164,9 @@ data Instruction
   | InstructionPUSH IntOperand
   -- Pop from stack onto operand. Adjusts RSP.
   | InstructionPOP IntOperand
+  -- Store address of string in register
+  | InstructionLEA Register
+                   StringID
 
 data FunctionCall
   = NativeFunctionCall { nativeFunCallName :: LabelID }

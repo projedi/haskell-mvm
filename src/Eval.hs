@@ -246,9 +246,6 @@ functionCall NativeFunctionCall {nativeFunCallName = lbl} = do
 readImmediate :: Immediate -> Execute Value
 readImmediate (ImmediateInt i) = pure $ ValueInt i
 readImmediate (ImmediateFloat f) = pure $ ValueFloat f
-readImmediate (ImmediateString (StringID sid)) = do
-  s <- Reader.asks ((IntMap.! sid) . constEnvStrings)
-  pure $ ValueString $ Right s
 
 readRegister :: Register -> Execute Value
 readRegister RegisterRSP = State.gets (ValueInt . regRSP)
@@ -468,3 +465,6 @@ execute (InstructionPUSH x) = do
 execute (InstructionPOP x) = do
   v <- popFromStack (intOperandType x)
   writeIntOperand x v
+execute (InstructionLEA r (StringID sid)) = do
+  s <- Reader.asks ((IntMap.! sid) . constEnvStrings)
+  writeRegister r $ ValueString $ Right s
