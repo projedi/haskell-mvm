@@ -13,6 +13,7 @@ import qualified Control.Monad.Writer as Writer
 import Data.Int (Int64)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import Data.Word (Word64)
 
 import qualified ASMSyntax
 import CallingConvention (CallingConvention)
@@ -35,7 +36,7 @@ avenge p =
       runState (execWriterT (translateCode (LinearSyntax.programFunctions p))) $
       Env
         { varMap = IntMap.empty
-        , varStack = []
+        , currentStackSize = 0
         , lastLabelID = LinearSyntax.programLastLabelID p
         , funIdToLabelID = IntMap.empty
         , foreignFunctions = LinearSyntax.programForeignFunctions p
@@ -48,7 +49,7 @@ data Var = Var
 
 data Env = Env
   { varMap :: IntMap Var
-  , varStack :: [ASMSyntax.VarType]
+  , currentStackSize :: Int64
   , lastLabelID :: ASMSyntax.LabelID
   , funIdToLabelID :: IntMap ASMSyntax.LabelID
   , foreignFunctions :: IntMap ASMSyntax.ForeignFunctionDecl
@@ -86,11 +87,13 @@ introduceVariable :: LinearSyntax.Var -> ASM Var
 introduceVariable LinearSyntax.Var { LinearSyntax.varName = LinearSyntax.VarID vid
                                    , LinearSyntax.varType = t
                                    } = do
-  d <- State.gets (ASMSyntax.typesSize . varStack)
+  d <- State.gets currentStackSize
   let var = Var {varType = t, varDisplacement = d}
   State.modify $ \env ->
     env
-      {varMap = IntMap.insert vid var $ varMap env, varStack = t : varStack env}
+      { varMap = IntMap.insert vid var $ varMap env
+      , currentStackSize = ASMSyntax.typeSize t + currentStackSize env
+      }
   pure var
 
 resolveVariable :: MonadState Env m => LinearSyntax.Var -> m Var
@@ -123,10 +126,24 @@ translateCode fs = do
   fidLabelMap <- mapM generateLabelForFunID fids
   let funMap = IntMap.fromList fidLabelMap
   State.modify $ \env -> env {funIdToLabelID = funMap}
+  addStatement $ ASMSyntax.InstructionPUSH opRSP
+  State.modify $ \env ->
+    env
+      { currentStackSize =
+          ASMSyntax.typeSize ASMSyntax.VarTypeInt + currentStackSize env
+      }
+  -- Make sure our stack is 16-byte aligned
+  addStatement $
+    ASMSyntax.InstructionMOV_R64_IMM64
+      ASMSyntax.RegisterRAX
+      (ASMSyntax.ImmediateInt $ fromIntegral (0xfffffffffffffff0 :: Word64))
+  addStatement $
+    ASMSyntax.InstructionAND ASMSyntax.RegisterRSP (opRAX ASMSyntax.VarTypeInt)
   addStatement $
     ASMSyntax.InstructionCALL $
     ASMSyntax.NativeFunctionCall
       {ASMSyntax.nativeFunCallName = funMap IntMap.! 0}
+  addStatement $ ASMSyntax.InstructionPOP opRSP
   addStatement ASMSyntax.InstructionRET
   mapM_ translateFunctionDef fs
 
@@ -139,10 +156,9 @@ retValueFromCallingConvention cc =
 
 translateFunctionDef :: LinearSyntax.FunctionDef -> ASM ()
 translateFunctionDef fdef = do
-  State.modify $ \env -> env {varStack = []}
+  State.modify $ \env -> env {currentStackSize = 0}
   params <- mapM introduceVariable $ LinearSyntax.funDefParams fdef
   locals <- mapM introduceVariable $ LinearSyntax.funDefLocals fdef
-  State.modify $ \env -> env {varStack = []}
   let cc =
         CallingConvention.computeCallingConvention
           CallingConvention.FunctionCall
@@ -158,12 +174,18 @@ translateFunctionDef fdef = do
     addStatement $ ASMSyntax.InstructionLabelledNOP funLbl
     let stackVars = params ++ locals
     addStatement $ ASMSyntax.InstructionPUSH opRBP
+    State.modify $ \env ->
+      env
+        { currentStackSize =
+            ASMSyntax.typeSize ASMSyntax.VarTypeInt + currentStackSize env
+        }
     addStatement $ ASMSyntax.InstructionMOV_R64_RM64 ASMSyntax.RegisterRBP opRSP
     let size = ASMSyntax.typesSize $ map varType stackVars
     addStatement $
       ASMSyntax.InstructionMOV_R64_IMM64
         ASMSyntax.RegisterRBX
         (ASMSyntax.ImmediateInt size)
+    -- No need to account for these, as they have been accounted for in introduceVariable.
     addStatement $
       ASMSyntax.InstructionSUB
         ASMSyntax.RegisterRSP
@@ -172,6 +194,7 @@ translateFunctionDef fdef = do
     mapM_ translateStatement $ LinearSyntax.funDefBody fdef
     addStatement $ ASMSyntax.InstructionLabelledNOP epilogueLbl
     addStatement $ ASMSyntax.InstructionMOV_R64_RM64 ASMSyntax.RegisterRSP opRBP
+    State.modify $ \env -> env {currentStackSize = currentStackSize env - size}
     addStatement $ ASMSyntax.InstructionPOP opRBP
     addStatement ASMSyntax.InstructionRET
 
@@ -250,15 +273,19 @@ translateStatement (LinearSyntax.StatementJumpIfZero v l) = do
   compareIntToZero v'
   addStatement $ ASMSyntax.InstructionJZ l
 
-prepareArgsForCall :: CallingConvention -> [LinearSyntax.Var] -> ASMStatement ()
-prepareArgsForCall cc args = do
-  let size = ASMSyntax.typesSize $ CallingConvention.funStackToAllocate cc
+prepareArgsForCall ::
+     CallingConvention -> [LinearSyntax.Var] -> Int64 -> ASMStatement ()
+prepareArgsForCall cc args extraOffset = do
+  let size =
+        ASMSyntax.typesSize (CallingConvention.funStackToAllocate cc) +
+        extraOffset
   addStatement $
     ASMSyntax.InstructionMOV_R64_IMM64
       ASMSyntax.RegisterRAX
       (ASMSyntax.ImmediateInt size)
   addStatement $
     ASMSyntax.InstructionSUB ASMSyntax.RegisterRSP (opRAX ASMSyntax.VarTypeInt)
+  State.modify $ \env -> env {currentStackSize = currentStackSize env + size}
   mapM_ go (zip args (CallingConvention.funArgValues cc))
   addStatement $
     ASMSyntax.InstructionMOV_R64_IMM64
@@ -289,15 +316,18 @@ prepareArgsForCall cc args = do
         , ASMSyntax.pointerDisplacement = d
         }
 
-cleanStackAfterCall :: CallingConvention -> ASMStatement ()
-cleanStackAfterCall cc = do
-  let size = ASMSyntax.typesSize $ CallingConvention.funStackToAllocate cc
+cleanStackAfterCall :: CallingConvention -> Int64 -> ASMStatement ()
+cleanStackAfterCall cc extraOffset = do
+  let size =
+        ASMSyntax.typesSize (CallingConvention.funStackToAllocate cc) +
+        extraOffset
   addStatement $
     ASMSyntax.InstructionMOV_R64_IMM64
       ASMSyntax.RegisterRCX
       (ASMSyntax.ImmediateInt size)
   addStatement $
     ASMSyntax.InstructionADD ASMSyntax.RegisterRSP (opRCX ASMSyntax.VarTypeInt)
+  State.modify $ \env -> env {currentStackSize = currentStackSize env - size}
 
 prepareArgsAtCall :: [Var] -> CallingConvention -> ASMStatement ()
 prepareArgsAtCall params cc = do
@@ -344,6 +374,13 @@ prepareArgsAtCall params cc = do
             -d - ASMSyntax.typeSize ASMSyntax.VarTypeInt
         }
 
+computeExtraOffsetForCall :: CallingConvention -> ASMStatement Int64
+computeExtraOffsetForCall cc = do
+  size <- State.gets currentStackSize
+  let argsSize = ASMSyntax.typesSize (CallingConvention.funStackToAllocate cc)
+  let ripSize = ASMSyntax.typeSize (ASMSyntax.VarTypeInt)
+  pure $ 16 - ((size + argsSize + ripSize) `rem` 16)
+
 translateFunctionCall ::
      LinearSyntax.FunctionCall -> ASMStatement CallingConvention
 translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
@@ -355,13 +392,14 @@ translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
                 LinearSyntax.nativeFunCallRetType fcall
             , CallingConvention.funArgTypes = map LinearSyntax.varType args
             }
-  prepareArgsForCall cc args
+  extraOffset <- computeExtraOffsetForCall cc
+  prepareArgsForCall cc args extraOffset
   let (LinearSyntax.FunID fid) = LinearSyntax.nativeFunCallName fcall
   flbl <- State.gets ((IntMap.! fid) . funIdToLabelID)
   addStatement $
     ASMSyntax.InstructionCALL $
     ASMSyntax.NativeFunctionCall {ASMSyntax.nativeFunCallName = flbl}
-  cleanStackAfterCall cc
+  cleanStackAfterCall cc extraOffset
   pure cc
 translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {LinearSyntax.foreignFunCallName = ASMSyntax.FunID fid} = do
   let args = LinearSyntax.foreignFunCallArgs fcall
@@ -372,7 +410,8 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {LinearSyntax.forei
                 LinearSyntax.foreignFunCallRetType fcall
             , CallingConvention.funArgTypes = map LinearSyntax.varType args
             }
-  prepareArgsForCall cc args
+  extraOffset <- computeExtraOffsetForCall cc
+  prepareArgsForCall cc args extraOffset
   fdecl <- State.gets ((IntMap.! fid) . foreignFunctions)
   addStatement $
     ASMSyntax.InstructionCALL $
@@ -384,7 +423,7 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {LinearSyntax.forei
           LinearSyntax.foreignFunCallRetType fcall
       , ASMSyntax.foreignFunCallArgTypes = map LinearSyntax.varType args
       }
-  cleanStackAfterCall cc
+  cleanStackAfterCall cc extraOffset
   pure cc
 
 type SomeRegister
