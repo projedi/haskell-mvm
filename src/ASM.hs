@@ -13,6 +13,7 @@ import qualified Control.Monad.Writer as Writer
 import Data.Int (Int64)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import Data.Word (Word64)
 
 import qualified ASMSyntax
 import CallingConvention (CallingConvention)
@@ -123,10 +124,19 @@ translateCode fs = do
   fidLabelMap <- mapM generateLabelForFunID fids
   let funMap = IntMap.fromList fidLabelMap
   State.modify $ \env -> env {funIdToLabelID = funMap}
+  addStatement $ ASMSyntax.InstructionPUSH opRSP
+  -- Make sure our stack is 16-byte aligned
+  addStatement $
+    ASMSyntax.InstructionMOV_R64_IMM64
+      ASMSyntax.RegisterRAX
+      (ASMSyntax.ImmediateInt $ fromIntegral (0xfffffffffffffff0 :: Word64))
+  addStatement $
+    ASMSyntax.InstructionAND ASMSyntax.RegisterRSP (opRAX ASMSyntax.VarTypeInt)
   addStatement $
     ASMSyntax.InstructionCALL $
     ASMSyntax.NativeFunctionCall
       {ASMSyntax.nativeFunCallName = funMap IntMap.! 0}
+  addStatement $ ASMSyntax.InstructionPOP opRSP
   addStatement ASMSyntax.InstructionRET
   mapM_ translateFunctionDef fs
 
