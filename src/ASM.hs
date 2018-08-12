@@ -273,9 +273,12 @@ translateStatement (LinearSyntax.StatementJumpIfZero v l) = do
   compareIntToZero v'
   addStatement $ ASMSyntax.InstructionJZ l
 
-prepareArgsForCall :: CallingConvention -> [LinearSyntax.Var] -> ASMStatement ()
-prepareArgsForCall cc args = do
-  let size = ASMSyntax.typesSize $ CallingConvention.funStackToAllocate cc
+prepareArgsForCall ::
+     CallingConvention -> [LinearSyntax.Var] -> Int64 -> ASMStatement ()
+prepareArgsForCall cc args extraOffset = do
+  let size =
+        ASMSyntax.typesSize (CallingConvention.funStackToAllocate cc) +
+        extraOffset
   addStatement $
     ASMSyntax.InstructionMOV_R64_IMM64
       ASMSyntax.RegisterRAX
@@ -313,9 +316,11 @@ prepareArgsForCall cc args = do
         , ASMSyntax.pointerDisplacement = d
         }
 
-cleanStackAfterCall :: CallingConvention -> ASMStatement ()
-cleanStackAfterCall cc = do
-  let size = ASMSyntax.typesSize $ CallingConvention.funStackToAllocate cc
+cleanStackAfterCall :: CallingConvention -> Int64 -> ASMStatement ()
+cleanStackAfterCall cc extraOffset = do
+  let size =
+        ASMSyntax.typesSize (CallingConvention.funStackToAllocate cc) +
+        extraOffset
   addStatement $
     ASMSyntax.InstructionMOV_R64_IMM64
       ASMSyntax.RegisterRCX
@@ -369,6 +374,13 @@ prepareArgsAtCall params cc = do
             -d - ASMSyntax.typeSize ASMSyntax.VarTypeInt
         }
 
+computeExtraOffsetForCall :: CallingConvention -> ASMStatement Int64
+computeExtraOffsetForCall cc = do
+  size <- State.gets currentStackSize
+  let argsSize = ASMSyntax.typesSize (CallingConvention.funStackToAllocate cc)
+  let ripSize = ASMSyntax.typeSize (ASMSyntax.VarTypeInt)
+  pure $ 16 - ((size + argsSize + ripSize) `rem` 16)
+
 translateFunctionCall ::
      LinearSyntax.FunctionCall -> ASMStatement CallingConvention
 translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
@@ -380,13 +392,14 @@ translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
                 LinearSyntax.nativeFunCallRetType fcall
             , CallingConvention.funArgTypes = map LinearSyntax.varType args
             }
-  prepareArgsForCall cc args
+  extraOffset <- computeExtraOffsetForCall cc
+  prepareArgsForCall cc args extraOffset
   let (LinearSyntax.FunID fid) = LinearSyntax.nativeFunCallName fcall
   flbl <- State.gets ((IntMap.! fid) . funIdToLabelID)
   addStatement $
     ASMSyntax.InstructionCALL $
     ASMSyntax.NativeFunctionCall {ASMSyntax.nativeFunCallName = flbl}
-  cleanStackAfterCall cc
+  cleanStackAfterCall cc extraOffset
   pure cc
 translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {LinearSyntax.foreignFunCallName = ASMSyntax.FunID fid} = do
   let args = LinearSyntax.foreignFunCallArgs fcall
@@ -397,7 +410,8 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {LinearSyntax.forei
                 LinearSyntax.foreignFunCallRetType fcall
             , CallingConvention.funArgTypes = map LinearSyntax.varType args
             }
-  prepareArgsForCall cc args
+  extraOffset <- computeExtraOffsetForCall cc
+  prepareArgsForCall cc args extraOffset
   fdecl <- State.gets ((IntMap.! fid) . foreignFunctions)
   addStatement $
     ASMSyntax.InstructionCALL $
@@ -409,7 +423,7 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {LinearSyntax.forei
           LinearSyntax.foreignFunCallRetType fcall
       , ASMSyntax.foreignFunCallArgTypes = map LinearSyntax.varType args
       }
-  cleanStackAfterCall cc
+  cleanStackAfterCall cc extraOffset
   pure cc
 
 type SomeRegister
