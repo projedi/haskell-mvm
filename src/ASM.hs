@@ -36,7 +36,7 @@ avenge p =
       runState (execWriterT (translateCode (LinearSyntax.programFunctions p))) $
       Env
         { varMap = IntMap.empty
-        , varStack = []
+        , currentStackSize = 0
         , lastLabelID = LinearSyntax.programLastLabelID p
         , funIdToLabelID = IntMap.empty
         , foreignFunctions = LinearSyntax.programForeignFunctions p
@@ -49,7 +49,7 @@ data Var = Var
 
 data Env = Env
   { varMap :: IntMap Var
-  , varStack :: [ASMSyntax.VarType]
+  , currentStackSize :: Int64
   , lastLabelID :: ASMSyntax.LabelID
   , funIdToLabelID :: IntMap ASMSyntax.LabelID
   , foreignFunctions :: IntMap ASMSyntax.ForeignFunctionDecl
@@ -87,11 +87,13 @@ introduceVariable :: LinearSyntax.Var -> ASM Var
 introduceVariable LinearSyntax.Var { LinearSyntax.varName = LinearSyntax.VarID vid
                                    , LinearSyntax.varType = t
                                    } = do
-  d <- State.gets (ASMSyntax.typesSize . varStack)
+  d <- State.gets currentStackSize
   let var = Var {varType = t, varDisplacement = d}
   State.modify $ \env ->
     env
-      {varMap = IntMap.insert vid var $ varMap env, varStack = t : varStack env}
+      { varMap = IntMap.insert vid var $ varMap env
+      , currentStackSize = ASMSyntax.typeSize t + currentStackSize env
+      }
   pure var
 
 resolveVariable :: MonadState Env m => LinearSyntax.Var -> m Var
@@ -149,10 +151,9 @@ retValueFromCallingConvention cc =
 
 translateFunctionDef :: LinearSyntax.FunctionDef -> ASM ()
 translateFunctionDef fdef = do
-  State.modify $ \env -> env {varStack = []}
+  State.modify $ \env -> env {currentStackSize = 0}
   params <- mapM introduceVariable $ LinearSyntax.funDefParams fdef
   locals <- mapM introduceVariable $ LinearSyntax.funDefLocals fdef
-  State.modify $ \env -> env {varStack = []}
   let cc =
         CallingConvention.computeCallingConvention
           CallingConvention.FunctionCall
