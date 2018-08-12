@@ -127,6 +127,11 @@ translateCode fs = do
   let funMap = IntMap.fromList fidLabelMap
   State.modify $ \env -> env {funIdToLabelID = funMap}
   addStatement $ ASMSyntax.InstructionPUSH opRSP
+  State.modify $ \env ->
+    env
+      { currentStackSize =
+          ASMSyntax.typeSize ASMSyntax.VarTypeInt + currentStackSize env
+      }
   -- Make sure our stack is 16-byte aligned
   addStatement $
     ASMSyntax.InstructionMOV_R64_IMM64
@@ -169,12 +174,18 @@ translateFunctionDef fdef = do
     addStatement $ ASMSyntax.InstructionLabelledNOP funLbl
     let stackVars = params ++ locals
     addStatement $ ASMSyntax.InstructionPUSH opRBP
+    State.modify $ \env ->
+      env
+        { currentStackSize =
+            ASMSyntax.typeSize ASMSyntax.VarTypeInt + currentStackSize env
+        }
     addStatement $ ASMSyntax.InstructionMOV_R64_RM64 ASMSyntax.RegisterRBP opRSP
     let size = ASMSyntax.typesSize $ map varType stackVars
     addStatement $
       ASMSyntax.InstructionMOV_R64_IMM64
         ASMSyntax.RegisterRBX
         (ASMSyntax.ImmediateInt size)
+    -- No need to account for these, as they have been accounted for in introduceVariable.
     addStatement $
       ASMSyntax.InstructionSUB
         ASMSyntax.RegisterRSP
@@ -183,6 +194,7 @@ translateFunctionDef fdef = do
     mapM_ translateStatement $ LinearSyntax.funDefBody fdef
     addStatement $ ASMSyntax.InstructionLabelledNOP epilogueLbl
     addStatement $ ASMSyntax.InstructionMOV_R64_RM64 ASMSyntax.RegisterRSP opRBP
+    State.modify $ \env -> env {currentStackSize = currentStackSize env - size}
     addStatement $ ASMSyntax.InstructionPOP opRBP
     addStatement ASMSyntax.InstructionRET
 
@@ -270,6 +282,7 @@ prepareArgsForCall cc args = do
       (ASMSyntax.ImmediateInt size)
   addStatement $
     ASMSyntax.InstructionSUB ASMSyntax.RegisterRSP (opRAX ASMSyntax.VarTypeInt)
+  State.modify $ \env -> env {currentStackSize = currentStackSize env + size}
   mapM_ go (zip args (CallingConvention.funArgValues cc))
   addStatement $
     ASMSyntax.InstructionMOV_R64_IMM64
@@ -309,6 +322,7 @@ cleanStackAfterCall cc = do
       (ASMSyntax.ImmediateInt size)
   addStatement $
     ASMSyntax.InstructionADD ASMSyntax.RegisterRSP (opRCX ASMSyntax.VarTypeInt)
+  State.modify $ \env -> env {currentStackSize = currentStackSize env - size}
 
 prepareArgsAtCall :: [Var] -> CallingConvention -> ASMStatement ()
 prepareArgsAtCall params cc = do
