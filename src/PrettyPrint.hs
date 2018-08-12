@@ -50,10 +50,7 @@ instance PrettyPrintSimple FunctionCall where
   prettyPrintSimple NativeFunctionCall {nativeFunCallName = funname} =
     prettyPrintSimple funname
   prettyPrintSimple ForeignFunctionCall {foreignFunCallRealName = funname} =
-    go funname
-    where
-      go "printf" = "_printf"
-      go n = n
+    '_' : funname
 
 instance PrettyPrintSimple IntOperand where
   prettyPrintSimple (IntOperandRegister _ r) = prettyPrintSimple r
