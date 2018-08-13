@@ -251,6 +251,9 @@ resolveLabel = _
 resolveFunction :: FunctionCall -> Translator Int32
 resolveFunction = _
 
+resolveString :: StringID -> Translator Int32
+resolveString = _
+
 translateInstruction :: Instruction -> Translator ()
 translateInstruction (InstructionCMP r rm) =
   instructionWithModRM rexW [0x3b] (Right r) rm
@@ -296,3 +299,15 @@ translateInstruction (InstructionIMUL r rm) =
 translateInstruction InstructionCQO = do
   byte $ rexByte rexW
   byte 0x99
+translateInstruction (InstructionPUSH rm) =
+  instructionWithModRM mempty [0xff] (Left 6) rm
+translateInstruction (InstructionPOP rm) =
+  instructionWithModRM mempty [0x8f] (Left 0) rm
+translateInstruction (InstructionLEA r s) = do
+  rl <- resolveString s
+  let (rExt, rBits) = reg r
+      (x, modRMByte) = (rexW {rex_R = rExt}, rBits * 8 + 5)
+  byte $ rexByte x
+  byte 0x8d
+  byte modRMByte
+  int32 rl
