@@ -7,6 +7,7 @@ module ForeignEval
   , dlopen
   , call
   , findSymbol
+  , findSymbolRaw
   ) where
 
 import Control.Exception (catch, tryJust)
@@ -42,9 +43,13 @@ dlclose :: LibHandle -> IO ()
 dlclose (LibHandle handle) = DL.dlclose handle
 
 findSymbol :: String -> IO (Maybe ForeignFun)
-findSymbol name =
-  catch (Just . ForeignFun <$> DL.dlsym DL.Default name) $ \(_ :: IOError) ->
-    pure Nothing
+findSymbol name = do
+  msym <- findSymbolRaw name
+  pure $ (ForeignFun <$> msym)
+
+findSymbolRaw :: String -> IO (Maybe (FunPtr ()))
+findSymbolRaw name =
+  catch (Just <$> DL.dlsym DL.Default name) $ \(_ :: IOError) -> pure Nothing
 
 withValue :: Value -> (FFI.Arg -> IO a) -> IO a
 withValue (ValueInt i) fun = fun (FFI.argInt64 i)

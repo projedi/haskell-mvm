@@ -43,6 +43,7 @@ library
                        -- for hlint
                      , apply-refact
                      , array
+                     , bytestring
                      , containers
                      , filepath
                      , hindent >= 5.2
