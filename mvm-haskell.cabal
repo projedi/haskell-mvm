@@ -22,6 +22,7 @@ library
                      , Eval
                      , EvalSimplified
                      , ForeignEval
+                     , JIT
                      , Lexer
                      , LinearSyntax
                      , Parser

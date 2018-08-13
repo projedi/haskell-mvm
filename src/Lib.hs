@@ -9,6 +9,7 @@ import ASM
 import qualified ASMSyntax
 import qualified Eval
 import qualified EvalSimplified
+import qualified JIT
 import Parser (parseExpr)
 import qualified PrettyPrint
 import qualified PrettyPrintSimplified
@@ -34,6 +35,11 @@ evaluateFile fname = do
   contents <- readFile fname
   Eval.eval $ getASM $ getExpr contents
 
+jit :: FilePath -> IO ()
+jit fname = do
+  contents <- readFile fname
+  JIT.jit $ getASM $ getExpr contents
+
 dump :: FilePath -> IO ()
 dump fname = do
   contents <- readFile fname
@@ -58,7 +64,8 @@ getOperation ("--dumb":args) = (evaluateFileDumb, args)
 getOperation ("--dump":args) = (dump, args)
 getOperation ("--dump-asm":args) = (dumpASM, args)
 getOperation ("--asm":args) = (evaluateFile, args)
-getOperation args = (evaluateFile, args)
+getOperation ("--jit":args) = (jit, args)
+getOperation args = (jit, args)
 
 someFunc :: IO ()
 someFunc = do
