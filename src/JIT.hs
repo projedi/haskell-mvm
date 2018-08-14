@@ -6,6 +6,8 @@ module JIT
 
 import Control.Monad
 import Control.Monad.Reader (ReaderT, runReaderT)
+import Control.Monad.State (MonadState, StateT, evalStateT)
+import qualified Control.Monad.State as State
 import Control.Monad.Writer (MonadWriter, Writer, execWriter)
 import qualified Control.Monad.Writer as Writer
 import qualified Data.ByteString.Builder as BSBuilder
@@ -75,12 +77,11 @@ translateCode ::
 translateCode is ffs ss ls off =
   execWriter
     (runReaderT
-       (mapM translateInstruction is)
+       (evalStateT (mapM translateInstruction is) Env {envCodeOffset = off})
        ConstEnv
          { envForeignFuns = (ptrToInt64 . castFunPtrToPtr) <$> ffs
          , envStrings = ptrToInt64 <$> ss
          , envLabels = ls
-         , envCodeOffset = off
          })
 
 writeBSBuilder :: BSBuilder -> Ptr Word8 -> Int64 -> IO ()
@@ -110,10 +111,13 @@ data ConstEnv = ConstEnv
   { envForeignFuns :: IntMap Int64
   , envStrings :: IntMap Int64
   , envLabels :: IntMap Int64
-  , envCodeOffset :: Int64
   }
 
-type Translator = ReaderT ConstEnv (Writer BSBuilder)
+data Env = Env
+  { envCodeOffset :: Int64
+  }
+
+type Translator = StateT Env (ReaderT ConstEnv (Writer BSBuilder))
 
 data REX = REX
   { rex_W :: Bool
@@ -243,20 +247,24 @@ modRM8 RegisterAL = 0xc0
 modRM8 RegisterCL = 0xc1
 modRM8 RegisterDL = 0xc2
 
-byte :: (MonadWriter BSBuilder m) => Word8 -> m ()
-byte = Writer.tell . BSBuilder.word8
+incrementLocation :: (MonadState Env m) => Int64 -> m ()
+incrementLocation i =
+  State.modify $ \env -> env {envCodeOffset = envCodeOffset env + i}
 
-word32 :: (MonadWriter BSBuilder m) => Word32 -> m ()
-word32 = Writer.tell . BSBuilder.word32BE
+byte :: (MonadWriter BSBuilder m, MonadState Env m) => Word8 -> m ()
+byte x = Writer.tell (BSBuilder.word8 x) >> incrementLocation 1
 
-int32 :: (MonadWriter BSBuilder m) => Int32 -> m ()
-int32 = Writer.tell . BSBuilder.int32BE
+word32 :: (MonadWriter BSBuilder m, MonadState Env m) => Word32 -> m ()
+word32 x = Writer.tell (BSBuilder.word32BE x) >> incrementLocation 4
 
-int64 :: (MonadWriter BSBuilder m) => Int64 -> m ()
-int64 = Writer.tell . BSBuilder.int64BE
+int32 :: (MonadWriter BSBuilder m, MonadState Env m) => Int32 -> m ()
+int32 x = Writer.tell (BSBuilder.int32BE x) >> incrementLocation 4
 
-double :: (MonadWriter BSBuilder m) => Double -> m ()
-double = Writer.tell . BSBuilder.doubleBE
+int64 :: (MonadWriter BSBuilder m, MonadState Env m) => Int64 -> m ()
+int64 x = Writer.tell (BSBuilder.int64BE x) >> incrementLocation 8
+
+double :: (MonadWriter BSBuilder m, MonadState Env m) => Double -> m ()
+double x = Writer.tell (BSBuilder.doubleBE x) >> incrementLocation 8
 
 instructionWithModRM :: REX -> [Word8] -> ModRM_R -> ModRM_RM -> Translator ()
 instructionWithModRM x i r rm = do
