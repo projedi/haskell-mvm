@@ -338,6 +338,61 @@ translateInstruction (InstructionIMUL r rm) =
 translateInstruction InstructionCQO = do
   byte $ rexByte rexW
   byte 0x99
+translateInstruction (InstructionADDSD r rm) =
+  instructionWithModRM
+    mempty
+    [0xf2, 0x0f, 0x58]
+    (ModRM_R_RegisterXMM r)
+    (ModRM_RM_RegisterXMM rm)
+translateInstruction (InstructionSUBSD r rm) =
+  instructionWithModRM
+    mempty
+    [0xf2, 0x0f, 0x5c]
+    (ModRM_R_RegisterXMM r)
+    (ModRM_RM_RegisterXMM rm)
+translateInstruction (InstructionMULSD r rm) =
+  instructionWithModRM
+    mempty
+    [0xf2, 0x0f, 0x59]
+    (ModRM_R_RegisterXMM r)
+    (ModRM_RM_RegisterXMM rm)
+translateInstruction (InstructionDIVSD r rm) =
+  instructionWithModRM
+    mempty
+    [0xf2, 0x0f, 0x5e]
+    (ModRM_R_RegisterXMM r)
+    (ModRM_RM_RegisterXMM rm)
+translateInstruction (InstructionCOMISD r rm) =
+  instructionWithModRM
+    mempty
+    [0x66, 0x0f, 0x2f]
+    (ModRM_R_RegisterXMM r)
+    (ModRM_RM_RegisterXMM rm)
+translateInstruction (InstructionMOVSD_XMM_XMM r rm) =
+  instructionWithModRM
+    mempty
+    [0xf2, 0x0f, 0x10]
+    (ModRM_R_RegisterXMM r)
+    (ModRM_RM_RegisterXMM rm)
+translateInstruction (InstructionMOVSD_XMM_M64 r rm) =
+  instructionWithModRM
+    mempty
+    [0xf2, 0x0f, 0x10]
+    (ModRM_R_RegisterXMM r)
+    (ModRM_RM_Pointer rm)
+translateInstruction (InstructionMOVSD_M64_XMM rm r) =
+  instructionWithModRM
+    mempty
+    [0xf2, 0x0f, 0x11]
+    (ModRM_R_RegisterXMM r)
+    (ModRM_RM_Pointer rm)
+translateInstruction (InstructionCVTSI2SD r rm) = do
+  byte 0xf2
+  instructionWithModRM
+    rexW
+    [0x0f, 0x2a]
+    (ModRM_R_RegisterXMM r)
+    (intOperandToRM rm)
 translateInstruction (InstructionPUSH rm) =
   instructionWithModRM mempty [0xff] (ModRM_R_Ext 6) (intOperandToRM rm)
 translateInstruction (InstructionPOP rm) =
