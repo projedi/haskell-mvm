@@ -7,10 +7,13 @@ import System.Environment (getArgs)
 
 import ASM
 import qualified ASMSyntax
-import qualified Eval
+import BinaryTranslator (withBinary)
+import qualified EvalASM
 import qualified EvalSimplified
+import qualified JIT
 import Parser (parseExpr)
-import qualified PrettyPrint
+import qualified PrettyPrintASM
+import qualified PrettyPrintBinary
 import qualified PrettyPrintSimplified
 import qualified SimplifiedSyntax
 import SyntaxLinearizer (linearize)
@@ -32,7 +35,12 @@ evaluateFileDumb fname = do
 evaluateFile :: FilePath -> IO ()
 evaluateFile fname = do
   contents <- readFile fname
-  Eval.eval $ getASM $ getExpr contents
+  EvalASM.eval $ getASM $ getExpr contents
+
+jit :: FilePath -> IO ()
+jit fname = do
+  asm <- getASM . getExpr <$> readFile fname
+  withBinary asm JIT.jit
 
 dump :: FilePath -> IO ()
 dump fname = do
@@ -45,20 +53,28 @@ dump fname = do
   putStrLn $ PrettyPrintSimplified.prettyPrint expr
   putStrLn "======= ASM  ======="
   let asm = getASM expr
-  putStrLn $ PrettyPrint.prettyPrint asm
+  putStrLn $ PrettyPrintASM.prettyPrint asm
 
 dumpASM :: FilePath -> IO ()
 dumpASM fname = do
-  asm <- (PrettyPrint.prettyPrint . getASM . getExpr) <$> readFile fname
+  asm <- (PrettyPrintASM.prettyPrint . getASM . getExpr) <$> readFile fname
   putStrLn asm
+
+dumpBin :: FilePath -> IO ()
+dumpBin fname = do
+  asm <- getASM . getExpr <$> readFile fname
+  binary <- withBinary asm PrettyPrintBinary.prettyPrint
+  putStrLn binary
 
 getOperation :: [String] -> (FilePath -> IO (), [String])
 getOperation [] = (const $ pure (), [])
 getOperation ("--dumb":args) = (evaluateFileDumb, args)
 getOperation ("--dump":args) = (dump, args)
 getOperation ("--dump-asm":args) = (dumpASM, args)
+getOperation ("--dump-bin":args) = (dumpBin, args)
 getOperation ("--asm":args) = (evaluateFile, args)
-getOperation args = (evaluateFile, args)
+getOperation ("--jit":args) = (jit, args)
+getOperation args = (jit, args)
 
 someFunc :: IO ()
 someFunc = do

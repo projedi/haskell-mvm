@@ -1,4 +1,4 @@
-module Eval
+module EvalASM
   ( eval
   ) where
 

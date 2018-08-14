@@ -18,15 +18,19 @@ library
   exposed-modules:     Lib
                      , ASM
                      , ASMSyntax
+                     , BinarySyntax
+                     , BinaryTranslator
                      , CallingConvention
-                     , Eval
+                     , EvalASM
                      , EvalSimplified
                      , ForeignEval
+                     , JIT
                      , Lexer
                      , LinearSyntax
                      , Parser
                      , PreSyntax
-                     , PrettyPrint
+                     , PrettyPrintASM
+                     , PrettyPrintBinary
                      , PrettyPrintSimplified
                      , ResolvedSyntax
                      , SimplifiedSyntax
@@ -42,6 +46,7 @@ library
                        -- for hlint
                      , apply-refact
                      , array
+                     , bytestring
                      , containers
                      , filepath
                      , hindent >= 5.2

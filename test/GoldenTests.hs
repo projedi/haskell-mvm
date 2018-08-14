@@ -106,11 +106,13 @@ data TestRuntime
   = TestRuntimeDumb
   | TestRuntimeASM
   | TestRuntimeRealASM
+  | TestRuntimeJIT
 
 runtimeName :: TestRuntime -> String
 runtimeName TestRuntimeDumb = "Dumb"
 runtimeName TestRuntimeASM = "ASM"
 runtimeName TestRuntimeRealASM = "RealASM"
+runtimeName TestRuntimeJIT = "JIT"
 
 passTests :: TestTree
 passTests =
@@ -119,6 +121,7 @@ passTests =
     [ testsWithParams TestRuntimeDumb 1 "expected" names
     , testsWithParams TestRuntimeASM 1 "expected" names
     , testsWithParams TestRuntimeRealASM 1 "expected" names
+    , testsWithParams TestRuntimeJIT 1 "expected" names
     ]
   where
     names = testList ++ originalTestList
@@ -131,6 +134,7 @@ failTests =
     [ testsWithParams TestRuntimeDumb 1 "expected" names
     , testsWithParams TestRuntimeASM 1 "expected" names
     , testsWithParams TestRuntimeRealASM 1 "expected" names
+    , testsWithParams TestRuntimeJIT 1 "expected" names
     ]
   where
     names = failTestList ++ originalFailTestList
@@ -142,6 +146,7 @@ intensiveTests =
     [ testsWithParams TestRuntimeDumb 30 "expected" names
     , testsWithParams TestRuntimeASM 30 "expected" names
     , testsWithParams TestRuntimeRealASM 30 "expected" names
+    , testsWithParams TestRuntimeJIT 30 "expected" names
     ]
   where
     names = intensiveTestList ++ originalIntensiveTestList
@@ -153,6 +158,7 @@ graphicsTests =
     [ testsWithParams TestRuntimeDumb 30 "ppm" names
     , testsWithParams TestRuntimeASM 30 "ppm" names
     , testsWithParams TestRuntimeRealASM 30 "expected" names
+    , testsWithParams TestRuntimeJIT 30 "expected" names
     ]
   where
     names = graphicsTestList ++ originalGraphicsTestList
@@ -189,6 +195,7 @@ runEvaluateWithFlags runtime fname = do
     cmd TestRuntimeDumb = "mvm-haskell-exe --dumb"
     cmd TestRuntimeASM = "mvm-haskell-exe --asm"
     cmd TestRuntimeRealASM = "test/runasm.sh"
+    cmd TestRuntimeJIT = "mvm-haskell-exe --jit"
 
 compareResult :: String -> String -> IO (Maybe String)
 compareResult lhs rhs = do
