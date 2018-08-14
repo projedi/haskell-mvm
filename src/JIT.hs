@@ -7,9 +7,9 @@ module JIT
 import Control.Monad
 import Control.Monad.Reader (ReaderT, runReaderT)
 import qualified Control.Monad.Reader as Reader
-import Control.Monad.State (MonadState, StateT, evalStateT)
+import Control.Monad.State (MonadState, StateT, evalStateT, execStateT)
 import qualified Control.Monad.State as State
-import Control.Monad.Writer (MonadWriter, Writer, execWriter)
+import Control.Monad.Writer (MonadWriter, Writer, execWriter, runWriter)
 import qualified Control.Monad.Writer as Writer
 import qualified Data.ByteString.Builder as BSBuilder
 import qualified Data.ByteString.Builder.Extra as BSBuilder
@@ -46,7 +46,8 @@ jit p = do
       Just f <- findSymbolRaw $ foreignFunDeclRealName fdecl
       pure f
   strings <- forM (programStrings p) Foreign.newCString
-  let (labels, programSize) = resolveLabelsAndProgramSize (programCode p)
+  let (labels, programSize) =
+        resolveLabelsAndProgramSize (programCode p) ffuns strings
   codeLocation <- Foreign.mallocBytes (fromIntegral programSize)
   let binaryCode =
         translateCode
@@ -61,8 +62,26 @@ jit p = do
   forM_ strings Foreign.free
   forM_ libhandles dlclose
 
-resolveLabelsAndProgramSize :: [Instruction] -> (IntMap Int64, Int64)
-resolveLabelsAndProgramSize = _
+resolveLabelsAndProgramSize ::
+     [Instruction]
+  -> IntMap (FunPtr ())
+  -> IntMap CString
+  -> (IntMap Int64, Int64)
+resolveLabelsAndProgramSize is ffs ss =
+  (envNewLables finalEnv, envCodeOffset finalEnv)
+  where
+    (finalEnv, _) =
+      runWriter
+        (runReaderT
+           (execStateT
+              (mapM translateInstruction is)
+              Env {envCodeOffset = 0, envNewLables = IntMap.empty})
+           ConstEnv
+             { envForeignFuns = (ptrToInt64 . castFunPtrToPtr) <$> ffs
+             , envStrings = ptrToInt64 <$> ss
+             , envLabels = IntMap.empty
+             , envOriginalCodeOffset = 0
+             })
 
 ptrToInt64 :: Ptr a -> Int64
 ptrToInt64 p =
