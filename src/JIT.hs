@@ -6,6 +6,7 @@ module JIT
 
 import Control.Monad
 import Control.Monad.Reader (ReaderT, runReaderT)
+import qualified Control.Monad.Reader as Reader
 import Control.Monad.State (MonadState, StateT, evalStateT)
 import qualified Control.Monad.State as State
 import Control.Monad.Writer (MonadWriter, Writer, execWriter)
@@ -14,6 +15,7 @@ import qualified Data.ByteString.Builder as BSBuilder
 import qualified Data.ByteString.Builder.Extra as BSBuilder
 import Data.Int (Int32, Int64)
 import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.Word (Word32, Word8)
 import qualified Foreign.C.String as Foreign
 import Foreign.C.String (CString)
@@ -82,6 +84,7 @@ translateCode is ffs ss ls off =
          { envForeignFuns = (ptrToInt64 . castFunPtrToPtr) <$> ffs
          , envStrings = ptrToInt64 <$> ss
          , envLabels = ls
+         , envOriginalCodeOffset = off
          })
 
 writeBSBuilder :: BSBuilder -> Ptr Word8 -> Int64 -> IO ()
@@ -111,6 +114,7 @@ data ConstEnv = ConstEnv
   { envForeignFuns :: IntMap Int64
   , envStrings :: IntMap Int64
   , envLabels :: IntMap Int64
+  , envOriginalCodeOffset :: Int64
   }
 
 data Env = Env
@@ -281,17 +285,36 @@ instructionWithModRM8 i r = do
   mapM_ byte i
   byte $ modRM8 r
 
-resolveLabel :: LabelID -> Translator Int32
-resolveLabel = _
+resolveRelativeLocation :: Int64 -> Translator ()
+resolveRelativeLocation loc = do
+  currentLocation <- State.gets envCodeOffset
+  -- Our current location is before we place the address, but relative
+  -- addressing uses location just after the address.
+  let relativeLocation = loc - (currentLocation + 4)
+  int32 $ fromIntegral relativeLocation
 
-resolveFunction :: FunctionCall -> Translator Int32
-resolveFunction = _
+resolveLabel :: LabelID -> Translator ()
+resolveLabel (LabelID lid) = do
+  ls <- Reader.asks envLabels
+  case (IntMap.lookup lid ls) of
+    Nothing -> int32 0
+    Just loc -> do
+      originalOffset <- Reader.asks envOriginalCodeOffset
+      resolveRelativeLocation (originalOffset + loc)
 
-resolveString :: StringID -> Translator Int32
-resolveString = _
+resolveFunction :: FunctionCall -> Translator ()
+resolveFunction NativeFunctionCall {nativeFunCallName = l} = resolveLabel l
+resolveFunction ForeignFunctionCall {foreignFunCallName = FunID fid} = do
+  fs <- Reader.asks envForeignFuns
+  resolveRelativeLocation (fs IntMap.! fid)
 
-translateLabel :: LabelID -> Translator ()
-translateLabel _ = pure ()
+resolveString :: StringID -> Translator ()
+resolveString (StringID sid) = do
+  ss <- Reader.asks envStrings
+  resolveRelativeLocation (ss IntMap.! sid)
+
+introduceLabel :: LabelID -> Translator ()
+introduceLabel _ = pure ()
 
 translateInstruction :: Instruction -> Translator ()
 translateInstruction (InstructionCMP r rm) =
@@ -312,22 +335,19 @@ translateInstruction (InstructionMOV_R64_RM64 r rm) =
 translateInstruction (InstructionMOV_RM64_R64 rm r) =
   instructionWithModRM rexW [0x89] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionLabelledNOP lid) = do
-  translateLabel lid
+  introduceLabel lid
   byte 0x90
 translateInstruction (InstructionJMP lid) = do
-  rl <- resolveLabel lid
   byte 0xe9
-  int32 rl
+  resolveLabel lid
 translateInstruction (InstructionJZ lid) = do
-  rl <- resolveLabel lid
   byte 0x0f
   byte 0x84
-  int32 rl
+  resolveLabel lid
 translateInstruction InstructionRET = byte 0xc3
 translateInstruction (InstructionCALL fcall) = do
-  rl <- resolveFunction fcall
   byte 0xe8
-  int32 rl
+  resolveFunction fcall
 translateInstruction (InstructionNEG rm) =
   instructionWithModRM rexW [0xf7] (ModRM_R_Ext 3) (intOperandToRM rm)
 translateInstruction (InstructionAND r rm) =
@@ -411,10 +431,9 @@ translateInstruction (InstructionPUSH rm) =
 translateInstruction (InstructionPOP rm) =
   instructionWithModRM mempty [0x8f] (ModRM_R_Ext 0) (intOperandToRM rm)
 translateInstruction (InstructionLEA r s) = do
-  rl <- resolveString s
   let (rExt, rBits) = reg r
       (x, modRMByte) = (rexW {rex_R = rExt}, rBits * 8 + 5)
   byte $ rexByte x
   byte 0x8d
   byte modRMByte
-  int32 rl
+  resolveString s
