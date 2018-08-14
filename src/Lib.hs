@@ -7,11 +7,13 @@ import System.Environment (getArgs)
 
 import ASM
 import qualified ASMSyntax
+import BinaryTranslator (withBinary)
 import qualified EvalASM
 import qualified EvalSimplified
 import qualified JIT
 import Parser (parseExpr)
 import qualified PrettyPrintASM
+import qualified PrettyPrintBinary
 import qualified PrettyPrintSimplified
 import qualified SimplifiedSyntax
 import SyntaxLinearizer (linearize)
@@ -37,8 +39,8 @@ evaluateFile fname = do
 
 jit :: FilePath -> IO ()
 jit fname = do
-  contents <- readFile fname
-  JIT.jit $ getASM $ getExpr contents
+  asm <- getASM . getExpr <$> readFile fname
+  withBinary asm JIT.jit
 
 dump :: FilePath -> IO ()
 dump fname = do
@@ -60,8 +62,8 @@ dumpASM fname = do
 
 dumpBin :: FilePath -> IO ()
 dumpBin fname = do
-  asm <- (getASM . getExpr) <$> readFile fname
-  binary <- JIT.dumpBinary asm
+  asm <- getASM . getExpr <$> readFile fname
+  binary <- withBinary asm PrettyPrintBinary.prettyPrint
   putStrLn binary
 
 getOperation :: [String] -> (FilePath -> IO (), [String])
