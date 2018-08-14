@@ -229,6 +229,12 @@ word32 = Writer.tell . BSBuilder.word32BE
 int32 :: (MonadWriter BSBuilder m) => Int32 -> m ()
 int32 = Writer.tell . BSBuilder.int32BE
 
+int64 :: (MonadWriter BSBuilder m) => Int64 -> m ()
+int64 = Writer.tell . BSBuilder.int64BE
+
+double :: (MonadWriter BSBuilder m) => Double -> m ()
+double = Writer.tell . BSBuilder.doubleBE
+
 instructionWithModRM ::
      REX -> [Word8] -> Either Word8 Register -> IntOperand -> Translator ()
 instructionWithModRM x i r rm = do
@@ -261,6 +267,13 @@ translateInstruction (InstructionSetZ r) = instructionWithModRM8 [0x0f, 0x94] r
 translateInstruction (InstructionSetNZ r) = instructionWithModRM8 [0x0f, 0x95] r
 translateInstruction (InstructionSetS r) = instructionWithModRM8 [0x0f, 0x98] r
 translateInstruction (InstructionSetC r) = instructionWithModRM8 [0x0f, 0x92] r
+translateInstruction (InstructionMOV_R64_IMM64 r imm) = do
+  let (rExt, rBits) = reg r
+  byte $ rexByte $ rexW {rex_R = rExt}
+  byte $ 0xb8 + rBits
+  case imm of
+    ImmediateInt i -> int64 i
+    ImmediateFloat d -> double d
 translateInstruction (InstructionMOV_R64_RM64 r rm) =
   instructionWithModRM rexW [0x8b] (Right r) rm
 translateInstruction (InstructionMOV_RM64_R64 rm r) =
