@@ -143,7 +143,7 @@ translateCode fs = do
     ASMSyntax.InstructionCALL $
     ASMSyntax.NativeFunctionCall
       {ASMSyntax.nativeFunCallName = funMap IntMap.! 0}
-  addStatement $ ASMSyntax.InstructionPOP opRSP
+  addStatement $ ASMSyntax.InstructionPOP ASMSyntax.RegisterRSP
   addStatement ASMSyntax.InstructionRET
   mapM_ translateFunctionDef fs
 
@@ -195,7 +195,7 @@ translateFunctionDef fdef = do
     addStatement $ ASMSyntax.InstructionLabelledNOP epilogueLbl
     addStatement $ ASMSyntax.InstructionMOV_R64_RM64 ASMSyntax.RegisterRSP opRBP
     State.modify $ \env -> env {currentStackSize = currentStackSize env - size}
-    addStatement $ ASMSyntax.InstructionPOP opRBP
+    addStatement $ ASMSyntax.InstructionPOP ASMSyntax.RegisterRBP
     addStatement ASMSyntax.InstructionRET
 
 type ASMStatement = ReaderT ConstEnv ASM

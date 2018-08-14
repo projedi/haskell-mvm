@@ -441,8 +441,10 @@ translateInstruction (InstructionPUSH r) = do
   let (rExt, rBits) = reg r
   when rExt $ byte $ rexByte rexR
   byte $ 0x50 + rBits
-translateInstruction (InstructionPOP rm) =
-  instructionWithModRM mempty [0x8f] (ModRM_R_Ext 0) (intOperandToRM rm)
+translateInstruction (InstructionPOP r) = do
+  let (rExt, rBits) = reg r
+  when rExt $ byte $ rexByte rexR
+  byte $ 0x58 + rBits
 translateInstruction (InstructionLEA r s) = do
   let (rExt, rBits) = reg r
       (x, modRMByte) = (rexW {rex_R = rExt}, rBits * 8 + 5)

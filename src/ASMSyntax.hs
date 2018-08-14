@@ -173,7 +173,7 @@ data Instruction
   -- Push operand on stack. Adjusts RSP.
   | InstructionPUSH Register
   -- Pop from stack onto operand. Adjusts RSP.
-  | InstructionPOP IntOperand
+  | InstructionPOP Register
   -- Store address of string in register
   | InstructionLEA Register
                    StringID

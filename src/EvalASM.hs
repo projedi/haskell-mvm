@@ -482,8 +482,8 @@ execute (InstructionPUSH x) = do
   res <- readRegister x
   pushOnStack res
 execute (InstructionPOP x) = do
-  v <- popFromStack (intOperandType x)
-  writeIntOperand x v
+  v <- popFromStack VarTypeInt
+  writeRegister x v
 execute (InstructionLEA r (StringID sid)) = do
   s <- Reader.asks ((IntMap.! sid) . constEnvStrings)
   writeRegister r $ ValueString $ Right s
