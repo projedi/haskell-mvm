@@ -2,6 +2,7 @@
 
 module JIT
   ( jit
+  , dumpBinary
   ) where
 
 import Control.Monad
@@ -18,7 +19,6 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Word (Word32, Word8)
 import qualified Foreign.C.String as Foreign
-import Foreign.C.String (CString)
 import qualified Foreign.Marshal.Alloc as Foreign
 import Foreign.Ptr
   ( FunPtr
@@ -36,7 +36,13 @@ import ForeignEval
 type BSBuilder = BSBuilder.Builder
 
 jit :: Program -> IO ()
-jit p = do
+jit p = withBinary p $ \_ ptr _ -> run ptr
+
+dumpBinary :: Program -> IO String
+dumpBinary p = withBinary p $ \_ ptr _ -> _
+
+withBinary :: Program -> (ConstEnv -> Ptr Word8 -> Int64 -> IO a) -> IO a
+withBinary p fun = do
   libhandles <-
     forM (programLibraries p) $ \l -> do
       Right h <- dlopen l
@@ -46,28 +52,30 @@ jit p = do
       Just f <- findSymbolRaw $ foreignFunDeclRealName fdecl
       pure f
   strings <- forM (programStrings p) Foreign.newCString
+  let constEnv1 =
+        ConstEnv
+          { envForeignFuns = (ptrToInt64 . castFunPtrToPtr) <$> ffuns
+          , envStrings = ptrToInt64 <$> strings
+          , envLabels = IntMap.empty
+          , envOriginalCodeOffset = 0
+          }
   let (labels, programSize) =
-        resolveLabelsAndProgramSize (programCode p) ffuns strings
+        resolveLabelsAndProgramSize (programCode p) constEnv1
   codeLocation <- Foreign.mallocBytes (fromIntegral programSize)
-  let binaryCode =
-        translateCode
-          (programCode p)
-          ffuns
-          strings
-          labels
-          (ptrToInt64 codeLocation)
+  let constEnv2 =
+        constEnv1
+          {envLabels = labels, envOriginalCodeOffset = ptrToInt64 codeLocation}
+  let binaryCode = translateCode (programCode p) constEnv2
   writeBSBuilder binaryCode codeLocation programSize
-  run codeLocation
+  res <- fun constEnv2 codeLocation programSize
   Foreign.free codeLocation
   forM_ strings Foreign.free
   forM_ libhandles dlclose
+  pure res
 
 resolveLabelsAndProgramSize ::
-     [Instruction]
-  -> IntMap (FunPtr ())
-  -> IntMap CString
-  -> (IntMap Int64, Int64)
-resolveLabelsAndProgramSize is ffs ss =
+     [Instruction] -> ConstEnv -> (IntMap Int64, Int64)
+resolveLabelsAndProgramSize is constEnv =
   (envNewLables finalEnv, envCodeOffset finalEnv)
   where
     (finalEnv, _) =
@@ -76,37 +84,24 @@ resolveLabelsAndProgramSize is ffs ss =
            (execStateT
               (mapM translateInstruction is)
               Env {envCodeOffset = 0, envNewLables = IntMap.empty})
-           ConstEnv
-             { envForeignFuns = (ptrToInt64 . castFunPtrToPtr) <$> ffs
-             , envStrings = ptrToInt64 <$> ss
-             , envLabels = IntMap.empty
-             , envOriginalCodeOffset = 0
-             })
+           constEnv)
 
 ptrToInt64 :: Ptr a -> Int64
 ptrToInt64 p =
   let (IntPtr v) = ptrToIntPtr p
    in fromIntegral v
 
-translateCode ::
-     [Instruction]
-  -> IntMap (FunPtr ())
-  -> IntMap CString
-  -> IntMap Int64
-  -> Int64
-  -> BSBuilder
-translateCode is ffs ss ls off =
+translateCode :: [Instruction] -> ConstEnv -> BSBuilder
+translateCode is constEnv =
   execWriter
     (runReaderT
        (evalStateT
           (mapM translateInstruction is)
-          Env {envCodeOffset = off, envNewLables = IntMap.empty})
-       ConstEnv
-         { envForeignFuns = (ptrToInt64 . castFunPtrToPtr) <$> ffs
-         , envStrings = ptrToInt64 <$> ss
-         , envLabels = ls
-         , envOriginalCodeOffset = off
-         })
+          Env
+            { envCodeOffset = envOriginalCodeOffset constEnv
+            , envNewLables = IntMap.empty
+            })
+       constEnv)
 
 writeBSBuilder :: BSBuilder -> Ptr Word8 -> Int64 -> IO ()
 writeBSBuilder bs p l = go (BSBuilder.runBuilder bs) p (fromIntegral l)
