@@ -282,6 +282,9 @@ resolveFunction = _
 resolveString :: StringID -> Translator Int32
 resolveString = _
 
+translateLabel :: LabelID -> Translator ()
+translateLabel _ = pure ()
+
 translateInstruction :: Instruction -> Translator ()
 translateInstruction (InstructionCMP r rm) =
   instructionWithModRM rexW [0x3b] (ModRM_R_Register r) (intOperandToRM rm)
@@ -300,7 +303,9 @@ translateInstruction (InstructionMOV_R64_RM64 r rm) =
   instructionWithModRM rexW [0x8b] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionMOV_RM64_R64 rm r) =
   instructionWithModRM rexW [0x89] (ModRM_R_Register r) (intOperandToRM rm)
-translateInstruction (InstructionLabelledNOP _) = byte 0x90
+translateInstruction (InstructionLabelledNOP lid) = do
+  translateLabel lid
+  byte 0x90
 translateInstruction (InstructionJMP lid) = do
   rl <- resolveLabel lid
   byte 0xe9
