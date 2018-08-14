@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module PrettyPrint
+module PrettyPrintASM
   ( prettyPrint
   ) where
 

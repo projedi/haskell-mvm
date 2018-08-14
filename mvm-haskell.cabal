@@ -19,7 +19,7 @@ library
                      , ASM
                      , ASMSyntax
                      , CallingConvention
-                     , Eval
+                     , EvalASM
                      , EvalSimplified
                      , ForeignEval
                      , JIT
@@ -27,7 +27,7 @@ library
                      , LinearSyntax
                      , Parser
                      , PreSyntax
-                     , PrettyPrint
+                     , PrettyPrintASM
                      , PrettyPrintSimplified
                      , ResolvedSyntax
                      , SimplifiedSyntax

@@ -7,11 +7,11 @@ import System.Environment (getArgs)
 
 import ASM
 import qualified ASMSyntax
-import qualified Eval
+import qualified EvalASM
 import qualified EvalSimplified
 import qualified JIT
 import Parser (parseExpr)
-import qualified PrettyPrint
+import qualified PrettyPrintASM
 import qualified PrettyPrintSimplified
 import qualified SimplifiedSyntax
 import SyntaxLinearizer (linearize)
@@ -33,7 +33,7 @@ evaluateFileDumb fname = do
 evaluateFile :: FilePath -> IO ()
 evaluateFile fname = do
   contents <- readFile fname
-  Eval.eval $ getASM $ getExpr contents
+  EvalASM.eval $ getASM $ getExpr contents
 
 jit :: FilePath -> IO ()
 jit fname = do
@@ -51,11 +51,11 @@ dump fname = do
   putStrLn $ PrettyPrintSimplified.prettyPrint expr
   putStrLn "======= ASM  ======="
   let asm = getASM expr
-  putStrLn $ PrettyPrint.prettyPrint asm
+  putStrLn $ PrettyPrintASM.prettyPrint asm
 
 dumpASM :: FilePath -> IO ()
 dumpASM fname = do
-  asm <- (PrettyPrint.prettyPrint . getASM . getExpr) <$> readFile fname
+  asm <- (PrettyPrintASM.prettyPrint . getASM . getExpr) <$> readFile fname
   putStrLn asm
 
 dumpBin :: FilePath -> IO ()
