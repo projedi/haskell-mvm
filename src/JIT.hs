@@ -164,29 +164,43 @@ reg RegisterRDI = (False, 7)
 reg RegisterR8 = (True, 0)
 reg RegisterR9 = (True, 1)
 
-modRM_R :: Either Word8 Register -> (Bool, Word8)
-modRM_R (Left v) = (False, v)
-modRM_R (Right r) = reg r
+regXMM :: RegisterXMM -> (Bool, Word8)
+regXMM RegisterXMM0 = (False, 0)
+regXMM RegisterXMM1 = (False, 1)
+regXMM RegisterXMM2 = (False, 2)
+regXMM RegisterXMM3 = (False, 3)
+regXMM RegisterXMM4 = (False, 4)
+regXMM RegisterXMM5 = (False, 5)
+regXMM RegisterXMM6 = (False, 6)
+regXMM RegisterXMM7 = (False, 7)
 
-modRM ::
-     Either Word8 Register
-  -> IntOperand
-  -> (REX, Word8, Maybe Word8, Maybe Word32)
-modRM r (IntOperandRegister _ rm) =
-  let (rExt, rBits) = modRM_R r
-      (rmExt, rmBits) = reg rm
-   in ( mempty {rex_R = rExt, rex_B = rmExt}
-      , 3 * 64 + rBits * 8 + rmBits
-      , Nothing
-      , Nothing)
-modRM r (IntOperandPointer p) =
-  let (rExt, rBits) = modRM_R r
-      (mode, rmExt, rmBits, sib, extra) =
-        go (pointerBase p) (pointerDisplacement p)
-   in ( mempty {rex_R = rExt, rex_B = rmExt}
-      , mode * 64 + rBits * 8 + rmBits
-      , sib
-      , extra)
+data ModRM_R
+  = ModRM_R_Ext Word8
+  | ModRM_R_Register Register
+  | ModRM_R_RegisterXMM RegisterXMM
+
+modRM_R :: ModRM_R -> (Bool, Word8)
+modRM_R (ModRM_R_Ext v) = (False, v)
+modRM_R (ModRM_R_Register r) = reg r
+modRM_R (ModRM_R_RegisterXMM r) = regXMM r
+
+data ModRM_RM
+  = ModRM_RM_Register Register
+  | ModRM_RM_RegisterXMM RegisterXMM
+  | ModRM_RM_Pointer Pointer
+
+intOperandToRM :: IntOperand -> ModRM_RM
+intOperandToRM (IntOperandRegister _ rm) = ModRM_RM_Register rm
+intOperandToRM (IntOperandPointer p) = ModRM_RM_Pointer p
+
+modRM_RM :: ModRM_RM -> (Word8, Bool, Word8, Maybe Word8, Maybe Word32)
+modRM_RM (ModRM_RM_Register rm) =
+  let (rmExt, rmBits) = reg rm
+   in (3, rmExt, rmBits, Nothing, Nothing)
+modRM_RM (ModRM_RM_RegisterXMM rm) =
+  let (rmExt, rmBits) = regXMM rm
+   in (3, rmExt, rmBits, Nothing, Nothing)
+modRM_RM (ModRM_RM_Pointer p) = go (pointerBase p) (pointerDisplacement p)
   where
     go :: Register -> Int64 -> (Word8, Bool, Word8, Maybe Word8, Maybe Word32)
     go rm@RegisterRAX d = stdGo rm d
@@ -215,6 +229,15 @@ modRM r (IntOperandPointer p) =
           then Nothing
           else Just (fromIntegral d))
 
+modRM :: ModRM_R -> ModRM_RM -> (REX, Word8, Maybe Word8, Maybe Word32)
+modRM r rm =
+  let (rExt, rBits) = modRM_R r
+      (mode, rmExt, rmBits, sib, extra) = modRM_RM rm
+   in ( mempty {rex_R = rExt, rex_B = rmExt}
+      , mode * 64 + rBits * 8 + rmBits
+      , sib
+      , extra)
+
 modRM8 :: Register8 -> Word8
 modRM8 RegisterAL = 0xc0
 modRM8 RegisterCL = 0xc1
@@ -235,8 +258,7 @@ int64 = Writer.tell . BSBuilder.int64BE
 double :: (MonadWriter BSBuilder m) => Double -> m ()
 double = Writer.tell . BSBuilder.doubleBE
 
-instructionWithModRM ::
-     REX -> [Word8] -> Either Word8 Register -> IntOperand -> Translator ()
+instructionWithModRM :: REX -> [Word8] -> ModRM_R -> ModRM_RM -> Translator ()
 instructionWithModRM x i r rm = do
   let (x', modRMByte, sibByte, extra) = modRM r rm
       x'' = x `mappend` x'
@@ -262,7 +284,7 @@ resolveString = _
 
 translateInstruction :: Instruction -> Translator ()
 translateInstruction (InstructionCMP r rm) =
-  instructionWithModRM rexW [0x3b] (Right r) rm
+  instructionWithModRM rexW [0x3b] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionSetZ r) = instructionWithModRM8 [0x0f, 0x94] r
 translateInstruction (InstructionSetNZ r) = instructionWithModRM8 [0x0f, 0x95] r
 translateInstruction (InstructionSetS r) = instructionWithModRM8 [0x0f, 0x98] r
@@ -275,9 +297,9 @@ translateInstruction (InstructionMOV_R64_IMM64 r imm) = do
     ImmediateInt i -> int64 i
     ImmediateFloat d -> double d
 translateInstruction (InstructionMOV_R64_RM64 r rm) =
-  instructionWithModRM rexW [0x8b] (Right r) rm
+  instructionWithModRM rexW [0x8b] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionMOV_RM64_R64 rm r) =
-  instructionWithModRM rexW [0x89] (Right r) rm
+  instructionWithModRM rexW [0x89] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionLabelledNOP _) = byte 0x90
 translateInstruction (InstructionJMP lid) = do
   rl <- resolveLabel lid
@@ -294,28 +316,32 @@ translateInstruction (InstructionCALL fcall) = do
   byte 0xe8
   int32 rl
 translateInstruction (InstructionNEG rm) =
-  instructionWithModRM rexW [0xf7] (Left 3) rm
+  instructionWithModRM rexW [0xf7] (ModRM_R_Ext 3) (intOperandToRM rm)
 translateInstruction (InstructionAND r rm) =
-  instructionWithModRM rexW [0x23] (Right r) rm
+  instructionWithModRM rexW [0x23] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionXOR r rm) =
-  instructionWithModRM rexW [0x33] (Right r) rm
+  instructionWithModRM rexW [0x33] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionOR r rm) =
-  instructionWithModRM rexW [0x0b] (Right r) rm
+  instructionWithModRM rexW [0x0b] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionADD r rm) =
-  instructionWithModRM rexW [0x03] (Right r) rm
+  instructionWithModRM rexW [0x03] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionSUB r rm) =
-  instructionWithModRM rexW [0x2b] (Right r) rm
+  instructionWithModRM rexW [0x2b] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionIDIV rm) =
-  instructionWithModRM rexW [0xf7] (Left 7) rm
+  instructionWithModRM rexW [0xf7] (ModRM_R_Ext 7) (intOperandToRM rm)
 translateInstruction (InstructionIMUL r rm) =
-  instructionWithModRM rexW [0x0f, 0xaf] (Right r) rm
+  instructionWithModRM
+    rexW
+    [0x0f, 0xaf]
+    (ModRM_R_Register r)
+    (intOperandToRM rm)
 translateInstruction InstructionCQO = do
   byte $ rexByte rexW
   byte 0x99
 translateInstruction (InstructionPUSH rm) =
-  instructionWithModRM mempty [0xff] (Left 6) rm
+  instructionWithModRM mempty [0xff] (ModRM_R_Ext 6) (intOperandToRM rm)
 translateInstruction (InstructionPOP rm) =
-  instructionWithModRM mempty [0x8f] (Left 0) rm
+  instructionWithModRM mempty [0x8f] (ModRM_R_Ext 0) (intOperandToRM rm)
 translateInstruction (InstructionLEA r s) = do
   rl <- resolveString s
   let (rExt, rBits) = reg r
