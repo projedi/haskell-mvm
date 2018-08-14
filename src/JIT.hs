@@ -79,7 +79,9 @@ translateCode ::
 translateCode is ffs ss ls off =
   execWriter
     (runReaderT
-       (evalStateT (mapM translateInstruction is) Env {envCodeOffset = off})
+       (evalStateT
+          (mapM translateInstruction is)
+          Env {envCodeOffset = off, envNewLables = IntMap.empty})
        ConstEnv
          { envForeignFuns = (ptrToInt64 . castFunPtrToPtr) <$> ffs
          , envStrings = ptrToInt64 <$> ss
@@ -119,6 +121,7 @@ data ConstEnv = ConstEnv
 
 data Env = Env
   { envCodeOffset :: Int64
+  , envNewLables :: IntMap Int64
   }
 
 type Translator = StateT Env (ReaderT ConstEnv (Writer BSBuilder))
@@ -314,7 +317,10 @@ resolveString (StringID sid) = do
   resolveRelativeLocation (ss IntMap.! sid)
 
 introduceLabel :: LabelID -> Translator ()
-introduceLabel _ = pure ()
+introduceLabel (LabelID lid) = do
+  State.modify $ \env ->
+    env
+      {envNewLables = IntMap.insert lid (envCodeOffset env) (envNewLables env)}
 
 translateInstruction :: Instruction -> Translator ()
 translateInstruction (InstructionCMP r rm) =
