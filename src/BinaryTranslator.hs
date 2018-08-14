@@ -269,16 +269,16 @@ byte :: (MonadWriter BSBuilder m, MonadState Env m) => Word8 -> m ()
 byte x = Writer.tell (BSBuilder.word8 x) >> incrementLocation 1
 
 word32 :: (MonadWriter BSBuilder m, MonadState Env m) => Word32 -> m ()
-word32 x = Writer.tell (BSBuilder.word32BE x) >> incrementLocation 4
+word32 x = Writer.tell (BSBuilder.word32LE x) >> incrementLocation 4
 
 int32 :: (MonadWriter BSBuilder m, MonadState Env m) => Int32 -> m ()
-int32 x = Writer.tell (BSBuilder.int32BE x) >> incrementLocation 4
+int32 x = Writer.tell (BSBuilder.int32LE x) >> incrementLocation 4
 
 int64 :: (MonadWriter BSBuilder m, MonadState Env m) => Int64 -> m ()
-int64 x = Writer.tell (BSBuilder.int64BE x) >> incrementLocation 8
+int64 x = Writer.tell (BSBuilder.int64LE x) >> incrementLocation 8
 
 double :: (MonadWriter BSBuilder m, MonadState Env m) => Double -> m ()
-double x = Writer.tell (BSBuilder.doubleBE x) >> incrementLocation 8
+double x = Writer.tell (BSBuilder.doubleLE x) >> incrementLocation 8
 
 instructionWithModRM :: REX -> [Word8] -> ModRM_R -> ModRM_RM -> Translator ()
 instructionWithModRM x i r rm = do
