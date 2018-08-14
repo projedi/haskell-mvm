@@ -171,7 +171,7 @@ data Instruction
   | InstructionCVTSI2SD RegisterXMM
                         IntOperand
   -- Push operand on stack. Adjusts RSP.
-  | InstructionPUSH IntOperand
+  | InstructionPUSH Register
   -- Pop from stack onto operand. Adjusts RSP.
   | InstructionPOP IntOperand
   -- Store address of string in register

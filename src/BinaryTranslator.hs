@@ -150,6 +150,9 @@ instance Monoid REX where
 rexW :: REX
 rexW = mempty {rex_W = True}
 
+rexR :: REX
+rexR = mempty {rex_R = True}
+
 rexByte :: REX -> Word8
 rexByte REX {rex_W = w, rex_R = r, rex_X = x, rex_B = b} =
   0x40 +
@@ -434,8 +437,10 @@ translateInstruction (InstructionCVTSI2SD r rm) = do
     [0x0f, 0x2a]
     (ModRM_R_RegisterXMM r)
     (intOperandToRM rm)
-translateInstruction (InstructionPUSH rm) =
-  instructionWithModRM mempty [0xff] (ModRM_R_Ext 6) (intOperandToRM rm)
+translateInstruction (InstructionPUSH r) = do
+  let (rExt, rBits) = reg r
+  when rExt $ byte $ rexByte rexR
+  byte $ 0x50 + rBits
 translateInstruction (InstructionPOP rm) =
   instructionWithModRM mempty [0x8f] (ModRM_R_Ext 0) (intOperandToRM rm)
 translateInstruction (InstructionLEA r s) = do

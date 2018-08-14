@@ -479,7 +479,7 @@ execute (InstructionCVTSI2SD lhs rhs) = do
   ValueInt i <- readIntOperand rhs
   writeRegisterXMM lhs $ ValueFloat $ fromIntegral i
 execute (InstructionPUSH x) = do
-  res <- readIntOperand x
+  res <- readRegister x
   pushOnStack res
 execute (InstructionPOP x) = do
   v <- popFromStack (intOperandType x)

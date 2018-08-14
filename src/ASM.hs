@@ -126,7 +126,7 @@ translateCode fs = do
   fidLabelMap <- mapM generateLabelForFunID fids
   let funMap = IntMap.fromList fidLabelMap
   State.modify $ \env -> env {funIdToLabelID = funMap}
-  addStatement $ ASMSyntax.InstructionPUSH opRSP
+  addStatement $ ASMSyntax.InstructionPUSH ASMSyntax.RegisterRSP
   State.modify $ \env ->
     env
       { currentStackSize =
@@ -173,7 +173,7 @@ translateFunctionDef fdef = do
     funLbl <- State.gets ((IntMap.! fid) . funIdToLabelID)
     addStatement $ ASMSyntax.InstructionLabelledNOP funLbl
     let stackVars = params ++ locals
-    addStatement $ ASMSyntax.InstructionPUSH opRBP
+    addStatement $ ASMSyntax.InstructionPUSH ASMSyntax.RegisterRBP
     State.modify $ \env ->
       env
         { currentStackSize =
