@@ -21,7 +21,9 @@ import qualified Language.C.Inline as C
 import qualified Language.C.Inline.Unsafe as CU
 
 C.include "<stdio.h>"
+
 C.include "<sys/mman.h>"
+
 C.include "<unistd.h>"
 
 doubleToString :: Double -> IO String
@@ -45,15 +47,17 @@ doubleToWord64 x = runST (cast x)
 allocateExecutablePage :: Int64 -> IO (Ptr a, Int64)
 allocateExecutablePage len = do
   let len' = fromIntegral len
-  alignedSize <- [C.block| size_t {
+  alignedSize <-
+    [C.block| size_t {
                     const size_t alignment = getpagesize();
                     const size_t size = $(size_t len');
                     return (size + alignment) & ~(alignment - 1);
                   }|]
-  ptr <- [C.block| void* {
+  ptr <-
+    [C.block| void* {
             const int protection = PROT_READ | PROT_WRITE | PROT_EXEC;
             return mmap(NULL, $(size_t alignedSize), protection, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-          }|];
+          }|]
   pure (castPtr ptr, fromIntegral alignedSize)
 
 freeExecutablePage :: Ptr a -> Int64 -> IO ()
