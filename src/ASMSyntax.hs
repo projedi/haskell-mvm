@@ -8,7 +8,7 @@ module ASMSyntax
   , VarType(..)
   , Instruction(..)
   , ForeignFunctionDecl(..)
-  , FunctionCall(..)
+  , ForeignFunctionCall(..)
   , Register(..)
   , Register8(..)
   , RegisterXMM(..)
@@ -107,6 +107,8 @@ data Instruction
   -- Copy from rhs to lhs.
   | InstructionMOV_R64_IMM64 Register
                              Immediate
+  | InstructionMOV_R64_FunID Register
+                             FunID
   | InstructionMOV_RM64_R64 IntOperand
                             Register
   | InstructionMOV_R64_RM64 Register
@@ -120,7 +122,10 @@ data Instruction
   -- Pop RIP from the stack and jump to it.
   | InstructionRET
   -- Push RIP to the stack and jump.
-  | InstructionCALL FunctionCall
+  | InstructionCALL_DISP LabelID
+  -- Push RIP to the stack and jump.
+  | InstructionCALL_RM64 ForeignFunctionCall
+                         IntOperand
   -- Negate integer operand
   | InstructionNEG IntOperand
   -- Bitwise AND instruction. Stores result in the lhs.
@@ -171,19 +176,19 @@ data Instruction
   | InstructionCVTSI2SD RegisterXMM
                         IntOperand
   -- Push operand on stack. Adjusts RSP.
-  | InstructionPUSH IntOperand
+  | InstructionPUSH Register
   -- Pop from stack onto operand. Adjusts RSP.
-  | InstructionPOP IntOperand
+  | InstructionPOP Register
   -- Store address of string in register
   | InstructionLEA Register
                    StringID
 
-data FunctionCall
-  = NativeFunctionCall { nativeFunCallName :: LabelID }
-  | ForeignFunctionCall { foreignFunCallName :: FunID
-                        , foreignFunCallRealName :: String
-                        , foreignFunCallRetType :: Maybe VarType
-                        , foreignFunCallArgTypes :: [VarType] }
+data ForeignFunctionCall = ForeignFunctionCall
+  { foreignFunCallName :: FunID
+  , foreignFunCallRealName :: String
+  , foreignFunCallRetType :: Maybe VarType
+  , foreignFunCallArgTypes :: [VarType]
+  }
 
 typeSize :: VarType -> Int64
 typeSize _ = 8

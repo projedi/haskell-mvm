@@ -31,6 +31,7 @@ import Foreign.Ptr
 import ASMSyntax
 import qualified BinarySyntax
 import ForeignEval
+import Util
 
 type BSBuilder = BSBuilder.Builder
 
@@ -53,7 +54,7 @@ withBinary p fun = do
           }
   let (labels, programSize) =
         resolveLabelsAndProgramSize (programCode p) constEnv1
-  codeLocation <- Foreign.mallocBytes (fromIntegral programSize)
+  (codeLocation, actualSize) <- allocateExecutablePage programSize
   let codeOffset = ptrToInt64 codeLocation
   let constEnv2 = constEnv1 {envLabels = (+ codeOffset) <$> labels}
   let binaryCode = translateCode (programCode p) codeOffset constEnv2
@@ -67,7 +68,7 @@ withBinary p fun = do
       , BinarySyntax.programStrings = envStrings constEnv2
       , BinarySyntax.programLabels = envLabels constEnv2
       }
-  Foreign.free codeLocation
+  freeExecutablePage codeLocation actualSize
   forM_ strings Foreign.free
   forM_ libhandles dlclose
   pure res
@@ -149,6 +150,9 @@ instance Monoid REX where
 
 rexW :: REX
 rexW = mempty {rex_W = True}
+
+rexR :: REX
+rexR = mempty {rex_R = True}
 
 rexByte :: REX -> Word8
 rexByte REX {rex_W = w, rex_R = r, rex_X = x, rex_B = b} =
@@ -266,16 +270,16 @@ byte :: (MonadWriter BSBuilder m, MonadState Env m) => Word8 -> m ()
 byte x = Writer.tell (BSBuilder.word8 x) >> incrementLocation 1
 
 word32 :: (MonadWriter BSBuilder m, MonadState Env m) => Word32 -> m ()
-word32 x = Writer.tell (BSBuilder.word32BE x) >> incrementLocation 4
+word32 x = Writer.tell (BSBuilder.word32LE x) >> incrementLocation 4
 
 int32 :: (MonadWriter BSBuilder m, MonadState Env m) => Int32 -> m ()
-int32 x = Writer.tell (BSBuilder.int32BE x) >> incrementLocation 4
+int32 x = Writer.tell (BSBuilder.int32LE x) >> incrementLocation 4
 
 int64 :: (MonadWriter BSBuilder m, MonadState Env m) => Int64 -> m ()
-int64 x = Writer.tell (BSBuilder.int64BE x) >> incrementLocation 8
+int64 x = Writer.tell (BSBuilder.int64LE x) >> incrementLocation 8
 
 double :: (MonadWriter BSBuilder m, MonadState Env m) => Double -> m ()
-double x = Writer.tell (BSBuilder.doubleBE x) >> incrementLocation 8
+double x = Writer.tell (BSBuilder.doubleLE x) >> incrementLocation 8
 
 instructionWithModRM :: REX -> [Word8] -> ModRM_R -> ModRM_RM -> Translator ()
 instructionWithModRM x i r rm = do
@@ -307,17 +311,6 @@ resolveLabel (LabelID lid) = do
     Nothing -> int32 0
     Just loc -> resolveRelativeLocation loc
 
-resolveFunction :: FunctionCall -> Translator ()
-resolveFunction NativeFunctionCall {nativeFunCallName = l} = resolveLabel l
-resolveFunction ForeignFunctionCall {foreignFunCallName = FunID fid} = do
-  fs <- Reader.asks envForeignFuns
-  resolveRelativeLocation (fs IntMap.! fid)
-
-resolveString :: StringID -> Translator ()
-resolveString (StringID sid) = do
-  ss <- Reader.asks envStrings
-  resolveRelativeLocation (ss IntMap.! sid)
-
 introduceLabel :: LabelID -> Translator ()
 introduceLabel (LabelID lid) = do
   State.modify $ \env ->
@@ -338,6 +331,9 @@ translateInstruction (InstructionMOV_R64_IMM64 r imm) = do
   case imm of
     ImmediateInt i -> int64 i
     ImmediateFloat d -> double d
+translateInstruction (InstructionMOV_R64_FunID r (FunID fid)) = do
+  f <- Reader.asks ((IntMap.! fid) . envForeignFuns)
+  translateInstruction (InstructionMOV_R64_IMM64 r (ImmediateInt f))
 translateInstruction (InstructionMOV_R64_RM64 r rm) =
   instructionWithModRM rexW [0x8b] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionMOV_RM64_R64 rm r) =
@@ -353,9 +349,11 @@ translateInstruction (InstructionJZ lid) = do
   byte 0x84
   resolveLabel lid
 translateInstruction InstructionRET = byte 0xc3
-translateInstruction (InstructionCALL fcall) = do
+translateInstruction (InstructionCALL_DISP l) = do
   byte 0xe8
-  resolveFunction fcall
+  resolveLabel l
+translateInstruction (InstructionCALL_RM64 _ rm) = do
+  instructionWithModRM rexW [0xff] (ModRM_R_Ext 2) (intOperandToRM rm)
 translateInstruction (InstructionNEG rm) =
   instructionWithModRM rexW [0xf7] (ModRM_R_Ext 3) (intOperandToRM rm)
 translateInstruction (InstructionAND r rm) =
@@ -434,14 +432,14 @@ translateInstruction (InstructionCVTSI2SD r rm) = do
     [0x0f, 0x2a]
     (ModRM_R_RegisterXMM r)
     (intOperandToRM rm)
-translateInstruction (InstructionPUSH rm) =
-  instructionWithModRM mempty [0xff] (ModRM_R_Ext 6) (intOperandToRM rm)
-translateInstruction (InstructionPOP rm) =
-  instructionWithModRM mempty [0x8f] (ModRM_R_Ext 0) (intOperandToRM rm)
-translateInstruction (InstructionLEA r s) = do
+translateInstruction (InstructionPUSH r) = do
   let (rExt, rBits) = reg r
-      (x, modRMByte) = (rexW {rex_R = rExt}, rBits * 8 + 5)
-  byte $ rexByte x
-  byte 0x8d
-  byte modRMByte
-  resolveString s
+  when rExt $ byte $ rexByte rexR
+  byte $ 0x50 + rBits
+translateInstruction (InstructionPOP r) = do
+  let (rExt, rBits) = reg r
+  when rExt $ byte $ rexByte rexR
+  byte $ 0x58 + rBits
+translateInstruction (InstructionLEA r (StringID sid)) = do
+  s <- Reader.asks ((IntMap.! sid) . envStrings)
+  translateInstruction (InstructionMOV_R64_IMM64 r (ImmediateInt s))

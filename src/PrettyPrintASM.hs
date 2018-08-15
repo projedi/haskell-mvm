@@ -43,9 +43,7 @@ instance PrettyPrintSimple FunID where
 instance PrettyPrintSimple LabelID where
   prettyPrintSimple = show
 
-instance PrettyPrintSimple FunctionCall where
-  prettyPrintSimple NativeFunctionCall {nativeFunCallName = funname} =
-    prettyPrintSimple funname
+instance PrettyPrintSimple ForeignFunctionCall where
   prettyPrintSimple ForeignFunctionCall {foreignFunCallRealName = funname} =
     '_' : funname
 
@@ -102,7 +100,8 @@ printBinOp n t1 t2 =
   n ++ " " ++ prettyPrintSimple t1 ++ ", " ++ prettyPrintSimple t2
 
 instance PrettyPrintSimple Instruction where
-  prettyPrintSimple (InstructionCALL fcall) = printUnOp "call" fcall
+  prettyPrintSimple (InstructionCALL_DISP l) = printUnOp "call" l
+  prettyPrintSimple (InstructionCALL_RM64 fcall _) = printUnOp "call" fcall
   prettyPrintSimple (InstructionCMP lhs rhs) = printBinOp "cmp" lhs rhs
   prettyPrintSimple (InstructionSetZ v) = printUnOp "setz" v
   prettyPrintSimple (InstructionSetNZ v) = printUnOp "setnz" v
@@ -110,6 +109,9 @@ instance PrettyPrintSimple Instruction where
   prettyPrintSimple (InstructionSetC v) = printUnOp "setc" v
   prettyPrintSimple (InstructionMOV_R64_IMM64 lhs rhs) =
     printBinOp "mov" lhs rhs
+  prettyPrintSimple (InstructionMOV_R64_FunID _ _)
+    -- TODO: This is a nop, because we do the foreign call differently.
+   = "nop"
   prettyPrintSimple (InstructionMOV_R64_RM64 lhs rhs) = printBinOp "mov" lhs rhs
   prettyPrintSimple (InstructionMOV_RM64_R64 lhs rhs) = printBinOp "mov" lhs rhs
   prettyPrintSimple InstructionRET = "ret"

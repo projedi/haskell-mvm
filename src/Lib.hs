@@ -66,6 +66,14 @@ dumpBin fname = do
   binary <- withBinary asm PrettyPrintBinary.prettyPrint
   putStrLn binary
 
+dumpJIT :: FilePath -> IO ()
+dumpJIT fname = do
+  asm <- getASM . getExpr <$> readFile fname
+  withBinary asm $ \p -> do
+    binary <- PrettyPrintBinary.prettyPrint p
+    putStrLn binary
+    JIT.jit p
+
 getOperation :: [String] -> (FilePath -> IO (), [String])
 getOperation [] = (const $ pure (), [])
 getOperation ("--dumb":args) = (evaluateFileDumb, args)
@@ -74,6 +82,7 @@ getOperation ("--dump-asm":args) = (dumpASM, args)
 getOperation ("--dump-bin":args) = (dumpBin, args)
 getOperation ("--asm":args) = (evaluateFile, args)
 getOperation ("--jit":args) = (jit, args)
+getOperation ("--dump-jit":args) = (dumpJIT, args)
 getOperation args = (jit, args)
 
 someFunc :: IO ()
