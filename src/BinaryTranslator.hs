@@ -31,6 +31,7 @@ import Foreign.Ptr
 import ASMSyntax
 import qualified BinarySyntax
 import ForeignEval
+import Util
 
 type BSBuilder = BSBuilder.Builder
 
@@ -53,7 +54,7 @@ withBinary p fun = do
           }
   let (labels, programSize) =
         resolveLabelsAndProgramSize (programCode p) constEnv1
-  codeLocation <- Foreign.mallocBytes (fromIntegral programSize)
+  (codeLocation, actualSize) <- allocateExecutablePage programSize
   let codeOffset = ptrToInt64 codeLocation
   let constEnv2 = constEnv1 {envLabels = (+ codeOffset) <$> labels}
   let binaryCode = translateCode (programCode p) codeOffset constEnv2
@@ -67,7 +68,7 @@ withBinary p fun = do
       , BinarySyntax.programStrings = envStrings constEnv2
       , BinarySyntax.programLabels = envLabels constEnv2
       }
-  Foreign.free codeLocation
+  freeExecutablePage codeLocation actualSize
   forM_ strings Foreign.free
   forM_ libhandles dlclose
   pure res
