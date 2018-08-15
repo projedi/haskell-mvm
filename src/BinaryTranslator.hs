@@ -311,11 +311,6 @@ resolveLabel (LabelID lid) = do
     Nothing -> int32 0
     Just loc -> resolveRelativeLocation loc
 
-resolveString :: StringID -> Translator ()
-resolveString (StringID sid) = do
-  ss <- Reader.asks envStrings
-  resolveRelativeLocation (ss IntMap.! sid)
-
 introduceLabel :: LabelID -> Translator ()
 introduceLabel (LabelID lid) = do
   State.modify $ \env ->
@@ -445,10 +440,6 @@ translateInstruction (InstructionPOP r) = do
   let (rExt, rBits) = reg r
   when rExt $ byte $ rexByte rexR
   byte $ 0x58 + rBits
-translateInstruction (InstructionLEA r s) = do
-  let (rExt, rBits) = reg r
-      (x, modRMByte) = (rexW {rex_R = rExt}, rBits * 8 + 5)
-  byte $ rexByte x
-  byte 0x8d
-  byte modRMByte
-  resolveString s
+translateInstruction (InstructionLEA r (StringID sid)) = do
+  s <- Reader.asks ((IntMap.! sid) . envStrings)
+  translateInstruction (InstructionMOV_R64_IMM64 r (ImmediateInt s))
