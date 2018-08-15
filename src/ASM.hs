@@ -139,10 +139,7 @@ translateCode fs = do
       (ASMSyntax.ImmediateInt $ fromIntegral (0xfffffffffffffff0 :: Word64))
   addStatement $
     ASMSyntax.InstructionAND ASMSyntax.RegisterRSP (opRAX ASMSyntax.VarTypeInt)
-  addStatement $
-    ASMSyntax.InstructionCALL $
-    ASMSyntax.NativeFunctionCall
-      {ASMSyntax.nativeFunCallName = funMap IntMap.! 0}
+  addStatement $ ASMSyntax.InstructionCALL_DISP (funMap IntMap.! 0)
   addStatement $ ASMSyntax.InstructionPOP ASMSyntax.RegisterRSP
   addStatement ASMSyntax.InstructionRET
   mapM_ translateFunctionDef fs
@@ -396,9 +393,7 @@ translateFunctionCall fcall@LinearSyntax.NativeFunctionCall {} = do
   prepareArgsForCall cc args extraOffset
   let (LinearSyntax.FunID fid) = LinearSyntax.nativeFunCallName fcall
   flbl <- State.gets ((IntMap.! fid) . funIdToLabelID)
-  addStatement $
-    ASMSyntax.InstructionCALL $
-    ASMSyntax.NativeFunctionCall {ASMSyntax.nativeFunCallName = flbl}
+  addStatement $ ASMSyntax.InstructionCALL_DISP flbl
   cleanStackAfterCall cc extraOffset
   pure cc
 translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {LinearSyntax.foreignFunCallName = ASMSyntax.FunID fid} = do
@@ -414,15 +409,20 @@ translateFunctionCall fcall@LinearSyntax.ForeignFunctionCall {LinearSyntax.forei
   prepareArgsForCall cc args extraOffset
   fdecl <- State.gets ((IntMap.! fid) . foreignFunctions)
   addStatement $
-    ASMSyntax.InstructionCALL $
-    ASMSyntax.ForeignFunctionCall
-      { ASMSyntax.foreignFunCallName = ASMSyntax.FunID fid
-      , ASMSyntax.foreignFunCallRealName =
-          ASMSyntax.foreignFunDeclRealName fdecl
-      , ASMSyntax.foreignFunCallRetType =
-          LinearSyntax.foreignFunCallRetType fcall
-      , ASMSyntax.foreignFunCallArgTypes = map LinearSyntax.varType args
-      }
+    ASMSyntax.InstructionMOV_R64_FunID
+      ASMSyntax.RegisterRBX
+      (ASMSyntax.FunID fid)
+  addStatement $
+    ASMSyntax.InstructionCALL_RM64
+      ASMSyntax.ForeignFunctionCall
+        { ASMSyntax.foreignFunCallName = ASMSyntax.FunID fid
+        , ASMSyntax.foreignFunCallRealName =
+            ASMSyntax.foreignFunDeclRealName fdecl
+        , ASMSyntax.foreignFunCallRetType =
+            LinearSyntax.foreignFunCallRetType fcall
+        , ASMSyntax.foreignFunCallArgTypes = map LinearSyntax.varType args
+        }
+      (opRBX ASMSyntax.VarTypeInt)
   cleanStackAfterCall cc extraOffset
   pure cc
 

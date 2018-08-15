@@ -311,12 +311,6 @@ resolveLabel (LabelID lid) = do
     Nothing -> int32 0
     Just loc -> resolveRelativeLocation loc
 
-resolveFunction :: FunctionCall -> Translator ()
-resolveFunction NativeFunctionCall {nativeFunCallName = l} = resolveLabel l
-resolveFunction ForeignFunctionCall {foreignFunCallName = FunID fid} = do
-  fs <- Reader.asks envForeignFuns
-  resolveRelativeLocation (fs IntMap.! fid)
-
 resolveString :: StringID -> Translator ()
 resolveString (StringID sid) = do
   ss <- Reader.asks envStrings
@@ -342,6 +336,9 @@ translateInstruction (InstructionMOV_R64_IMM64 r imm) = do
   case imm of
     ImmediateInt i -> int64 i
     ImmediateFloat d -> double d
+translateInstruction (InstructionMOV_R64_FunID r (FunID fid)) = do
+  f <- Reader.asks ((IntMap.! fid) . envForeignFuns)
+  translateInstruction (InstructionMOV_R64_IMM64 r (ImmediateInt f))
 translateInstruction (InstructionMOV_R64_RM64 r rm) =
   instructionWithModRM rexW [0x8b] (ModRM_R_Register r) (intOperandToRM rm)
 translateInstruction (InstructionMOV_RM64_R64 rm r) =
@@ -357,9 +354,11 @@ translateInstruction (InstructionJZ lid) = do
   byte 0x84
   resolveLabel lid
 translateInstruction InstructionRET = byte 0xc3
-translateInstruction (InstructionCALL fcall) = do
+translateInstruction (InstructionCALL_DISP l) = do
   byte 0xe8
-  resolveFunction fcall
+  resolveLabel l
+translateInstruction (InstructionCALL_RM64 _ rm) = do
+  instructionWithModRM rexW [0xff] (ModRM_R_Ext 2) (intOperandToRM rm)
 translateInstruction (InstructionNEG rm) =
   instructionWithModRM rexW [0xf7] (ModRM_R_Ext 3) (intOperandToRM rm)
 translateInstruction (InstructionAND r rm) =

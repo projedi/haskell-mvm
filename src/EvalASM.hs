@@ -227,7 +227,7 @@ foreignFunctionCall rettype params hasVarArgs args fun
       | hasVarArgs = vs
     assertVals _ _ = error "Type mismatch"
 
-functionCall :: FunctionCall -> Execute ()
+functionCall :: ForeignFunctionCall -> Execute ()
 functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
                                  , foreignFunCallArgTypes = args
                                  } = do
@@ -238,10 +238,6 @@ functionCall ForeignFunctionCall { foreignFunCallName = FunID fid
     (foreignFunDeclHasVarArgs fdecl)
     args
     f
-functionCall NativeFunctionCall {nativeFunCallName = lbl} = do
-  ip <- State.gets regRIP
-  pushOnStack (ValueInt ip)
-  jump lbl
 
 readImmediate :: Immediate -> Execute Value
 readImmediate (ImmediateInt i) = pure $ ValueInt i
@@ -346,7 +342,11 @@ jump (LabelID lid) = do
   State.modify $ \env -> env {regRIP = ip - 1}
 
 execute :: Instruction -> Execute ()
-execute (InstructionCALL fcall) = functionCall fcall
+execute (InstructionCALL_DISP lbl) = do
+  ip <- State.gets regRIP
+  pushOnStack (ValueInt ip)
+  jump lbl
+execute (InstructionCALL_RM64 ffcall _) = functionCall ffcall
 execute (InstructionCMP lhs rhs) = do
   ValueInt lhs' <- readRegister lhs
   ValueInt rhs' <- readIntOperand rhs
@@ -388,6 +388,8 @@ execute (InstructionSetC v) = do
 execute (InstructionMOV_R64_IMM64 lhs rhs) = do
   res <- readImmediate rhs
   writeRegister lhs res
+execute (InstructionMOV_R64_FunID lhs (FunID res)) = do
+  writeRegister lhs (fromIntegral res)
 execute (InstructionMOV_R64_RM64 lhs rhs) = do
   res <- readIntOperand rhs
   writeRegister lhs res
